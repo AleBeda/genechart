@@ -1,0 +1,90 @@
+# Default preferences — embedded at compile time via include_str! in preferences.rs
+title = "Default preferences"
+
+[files]
+gedcom = "{gedcom}" # First *.ged file in the working directory
+highlights = ""
+
+[scope]
+root = "" # If empty, the first individual in the GEDCOM file is used as root
+generations = 4 # Number of generations to output, including the root
+direction = "descendants" # Valid values: "desc[endants]", "anc[estors]" = "ped[igree]", "for[est]"
+
+[show]
+generation_num = true
+sex = true
+birth = true
+death = true
+marriage = true
+
+[format]
+individual = "{firstname} {lastname} {sex}"
+birth = "* {date:%d %b %Y}, {location}"
+death = "× {date:%d %b %Y}, {location}"
+marriage = "⚭ {date:%d %b %Y}, {location}"
+
+[layout]
+type = "boxed_couples" # Valid values: "simple", "boxed_couples", "fan"
+root_pos = "bottom" # Valid values: "bot[tom]", "top"
+
+[layout.simple]
+indent = 2
+vert_spacing = 1
+
+[layout.boxed_couples]
+box_width = 220
+box_height = 160
+gap_width = 40
+gap_height = 80
+box_width_2_spouses = 480 # must be >= 2 * box_width + gap_width
+
+[output]
+type = "svg" # Valid values: "text", "svg", "pdf"
+
+[output.paper]
+size = "A4" # Valid values: "A0"–"A5", "letter", "custom"
+orientation = "portrait" # Valid values: "port[rait]", "land[scape]"
+
+[output.paper.custom]
+width = 210  # mm
+height = 297 # mm
+
+[output.poster]
+rows = 1
+columns = 1
+overlap_mm = 0
+
+[output.text]
+title = "{gedcom}"
+copyright = "© 2026 Alex Bedarida"
+
+[output.style]
+
+[output.style.boxes]
+width = 0.5
+border = 0x222
+background = 0xFFF
+
+[output.style.connectors]
+width = 0.1
+border = 0x000
+
+[output.style.fonts]
+names = "Georgia 14"
+dates = "Arial 10"
+descendant = "bold"
+spouse = "regular"
+title = "Georgia 24"
+copyright = "Arial 8"
+
+[output.style.alignment]
+name = "center"
+date = "center"
+
+[output.style.spacing]
+
+[output.style.spacing.boxed_couples]
+name_above = 2
+date_above = 2
+marriage_above = 6
+spouse_separation = 10

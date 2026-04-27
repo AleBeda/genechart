@@ -1,0 +1,1 @@
+//! SVG output backend (stub).

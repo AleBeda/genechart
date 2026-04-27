@@ -1,0 +1,21 @@
+[package]
+name = "genechart"
+version = "0.0.1"
+edition = "2021"
+description = "Genealogical chart generator from GEDCOM files"
+license = "MIT"
+repository = "https://github.com/PLACEHOLDER/genechart"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+strfmt = "0.2"
+anyhow = "1"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
