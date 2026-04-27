@@ -8,6 +8,7 @@ repository = "https://github.com/PLACEHOLDER/genechart"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 strfmt = "0.2"
 anyhow = "1"

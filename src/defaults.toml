@@ -32,11 +32,11 @@ indent = 2
 vert_spacing = 1
 
 [layout.boxed_couples]
-box_width = 220
-box_height = 160
-gap_width = 40
-gap_height = 80
-box_width_2_spouses = 480 # must be >= 2 * box_width + gap_width
+box_width = 220.0
+box_height = 160.0
+gap_width = 40.0
+gap_height = 80.0
+box_width_2_spouses = 480.0 # must be >= 2 * box_width + gap_width
 
 [output]
 type = "svg" # Valid values: "text", "svg", "pdf"
@@ -46,13 +46,13 @@ size = "A4" # Valid values: "A0"–"A5", "letter", "custom"
 orientation = "portrait" # Valid values: "port[rait]", "land[scape]"
 
 [output.paper.custom]
-width = 210  # mm
-height = 297 # mm
+width = 210.0  # mm
+height = 297.0 # mm
 
 [output.poster]
 rows = 1
 columns = 1
-overlap_mm = 0
+overlap_mm = 0.0
 
 [output.text]
 title = "{gedcom}"
@@ -84,7 +84,7 @@ date = "center"
 [output.style.spacing]
 
 [output.style.spacing.boxed_couples]
-name_above = 2
-date_above = 2
-marriage_above = 6
-spouse_separation = 10
+name_above = 2.0
+date_above = 2.0
+marriage_above = 6.0
+spouse_separation = 10.0
