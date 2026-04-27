@@ -1,1 +1,54 @@
-//! Internal genealogical representation: Individual<G>, Family<G>, Genrep<G> (stub).
+use std::collections::HashMap;
+
+pub struct GedDate {
+    pub raw: String,
+}
+
+pub struct Event {
+    pub date: Option<GedDate>,
+    pub place: Option<String>,
+}
+
+pub struct Individual<G = ()> {
+    pub id: String,
+    pub given: Option<String>,
+    pub surname: Option<String>,
+    pub sex: Option<char>,
+    pub birth: Option<Event>,
+    pub death: Option<Event>,
+    pub fams: Vec<String>,
+    pub famc: Vec<String>,
+    pub in_scope: bool,
+    pub geo: Option<G>,
+}
+
+pub struct Family<G = ()> {
+    pub id: String,
+    pub husband_id: Option<String>,
+    pub wife_id: Option<String>,
+    pub children_ids: Vec<String>,
+    pub marriage: Option<Event>,
+    pub in_scope: bool,
+    pub geo: Option<G>,
+}
+
+pub struct Genrep<G = ()> {
+    pub individuals: HashMap<String, Individual<G>>,
+    pub families: HashMap<String, Family<G>>,
+    /// ID of the first individual encountered during parsing.
+    pub first_individual_id: Option<String>,
+}
+
+impl<G> Genrep<G> {
+    pub fn get_individual(&self, id: &str) -> Option<&Individual<G>> {
+        self.individuals.get(id)
+    }
+
+    pub fn get_family(&self, id: &str) -> Option<&Family<G>> {
+        self.families.get(id)
+    }
+
+    pub fn individuals_in_scope(&self) -> impl Iterator<Item = &Individual<G>> {
+        self.individuals.values().filter(|i| i.in_scope)
+    }
+}
