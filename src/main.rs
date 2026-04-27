@@ -5,5 +5,6 @@ mod layout;
 mod backend;
 
 fn main() {
+    let _args = cli::parse();
     println!("genechart");
 }
