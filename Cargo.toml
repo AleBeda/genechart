@@ -12,6 +12,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 strfmt = "0.2"
 anyhow = "1"
+svg2pdf = "0.13"
 
 [profile.dev]
 opt-level = 0

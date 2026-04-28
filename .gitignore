@@ -1,4 +1,5 @@
 /target
+.claude/settings.local.json
 # Cargo.lock is omitted here; for a binary crate the Rust community recommends
 # committing it, but the decision is left to the project owner.
 Cargo.lock
