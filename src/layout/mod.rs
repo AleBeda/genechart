@@ -72,6 +72,7 @@ mod tests {
     fn dispatch_fan() {
         let mut prefs = Prefs::default();
         prefs.layout.layout_type = "fan".to_string();
+        prefs.scope.direction = "ancestors".to_string();
         let output = run_layout(&empty_genrep(), &prefs).unwrap();
         assert!(matches!(output, LayoutOutput::Fan(_)));
     }

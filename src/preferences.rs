@@ -81,6 +81,16 @@ pub struct LayoutPrefs {
     pub simple: SimpleLayoutPrefs,
     #[serde(default)]
     pub boxed_couples: BoxedCouplesPrefs,
+    #[serde(default)]
+    pub fan: FanPrefs,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FanPrefs {
+    #[serde(default, deserialize_with = "de_f64")]
+    pub ring_height: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub ring_gap: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

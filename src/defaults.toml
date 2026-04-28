@@ -40,6 +40,10 @@ gap_width = 40.0
 gap_height = 80.0
 box_width_2_spouses = 480.0 # must be >= 2 * box_width + gap_width
 
+[layout.fan]
+ring_height = 80   # radial thickness of each generation ring (canvas units)
+ring_gap = 20      # gap between rings
+
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"
 path = "" # Output file path; empty means stdout
