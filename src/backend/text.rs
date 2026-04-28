@@ -7,7 +7,7 @@ use crate::parser::genrep::{GedDate, Genrep, Individual};
 use crate::layout::simple::SimpleGeo;
 use crate::preferences::Prefs;
 
-fn format_name(indi: &Individual<SimpleGeo>, prefs: &Prefs) -> String {
+pub(crate) fn format_name(indi: &Individual<SimpleGeo>, prefs: &Prefs) -> String {
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
     vars.insert("lastname".into(),  indi.surname.clone().unwrap_or_default());
@@ -24,7 +24,7 @@ fn format_name(indi: &Individual<SimpleGeo>, prefs: &Prefs) -> String {
         .to_string()
 }
 
-fn format_event(template: &str, date: Option<&GedDate>, place: Option<&str>) -> Option<String> {
+pub(crate) fn format_event(template: &str, date: Option<&GedDate>, place: Option<&str>) -> Option<String> {
     if date.is_none() && place.is_none() {
         return None;
     }
@@ -42,7 +42,7 @@ fn format_event(template: &str, date: Option<&GedDate>, place: Option<&str>) -> 
     Some(s)
 }
 
-fn find_marriage<'a>(
+pub(crate) fn find_marriage<'a>(
     indi: &Individual<SimpleGeo>,
     genrep: &'a Genrep<SimpleGeo>,
 ) -> Option<&'a crate::parser::genrep::Event> {
@@ -132,7 +132,7 @@ fn set_char_at(s: &mut String, byte_pos: usize, ch: char) {
 
 // ── Line assembly ─────────────────────────────────────────────────────────────
 
-fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<String> {
+pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<String> {
     let indent_chars = prefs.layout.simple.indent as usize;
     let cols = compute_columns(genrep, prefs);
 
