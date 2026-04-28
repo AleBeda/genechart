@@ -16,6 +16,10 @@ pub struct SimpleGeo {
     pub connectors_below: Vec<usize>,
 }
 
+fn matches_direction(input: &str, canonical: &str) -> bool {
+    !input.is_empty() && canonical.starts_with(input)
+}
+
 fn root_id(genrep: &Genrep, prefs: &Prefs) -> Option<String> {
     let r = prefs.scope.root.trim();
     if !r.is_empty() {
@@ -33,6 +37,7 @@ fn root_id(genrep: &Genrep, prefs: &Prefs) -> Option<String> {
 fn visit(
     id: &str,
     depth: usize,
+    spacing: usize,
     line: &mut usize,
     geo_map: &mut HashMap<String, SimpleGeo>,
     visited: &mut HashSet<String>,
@@ -62,7 +67,7 @@ fn visit(
             ..Default::default()
         },
     );
-    *line += 1;
+    *line += 1 + spacing;
 
     let fams = indi.fams.clone();
 
@@ -99,7 +104,7 @@ fn visit(
                                 ..Default::default()
                             },
                         );
-                        *line += 1;
+                        *line += 1 + spacing;
                     }
                 }
             }
@@ -107,15 +112,15 @@ fn visit(
 
         let children = fam.children_ids.clone();
         for child_id in &children {
-            visit(child_id, depth + 1, line, geo_map, visited, genrep);
+            visit(child_id, depth + 1, spacing, line, geo_map, visited, genrep);
         }
     }
 }
 
-fn layout_descendants(genrep: &Genrep, root: &str, geo_map: &mut HashMap<String, SimpleGeo>) {
+fn layout_descendants(genrep: &Genrep, root: &str, spacing: usize, geo_map: &mut HashMap<String, SimpleGeo>) {
     let mut visited: HashSet<String> = HashSet::new();
     let mut line: usize = 0;
-    visit(root, 0, &mut line, geo_map, &mut visited, genrep);
+    visit(root, 0, spacing, &mut line, geo_map, &mut visited, genrep);
 }
 
 fn in_order(
@@ -152,14 +157,15 @@ fn in_order(
     }
 }
 
-fn layout_ancestors(genrep: &Genrep, root: &str, geo_map: &mut HashMap<String, SimpleGeo>) {
+fn layout_ancestors(genrep: &Genrep, root: &str, spacing: usize, geo_map: &mut HashMap<String, SimpleGeo>) {
     let mut visited = HashSet::new();
     let mut ordered: Vec<(String, usize)> = Vec::new();
     in_order(root, 0, genrep, &mut visited, &mut ordered);
 
-    // First pass: assign line numbers
+    // First pass: assign line numbers, expanding gaps by vert_spacing
     let mut id_to_line: HashMap<String, usize> = HashMap::new();
-    for (line_num, (id, depth)) in ordered.iter().enumerate() {
+    for (seq, (id, depth)) in ordered.iter().enumerate() {
+        let line_num = seq * (1 + spacing);
         id_to_line.insert(id.clone(), line_num);
         geo_map.insert(
             id.clone(),
@@ -212,18 +218,19 @@ impl Layout for SimpleLayout {
         let dir = prefs.scope.direction.as_str();
         let mut geo_map: HashMap<String, SimpleGeo> = HashMap::new();
 
+        let spacing = prefs.layout.simple.vert_spacing as usize;
         match dir {
-            d if d.starts_with("desc") => {
+            d if matches_direction(d, "descendants") => {
                 if let Some(root) = root_id(genrep, prefs) {
-                    layout_descendants(genrep, &root, &mut geo_map);
+                    layout_descendants(genrep, &root, spacing, &mut geo_map);
                 }
             }
-            d if d.starts_with("anc") || d.starts_with("ped") => {
+            d if matches_direction(d, "ancestors") || matches_direction(d, "pedigree") => {
                 if let Some(root) = root_id(genrep, prefs) {
-                    layout_ancestors(genrep, &root, &mut geo_map);
+                    layout_ancestors(genrep, &root, spacing, &mut geo_map);
                 }
             }
-            d if d.starts_with("for") => {
+            d if matches_direction(d, "forest") => {
                 eprintln!(
                     "warning: forest direction is not yet implemented; output will be empty"
                 );
@@ -231,7 +238,7 @@ impl Layout for SimpleLayout {
             other => {
                 eprintln!("warning: unknown direction {other:?}, falling back to descendants");
                 if let Some(root) = root_id(genrep, prefs) {
-                    layout_descendants(genrep, &root, &mut geo_map);
+                    layout_descendants(genrep, &root, spacing, &mut geo_map);
                 }
             }
         }
@@ -415,6 +422,48 @@ mod tests {
         assert_eq!(i1.generation, 2);
         assert_eq!(i3.generation, 1);
         assert_eq!(i2.generation, 2);
+    }
+
+    #[test]
+    fn test_descendants_vert_spacing() {
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".to_string();
+        prefs.scope.direction = "descendants".to_string();
+        prefs.layout.simple.vert_spacing = 1;
+
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        let i1_line = result.individuals["I1"].geo.as_ref().unwrap().line;
+        let i2_line = result.individuals["I2"].geo.as_ref().unwrap().line;
+        let i3_line = result.individuals["I3"].geo.as_ref().unwrap().line;
+        assert_eq!(i2_line, i1_line + 2, "spouse should be 2 lines below root with spacing=1");
+        assert_eq!(i3_line, i2_line + 2, "child should be 2 lines below spouse with spacing=1");
+    }
+
+    #[test]
+    fn test_ancestors_vert_spacing() {
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".to_string();
+        prefs.scope.direction = "ancestors".to_string();
+        prefs.layout.simple.vert_spacing = 1;
+
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        let father_line = result.individuals["I1"].geo.as_ref().unwrap().line;
+        let root_line   = result.individuals["I3"].geo.as_ref().unwrap().line;
+        let mother_line = result.individuals["I2"].geo.as_ref().unwrap().line;
+        assert_eq!(root_line,   father_line + 2, "root should be 2 lines below father");
+        assert_eq!(mother_line, root_line   + 2, "mother should be 2 lines below root");
+
+        let root_geo = result.individuals["I3"].geo.as_ref().unwrap();
+        assert!(root_geo.connectors_above.contains(&(father_line + 1)),
+                "gap line between father and root must carry a connector");
     }
 
     #[test]

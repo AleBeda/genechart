@@ -36,6 +36,10 @@ enum TextSlot {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+fn matches_direction(input: &str, canonical: &str) -> bool {
+    !input.is_empty() && canonical.starts_with(input)
+}
+
 fn strip_at(s: &str) -> String {
     s.trim_matches('@').to_string()
 }
@@ -412,7 +416,7 @@ pub fn compute_scope(
     generations: Option<u32>,
 ) {
     let dir = direction.trim().to_ascii_lowercase();
-    if dir.starts_with("for") {
+    if matches_direction(&dir, "forest") {
         for indi in genrep.individuals.values_mut() {
             indi.in_scope = true;
         }
@@ -427,9 +431,9 @@ pub fn compute_scope(
         Option::None => return,
     };
 
-    if dir.starts_with("desc") {
+    if matches_direction(&dir, "descendants") {
         scope_descendants(genrep, &root, generations);
-    } else if dir.starts_with("anc") || dir.starts_with("ped") {
+    } else if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
         scope_ancestors(genrep, &root, generations);
     } else {
         eprintln!("Warning: unknown direction '{direction}', defaulting to forest");
@@ -642,6 +646,23 @@ mod tests {
         for fam in gr.families.values() {
             assert!(fam.in_scope, "family {} not in scope", fam.id);
         }
+    }
+
+    #[test]
+    fn test_direction_prefix_only_valid_prefixes_accepted() {
+        // "desc" is a valid prefix of "descendants" — I3's ancestors should not be in scope.
+        let mut gr = parse_str(SAMPLE).unwrap();
+        compute_scope(&mut gr, Some("I3"), "desc", Some(2));
+        assert!( gr.get_individual("I3").unwrap().in_scope, "I3 should be in scope");
+        assert!(!gr.get_individual("I1").unwrap().in_scope, "I1 is not a descendant of I3");
+        assert!(!gr.get_individual("I2").unwrap().in_scope, "I2 is not a descendant of I3");
+
+        // "descABC" is NOT a valid prefix — must not silently match descendants.
+        // The fallback is forest scope, so I1 ends up in scope.
+        let mut gr2 = parse_str(SAMPLE).unwrap();
+        compute_scope(&mut gr2, Some("I3"), "descABC", Some(2));
+        assert!(gr2.get_individual("I1").unwrap().in_scope,
+                "descABC must not match 'descendants'; forest fallback puts I1 in scope");
     }
 
     #[test]

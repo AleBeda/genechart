@@ -58,6 +58,10 @@ pub(crate) fn find_marriage<'a>(
 
 // ── Column layout ─────────────────────────────────────────────────────────────
 
+fn display_len(s: &str) -> usize {
+    s.chars().count()
+}
+
 struct Columns {
     birth:    usize,
     death:    usize,
@@ -77,7 +81,7 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
             } else {
                 0
             };
-            indent + gen_prefix + format_name(indi, prefs).len()
+            indent + gen_prefix + display_len(&format_name(indi, prefs))
         })
         .max()
         .unwrap_or(20);
@@ -87,7 +91,7 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .filter_map(|i| i.birth.as_ref().and_then(|e| {
             format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
         }))
-        .map(|s| s.len())
+        .map(|s| display_len(&s))
         .max()
         .unwrap_or(24);
 
@@ -96,7 +100,7 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .filter_map(|i| i.death.as_ref().and_then(|e| {
             format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
         }))
-        .map(|s| s.len())
+        .map(|s| display_len(&s))
         .max()
         .unwrap_or(24);
 
@@ -110,8 +114,8 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
 // ── String helpers ────────────────────────────────────────────────────────────
 
 fn write_at_col(s: &mut String, col: usize, text: &str) {
-    if s.len() < col {
-        s.extend(std::iter::repeat(' ').take(col - s.len()));
+    if display_len(s) < col {
+        s.extend(std::iter::repeat(' ').take(col - display_len(s)));
     } else {
         s.push_str("  ");
     }
@@ -277,7 +281,7 @@ pub fn render_to_file(
 mod tests {
     use super::*;
     use crate::parser::{compute_scope, parse_str};
-    use crate::layout::run_layout;
+    use crate::layout::{run_layout, LayoutOutput};
 
     const GEDCOM: &str = "\
 0 HEAD
@@ -374,6 +378,59 @@ mod tests {
         let birth_pos = lines[0].find("* ").expect("birth not found on line 0");
         assert!(birth_pos > "1. John Ancestor".len(),
                 "birth should be after name: {:?}", lines[0]);
+    }
+
+    #[test]
+    fn test_sex_unknown_column_aligned() {
+        // Regression: unknown sex previously left a trailing space in the formatted
+        // name, inflating the birth column for everyone by 1.
+        const GED: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Big /Nameperson/
+1 BIRT
+2 DATE 1 JAN 1900
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Al /Bo/
+1 SEX M
+1 BIRT
+2 DATE 2 FEB 1901
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+0 TRLR
+";
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I2"), "descendants", Some(2));
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I2".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.layout.layout_type = "simple".into();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        prefs.show.generation_num = false;
+        prefs.show.birth = true;
+        prefs.format.birth = "* {date}".into();
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+        let g = match &layout_out { LayoutOutput::Simple(g) => g, _ => panic!() };
+        let lines = build_lines(g, &prefs);
+
+        // Use character counts (display columns), not byte offsets.
+        // ♂ is 3 bytes but 1 display column — the test must measure visual alignment.
+        let char_positions: Vec<usize> = lines.iter()
+            .filter_map(|l| l.find("* ").map(|b| l[..b].chars().count()))
+            .collect();
+        assert_eq!(char_positions.len(), 2, "expected birth on both lines: {:?}", lines);
+        assert_eq!(char_positions[0], char_positions[1],
+                   "birth columns must align visually; lines:\n{:?}", lines);
+        assert_eq!(char_positions[0], "Big Nameperson".chars().count() + 4,
+                   "birth column should equal display width of longest name + 4");
     }
 
     #[test]

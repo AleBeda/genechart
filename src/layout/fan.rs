@@ -1,6 +1,10 @@
 //! Half-circle pedigree fan layout.
 
 use anyhow::{bail, Result};
+
+fn matches_direction(input: &str, canonical: &str) -> bool {
+    !input.is_empty() && canonical.starts_with(input)
+}
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -25,7 +29,7 @@ impl Layout for FanLayout {
 
     fn compute(&self, genrep: &Genrep, prefs: &Prefs) -> Result<Genrep<FanGeo>> {
         let dir = prefs.scope.direction.to_lowercase();
-        if !matches!(dir.as_str(), "ancestors" | "anc" | "pedigree" | "ped") {
+        if !matches_direction(&dir, "ancestors") && !matches_direction(&dir, "pedigree") {
             eprintln!("warning: fan layout requires direction=ancestors");
             bail!("fan layout requires direction=ancestors");
         }
