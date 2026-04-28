@@ -1,4 +1,4 @@
-//! Text-like layout: descendants, ancestors (stub), forest (stub).
+//! Text-like layout: descendants, ancestors, forest (stub).
 
 use anyhow::Result;
 use crate::parser::genrep::{Family, Genrep, Individual};
@@ -118,6 +118,91 @@ fn layout_descendants(genrep: &Genrep, root: &str, geo_map: &mut HashMap<String,
     visit(root, 0, &mut line, geo_map, &mut visited, genrep);
 }
 
+fn in_order(
+    id: &str,
+    depth: usize,
+    genrep: &Genrep,
+    visited: &mut HashSet<String>,
+    ordered: &mut Vec<(String, usize)>,
+) {
+    if visited.contains(id) {
+        return;
+    }
+    visited.insert(id.to_string());
+
+    let Some(indi) = genrep.individuals.get(id) else { return };
+    if !indi.in_scope {
+        return;
+    }
+
+    let parents = indi.famc.first()
+        .and_then(|fam_id| genrep.families.get(fam_id));
+
+    let father_id = parents.and_then(|f| f.husband_id.as_deref());
+    let mother_id = parents.and_then(|f| f.wife_id.as_deref());
+
+    if let Some(fid) = father_id {
+        in_order(fid, depth + 1, genrep, visited, ordered);
+    }
+
+    ordered.push((id.to_string(), depth));
+
+    if let Some(mid) = mother_id {
+        in_order(mid, depth + 1, genrep, visited, ordered);
+    }
+}
+
+fn layout_ancestors(genrep: &Genrep, root: &str, geo_map: &mut HashMap<String, SimpleGeo>) {
+    let mut visited = HashSet::new();
+    let mut ordered: Vec<(String, usize)> = Vec::new();
+    in_order(root, 0, genrep, &mut visited, &mut ordered);
+
+    // First pass: assign line numbers
+    let mut id_to_line: HashMap<String, usize> = HashMap::new();
+    for (line_num, (id, depth)) in ordered.iter().enumerate() {
+        id_to_line.insert(id.clone(), line_num);
+        geo_map.insert(
+            id.clone(),
+            SimpleGeo {
+                line: line_num,
+                indent: *depth,
+                generation: depth + 1,
+                is_spouse: false,
+                connectors_above: Vec::new(),
+                connectors_below: Vec::new(),
+            },
+        );
+    }
+
+    // Second pass: compute connectors
+    for (id, _depth) in &ordered {
+        let Some(indi) = genrep.individuals.get(id.as_str()) else { continue };
+        let self_line = id_to_line[id.as_str()];
+
+        let parents = indi.famc.first()
+            .and_then(|fam_id| genrep.families.get(fam_id));
+
+        if let Some(fam) = parents {
+            if let Some(fid) = &fam.husband_id {
+                if let Some(&father_line) = id_to_line.get(fid.as_str()) {
+                    let above: Vec<usize> = (father_line + 1..self_line).collect();
+                    if let Some(geo) = geo_map.get_mut(id.as_str()) {
+                        geo.connectors_above = above;
+                    }
+                }
+            }
+            if let Some(mid) = &fam.wife_id {
+                if let Some(&mother_line) = id_to_line.get(mid.as_str()) {
+                    let below: Vec<usize> = (self_line + 1..mother_line).collect();
+                    if let Some(geo) = geo_map.get_mut(id.as_str()) {
+                        geo.connectors_below = below;
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub struct SimpleLayout;
 
 impl Layout for SimpleLayout {
@@ -134,7 +219,9 @@ impl Layout for SimpleLayout {
                 }
             }
             d if d.starts_with("anc") || d.starts_with("ped") => {
-                eprintln!("warning: ancestors direction not yet implemented in simple layout");
+                if let Some(root) = root_id(genrep, prefs) {
+                    layout_ancestors(genrep, &root, &mut geo_map);
+                }
             }
             d if d.starts_with("for") => {
                 eprintln!(
@@ -267,5 +354,84 @@ mod tests {
 
         let result = SimpleLayout.compute(&genrep, &prefs);
         assert!(result.is_ok());
+    }
+
+    const GEDCOM_3GEN: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME John /Ancestor/
+1 SEX M
+1 FAMS @F1@
+1 FAMC @F2@
+0 @I2@ INDI
+1 NAME Jane /Ancestress/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Paul /Child/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 @I4@ INDI
+1 NAME Grandpa /Ancestor/
+1 SEX M
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Grandma /Ancestor/
+1 SEX F
+1 FAMS @F2@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I1@
+0 TRLR
+";
+
+    #[test]
+    fn test_ancestors_two_generations() {
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".to_string();
+        prefs.scope.direction = "ancestors".to_string();
+
+        let output = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        let i1 = output.individuals["I1"].geo.as_ref().unwrap();
+        let i3 = output.individuals["I3"].geo.as_ref().unwrap();
+        let i2 = output.individuals["I2"].geo.as_ref().unwrap();
+
+        assert!(i1.line < i3.line, "father above root");
+        assert!(i3.line < i2.line, "mother below root");
+        assert_eq!(i1.indent, 1);
+        assert_eq!(i3.indent, 0);
+        assert_eq!(i2.indent, 1);
+        assert_eq!(i1.generation, 2);
+        assert_eq!(i3.generation, 1);
+        assert_eq!(i2.generation, 2);
+    }
+
+    #[test]
+    fn test_ancestors_three_generations() {
+        let mut genrep = parse_str(GEDCOM_3GEN).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(3));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".to_string();
+        prefs.scope.direction = "ancestors".to_string();
+
+        let output = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        assert_eq!(output.individuals["I4"].geo.as_ref().unwrap().line, 0);
+        assert_eq!(output.individuals["I1"].geo.as_ref().unwrap().line, 1);
+        assert_eq!(output.individuals["I5"].geo.as_ref().unwrap().line, 2);
+        assert_eq!(output.individuals["I3"].geo.as_ref().unwrap().line, 3);
+        assert_eq!(output.individuals["I2"].geo.as_ref().unwrap().line, 4);
     }
 }
