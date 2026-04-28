@@ -26,7 +26,7 @@ death = "× {date}, {location}"
 marriage = "⚭ {date}, {location}"
 
 [layout]
-type = "boxed_couples" # Valid values: "simple", "boxed_couples", "fan"
+type = "simple" # Valid values: "simple", "boxed_couples", "fan"
 root_pos = "bottom" # Valid values: "bot[tom]", "top"
 
 [layout.simple]
@@ -41,7 +41,8 @@ gap_height = 80.0
 box_width_2_spouses = 480.0 # must be >= 2 * box_width + gap_width
 
 [output]
-type = "svg" # Valid values: "text", "svg", "pdf"
+type = "text" # Valid values: "text", "svg", "pdf"
+path = "" # Output file path; empty means stdout
 
 [output.paper]
 size = "A4" # Valid values: "A0"–"A5", "letter", "custom"

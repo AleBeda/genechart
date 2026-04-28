@@ -110,6 +110,8 @@ pub struct OutputPrefs {
     #[serde(default, rename = "type")]
     pub output_type: String,
     #[serde(default)]
+    pub path: String,
+    #[serde(default)]
     pub paper: PaperPrefs,
     #[serde(default)]
     pub poster: PosterPrefs,
@@ -358,8 +360,8 @@ mod tests {
         let prefs = load(None, &[]).unwrap();
         assert_eq!(prefs.scope.generations, 4);
         assert_eq!(prefs.scope.direction, "descendants");
-        assert_eq!(prefs.layout.layout_type, "boxed_couples");
-        assert_eq!(prefs.output.output_type, "svg");
+        assert_eq!(prefs.layout.layout_type, "simple");
+        assert_eq!(prefs.output.output_type, "text");
         assert!(prefs.show.generation_num);
         assert_eq!(prefs.layout.boxed_couples.box_width, 220.0);
         assert_eq!(prefs.output.paper.size, "A4");
