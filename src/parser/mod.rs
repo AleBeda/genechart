@@ -183,7 +183,7 @@ pub fn parse(path: &Path) -> anyhow::Result<Genrep> {
     parse_str(&content)
 }
 
-fn parse_str(content: &str) -> anyhow::Result<Genrep> {
+pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
     let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
     let mut families: HashMap<String, Family<()>> = HashMap::new();
     let mut first_indi_id: Option<String> = Option::None;

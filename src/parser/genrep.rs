@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct GedDate {
     pub raw: String,
 }
 
+#[derive(Clone)]
 pub struct Event {
     pub date: Option<GedDate>,
     pub place: Option<String>,
