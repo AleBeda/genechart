@@ -19,9 +19,11 @@ marriage = true
 
 [format]
 individual = "{firstname} {lastname} {sex}"
-birth = "* {date:%d %b %Y}, {location}"
-death = "× {date:%d %b %Y}, {location}"
-marriage = "⚭ {date:%d %b %Y}, {location}"
+# {date} expands to the raw GEDCOM date string (e.g. "1 JAN 1812").
+# Date reformatting (e.g. {date:%d %b %Y}) requires a GEDCOM date parser — deferred feature.
+birth = "* {date}, {location}"
+death = "× {date}, {location}"
+marriage = "⚭ {date}, {location}"
 
 [layout]
 type = "boxed_couples" # Valid values: "simple", "boxed_couples", "fan"
