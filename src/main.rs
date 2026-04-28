@@ -35,6 +35,7 @@ fn run() -> anyhow::Result<()> {
     prefs.files.gedcom = gedcom_path.display().to_string();
 
     // 5. Parse GEDCOM
+    parser::set_diagnostics(prefs.diagnostics.clone());
     let mut genrep = parser::parse(&gedcom_path)?;
 
     // 6. Compute scope

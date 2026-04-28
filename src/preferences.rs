@@ -10,6 +10,26 @@ const DEFAULTS_TOML: &str = include_str!("defaults.toml");
 
 // ── Structs ──────────────────────────────────────────────────────────────────
 
+fn default_true() -> bool { true }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiagnosticsPrefs {
+    #[serde(default = "default_true")]
+    pub errors: bool,
+    #[serde(default)]
+    pub warnings: bool,
+    #[serde(default)]
+    pub messages: bool,
+    #[serde(default)]
+    pub debug: bool,
+}
+
+impl Default for DiagnosticsPrefs {
+    fn default() -> Self {
+        Self { errors: true, warnings: false, messages: false, debug: false }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Prefs {
     pub title: Option<String>,
@@ -25,6 +45,8 @@ pub struct Prefs {
     pub layout: LayoutPrefs,
     #[serde(default)]
     pub output: OutputPrefs,
+    #[serde(default)]
+    pub diagnostics: DiagnosticsPrefs,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

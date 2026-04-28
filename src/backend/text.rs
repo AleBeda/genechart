@@ -76,12 +76,12 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
         .map(|(indi, geo)| {
             let indent = geo.indent * indent_chars;
-            let gen_prefix = if !geo.is_spouse && prefs.show.generation_num {
+            let gen_prefix_len = if prefs.show.generation_num {
                 format!("{}. ", geo.generation).len()
             } else {
                 0
             };
-            indent + gen_prefix + display_len(&format_name(indi, prefs))
+            indent + gen_prefix_len + display_len(&format_name(indi, prefs))
         })
         .max()
         .unwrap_or(20);
@@ -158,8 +158,12 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
     for (_, indi, geo) in &entries {
         let indent = " ".repeat(geo.indent * indent_chars);
 
-        let gen_prefix = if !geo.is_spouse && prefs.show.generation_num {
-            format!("{}. ", geo.generation)
+        let gen_prefix = if prefs.show.generation_num {
+            if geo.is_spouse {
+                " ".repeat(format!("{}. ", geo.generation).len())
+            } else {
+                format!("{}. ", geo.generation)
+            }
         } else {
             String::new()
         };
@@ -369,6 +373,21 @@ mod tests {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
         assert!(!lines[1].contains("* "), "unexpected birth prefix on spouse line: {:?}", lines[1]);
+    }
+
+    #[test]
+    fn test_spouse_name_aligned_with_non_spouse() {
+        // With generation numbers on, spouse names must start at the same column
+        // as the non-spouse name (i.e. after the "N. " prefix width).
+        let prefs = make_prefs(); // generation_num = true
+        let lines = render_text(&prefs);
+        // John (non-spouse) line starts with "1. John…"
+        let root_name_col = lines[0].find("John").expect("John not on line 0");
+        // Jane (spouse) line should start "   Jane…" — same column as John
+        let spouse_name_col = lines[1].find("Jane").expect("Jane not on line 1");
+        assert_eq!(root_name_col, spouse_name_col,
+            "spouse name column ({spouse_name_col}) must equal non-spouse name column ({root_name_col});\n  line0: {:?}\n  line1: {:?}",
+            lines[0], lines[1]);
     }
 
     #[test]

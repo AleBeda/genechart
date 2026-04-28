@@ -96,3 +96,9 @@ name_above = 2.0
 date_above = 2.0
 marriage_above = 6.0
 spouse_separation = 10.0
+
+[diagnostics]
+errors = true
+warnings = false
+messages = false
+debug = false

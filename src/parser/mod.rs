@@ -2,8 +2,25 @@ pub mod genrep;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
+use std::sync::OnceLock;
 
 use genrep::{Event, Family, GedDate, Genrep, Individual};
+use crate::preferences::DiagnosticsPrefs;
+
+static DIAG: OnceLock<DiagnosticsPrefs> = OnceLock::new();
+
+/// Call once from `main` after loading preferences, before parsing.
+pub fn set_diagnostics(diag: DiagnosticsPrefs) {
+    let _ = DIAG.set(diag);
+}
+
+macro_rules! diag_warn {
+    ($($arg:tt)*) => {
+        if DIAG.get().map_or(false, |d| d.warnings) {
+            eprintln!("Warning: {}", format_args!($($arg)*));
+        }
+    }
+}
 
 // ── internal parser state ────────────────────────────────────────────────────
 
@@ -207,7 +224,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
         let (level, xref, tag, value) = match parse_line(line) {
             Some(t) => t,
             Option::None => {
-                eprintln!("Warning: cannot parse line {n}: {line:?}");
+                diag_warn!("cannot parse line {n}: {line:?}");
                 continue;
             }
         };
@@ -360,7 +377,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         }
                         _ => {
                             if warned_tags.insert(tag.clone()) {
-                                eprintln!("Warning: unknown tag {tag} at line {n}");
+                                diag_warn!("unknown tag {tag} at line {n}");
                             }
                         }
                     }
@@ -468,7 +485,7 @@ pub fn compute_scope(
     } else if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
         scope_ancestors(genrep, &root, generations);
     } else {
-        eprintln!("Warning: unknown direction '{direction}', defaulting to forest");
+        diag_warn!("unknown direction '{direction}', defaulting to forest");
         for indi in genrep.individuals.values_mut() {
             indi.in_scope = true;
         }
@@ -484,14 +501,14 @@ fn resolve_root(genrep: &Genrep, root_id: Option<&str>) -> Option<String> {
             if genrep.individuals.contains_key(id) {
                 Some(id.to_string())
             } else {
-                eprintln!("Warning: root individual '{id}' not found");
+                diag_warn!("root individual '{id}' not found");
                 Option::None
             }
         }
         Option::None => match &genrep.first_individual_id {
             Some(id) => Some(id.clone()),
             Option::None => {
-                eprintln!("Warning: no individuals in genrep");
+                diag_warn!("no individuals in genrep");
                 Option::None
             }
         },
