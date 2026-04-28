@@ -16,6 +16,7 @@ sex = true
 birth = true
 death = true
 marriage = true
+notes = false
 
 [format]
 individual = "{firstname} {lastname} {sex}"

@@ -177,6 +177,9 @@ fn copy_individual(src: &Individual<()>, geo: Option<FanGeo>) -> Individual<FanG
         death: src.death.clone(),
         fams: src.fams.clone(),
         famc: src.famc.clone(),
+        alt_name: src.alt_name.clone(),
+        name_heb: src.name_heb.clone(),
+        living: src.living,
         in_scope: src.in_scope,
         geo,
     }
@@ -190,6 +193,7 @@ fn copy_families(genrep: &Genrep) -> HashMap<String, Family<FanGeo>> {
             wife_id: fam.wife_id.clone(),
             children_ids: fam.children_ids.clone(),
             marriage: fam.marriage.clone(),
+            jmar: fam.jmar.clone(),
             in_scope: fam.in_scope,
             geo: None,
         })
@@ -212,6 +216,9 @@ mod tests {
             death: None,
             fams: vec![],
             famc,
+            alt_name: None,
+            name_heb: None,
+            living: None,
             in_scope: true,
             geo: None,
         }
@@ -224,6 +231,7 @@ mod tests {
             wife_id: wife.map(str::to_string),
             children_ids: vec![child.to_string()],
             marriage: None,
+            jmar: None,
             in_scope: true,
             geo: None,
         }

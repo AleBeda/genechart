@@ -57,6 +57,8 @@ pub struct ShowPrefs {
     pub death: bool,
     #[serde(default)]
     pub marriage: bool,
+    #[serde(default)]
+    pub notes: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

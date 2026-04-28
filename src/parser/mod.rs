@@ -195,6 +195,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
     let mut ctx = RecordCtx::None;
     let mut event_ctx = EventCtx::None;
     let mut text_slot = TextSlot::None;
+    let mut warned_tags: HashSet<String> = HashSet::new();
 
     for (lineno, line) in content.lines().enumerate() {
         let n = lineno + 1;
@@ -232,6 +233,9 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             death: Option::None,
                             fams: Vec::new(),
                             famc: Vec::new(),
+                            alt_name: Option::None,
+                            name_heb: Option::None,
+                            living: Option::None,
                             in_scope: false,
                             geo: Option::None,
                         },
@@ -246,6 +250,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         wife_id: Option::None,
                         children_ids: Vec::new(),
                         marriage: Option::None,
+                        jmar: Option::None,
                         in_scope: false,
                         geo: Option::None,
                     });
@@ -328,8 +333,35 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                                 event_ctx = EventCtx::Marriage;
                             }
                         }
+                        "NOTE" | "CHAN" => {} // silently skip
+                        "NAM2" => {
+                            if let RecordCtx::Indi { indi, .. } = &mut ctx {
+                                indi.alt_name = Some(value.clone());
+                            }
+                        }
+                        "NAMH" => {
+                            if let RecordCtx::Indi { indi, .. } = &mut ctx {
+                                indi.name_heb = Some(value.clone());
+                            }
+                        }
+                        "JMAR" => {
+                            if let RecordCtx::Fam(fam) = &mut ctx {
+                                fam.jmar = Some(value.clone());
+                            }
+                        }
+                        "_LIVING" => {
+                            if let RecordCtx::Indi { indi, .. } = &mut ctx {
+                                indi.living = match value.trim() {
+                                    "Y" => Some(true),
+                                    "N" => Some(false),
+                                    _ => Option::None,
+                                };
+                            }
+                        }
                         _ => {
-                            eprintln!("Warning: unknown tag {tag} at line {n}");
+                            if warned_tags.insert(tag.clone()) {
+                                eprintln!("Warning: unknown tag {tag} at line {n}");
+                            }
                         }
                     }
                 }
@@ -672,5 +704,35 @@ mod tests {
         assert!(result.is_ok());
         let gr = result.unwrap();
         assert!(gr.get_individual("I1").is_some());
+    }
+
+    #[test]
+    fn test_new_tags_parsed() {
+        let ged = "\
+0 @I1@ INDI
+1 NAME Test /Person/
+1 NAM2 Test Person (alternate)
+1 NAMH טסט פרסון
+1 _LIVING Y
+0 @I2@ INDI
+1 NAME Dead /Person/
+1 _LIVING N
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 JMAR ref-12345
+0 TRLR
+";
+        let gr = parse_str(ged).unwrap();
+        let i1 = gr.get_individual("I1").unwrap();
+        assert_eq!(i1.alt_name.as_deref(), Some("Test Person (alternate)"));
+        assert_eq!(i1.name_heb.as_deref(), Some("טסט פרסון"));
+        assert_eq!(i1.living, Some(true));
+
+        let i2 = gr.get_individual("I2").unwrap();
+        assert_eq!(i2.living, Some(false));
+
+        let f1 = gr.get_family("F1").unwrap();
+        assert_eq!(f1.jmar.as_deref(), Some("ref-12345"));
     }
 }
