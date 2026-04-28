@@ -104,9 +104,9 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .max()
         .unwrap_or(24);
 
-    let birth_col    = max_name_col + 4;
-    let death_col    = birth_col  + max_birth  + 4;
-    let marriage_col = death_col  + max_death  + 4;
+    let birth_col    = max_name_col + 2;
+    let death_col    = birth_col  + max_birth  + 2;
+    let marriage_col = death_col  + max_death  + 2;
 
     Columns { birth: birth_col, death: death_col, marriage: marriage_col }
 }
@@ -429,8 +429,8 @@ mod tests {
         assert_eq!(char_positions.len(), 2, "expected birth on both lines: {:?}", lines);
         assert_eq!(char_positions[0], char_positions[1],
                    "birth columns must align visually; lines:\n{:?}", lines);
-        assert_eq!(char_positions[0], "Big Nameperson".chars().count() + 4,
-                   "birth column should equal display width of longest name + 4");
+        assert_eq!(char_positions[0], "Big Nameperson".chars().count() + 2,
+                   "birth column should equal display width of longest name + 2");
     }
 
     #[test]

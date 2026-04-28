@@ -333,7 +333,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                                 event_ctx = EventCtx::Marriage;
                             }
                         }
-                        "NOTE" | "CHAN" => {} // silently skip
+                        "NOTE" | "CHAN" | "TEXT" => {} // silently skip
                         "NAM2" => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
                                 indi.alt_name = Some(value.clone());
@@ -425,7 +425,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             }
                             EventCtx::None => {}
                         },
-                        _ => {} // silently skip unknown level-2 sub-fields
+                        _ => { text_slot = TextSlot::None; } // reset on unknown sub-fields so CONT can't bleed
                     }
                 }
                 _ => {} // level 3+: silently skip
@@ -704,6 +704,26 @@ mod tests {
         assert!(result.is_ok());
         let gr = result.unwrap();
         assert!(gr.get_individual("I1").is_some());
+    }
+
+    #[test]
+    fn test_cont_after_unknown_level2_does_not_bleed() {
+        // A CONT at level 3 after an unrecognised level-2 tag (e.g. SOUR, NOTE)
+        // must not append to the previously set field (e.g. birth place).
+        let ged = "\
+0 @I1@ INDI
+1 NAME Test /Person/
+1 BIRT
+2 DATE 1 JAN 1812
+2 PLAC London
+2 SOUR some source
+3 CONT Image Group Number: 005790649
+0 TRLR
+";
+        let gr = parse_str(ged).unwrap();
+        let i1 = gr.get_individual("I1").unwrap();
+        let place = i1.birth.as_ref().and_then(|e| e.place.as_deref()).unwrap_or("");
+        assert_eq!(place, "London", "CONT after unknown SOUR must not append to birth place");
     }
 
     #[test]
