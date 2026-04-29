@@ -210,7 +210,7 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // Uses exact font metrics when the font is available, falls back to estimate.
     let gen_prefix_w = |generation: usize| -> f64 {
         if prefs.show.generation_num {
-            let s = format!("{}. ", generation);
+            let s = format!("{:>2}. ", generation);
             font_metrics::measure_text(&s, &font_family_base, font_size)
                 .unwrap_or_else(|| s.chars().count() as f64 * cw)
         } else {
@@ -315,7 +315,7 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
         // Generation number (non-spouse only)
         if prefs.show.generation_num && !geo.is_spouse {
-            let prefix = format!("{}. ", geo.generation);
+            let prefix = format!("{:>2}. ", geo.generation);
             out.push_str(&svg_text(x_base, y, &prefix, &font_family, font_size));
         }
 

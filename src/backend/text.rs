@@ -62,6 +62,12 @@ fn display_len(s: &str) -> usize {
     s.chars().count()
 }
 
+/// Right-align the generation number in a 2-char field: " 1. ", " 9. ", "10. ".
+/// Fixed width prevents column shift at the single-digit / double-digit boundary.
+fn gen_prefix_str(generation: usize) -> String {
+    format!("{:>2}. ", generation)
+}
+
 struct Columns {
     birth:    usize,
     death:    usize,
@@ -77,7 +83,7 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .map(|(indi, geo)| {
             let indent = geo.indent * indent_chars;
             let gen_prefix_len = if prefs.show.generation_num {
-                format!("{}. ", geo.generation).len()
+                gen_prefix_str(geo.generation).len()
             } else {
                 0
             };
@@ -168,9 +174,9 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
 
         let gen_prefix = if prefs.show.generation_num {
             if geo.is_spouse {
-                " ".repeat(format!("{}. ", geo.generation).len())
+                " ".repeat(gen_prefix_str(geo.generation).len())
             } else {
-                format!("{}. ", geo.generation)
+                gen_prefix_str(geo.generation)
             }
         } else {
             String::new()
@@ -217,7 +223,7 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
     for (_, _, geo) in &entries {
         // Align with the first character of the parent's name (after gen-prefix).
         let parent_gen_prefix = if prefs.show.generation_num {
-            format!("{}. ", geo.generation + 1).len()
+            gen_prefix_str(geo.generation + 1).len()
         } else {
             0
         };
@@ -465,6 +471,29 @@ mod tests {
                    "birth columns must align visually; lines:\n{:?}", lines);
         assert_eq!(char_positions[0], "Big Nameperson".chars().count() + 2,
                    "birth column should equal display width of longest name + 2");
+    }
+
+    #[test]
+    fn test_gen_prefix_str_fixed_width() {
+        // Single-digit and double-digit generation numbers must produce the same width
+        // so that name columns stay aligned across the gen-9 / gen-10 boundary.
+        assert_eq!(gen_prefix_str(1),  " 1. ", "gen 1 should be right-aligned in 2 chars");
+        assert_eq!(gen_prefix_str(9),  " 9. ", "gen 9 should be right-aligned in 2 chars");
+        assert_eq!(gen_prefix_str(10), "10. ", "gen 10 should be 4 chars total");
+        assert_eq!(
+            gen_prefix_str(1).len(),
+            gen_prefix_str(10).len(),
+            "gen-1 and gen-10 prefix must be the same byte length"
+        );
+    }
+
+    #[test]
+    fn test_gen_prefix_present_in_output() {
+        // With generation numbers on, the root line must start with " 1. ".
+        let prefs = make_prefs(); // show.generation_num = true
+        let lines = render_text(&prefs);
+        assert!(lines[0].starts_with(" 1. "),
+            "root line should start with \" 1. \" (right-aligned); got: {:?}", lines[0]);
     }
 
     #[test]
