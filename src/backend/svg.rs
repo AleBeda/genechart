@@ -18,9 +18,6 @@ const FONT_FAMILY: &str = "monospace";
 // Estimated average character width as a fraction of font-size.
 // Used for column-position arithmetic when exact glyph metrics are unavailable.
 const CHAR_WIDTH_RATIO: f64 = 0.6;
-// More conservative estimate used only for dot-leader x1 placement.
-// Proportional fonts (Georgia, etc.) average closer to 0.50× font-size.
-const CHAR_WIDTH_RATIO_TIGHT: f64 = 0.50;
 // Fixed pixel gap between text and the start/end of a dot leader.
 const DOT_LEADER_GAP: f64 = 3.0;
 /// Font-family used for symbol characters rendered in their own <text> element.
@@ -315,19 +312,16 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
             out.push_str(&svg_text(x_base, y, &prefix, &font_family, font_size));
         }
 
-        // Name
+        // Name — rendered as a single element so sex symbols (♂/♀) at the end
+        // stay flush with the name text (no positioning gap from our width estimate).
         let name = format_name(indi, prefs);
-        render_mixed_text(&mut out, x_base + gpw, y, &name, &font_family, font_size, cw);
-
-        // Tight estimate of actual rendered text end (for name→birth dot-leader x1 only).
-        let name_end_tight = x_base + gpw
-            + name.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO_TIGHT;
+        out.push_str(&svg_text(x_base + gpw, y, &name, &font_family, font_size));
         let mut last_x = x_base + gpw + text_w(&name);
 
-        // Birth (with optional dot leader; use tight estimate for the left edge)
+        // Birth (with optional dot leader)
         if let Some(ref s) = birth_s {
             if dot_leaders {
-                dot_leader(&mut out, name_end_tight, x_birth, y, font_size, &conn_color);
+                dot_leader(&mut out, last_x, x_birth, y, font_size, &conn_color);
             }
             render_mixed_text(&mut out, x_birth, y, s, &font_family, font_size, cw);
             last_x = x_birth + text_w(s);
@@ -781,6 +775,24 @@ mod tests {
         });
         assert!(latin_in_georgia,
             "Latin text should be in the primary-font element: {out}");
+    }
+
+    #[test]
+    fn test_svg_sex_symbol_in_name_element() {
+        // Sex symbols (♂/♀) must share the same <text> element as the person's name.
+        // Splitting them into separate elements (as render_mixed_text does for event
+        // strings) creates a visible positioning gap due to character-width estimation.
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        let has_combined = out.lines().any(|l| {
+            l.contains("<text ")
+                && (l.contains("♂") || l.contains("♀"))
+                && (l.contains("John") || l.contains("Jane") || l.contains("Paul"))
+        });
+        assert!(has_combined,
+            "name and sex symbol should be in the same <text> element: {}",
+            &out[..out.len().min(500)]);
     }
 
     #[test]
