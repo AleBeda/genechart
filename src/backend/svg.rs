@@ -23,6 +23,10 @@ const CHAR_WIDTH_RATIO: f64 = 0.6;
 const CHAR_WIDTH_RATIO_TIGHT: f64 = 0.50;
 // Fixed pixel gap between text and the start/end of a dot leader.
 const DOT_LEADER_GAP: f64 = 3.0;
+/// Font-family used for symbol characters rendered in their own <text> element.
+/// Lists only symbol fonts so usvg doesn't try the primary Latin font first.
+const SYMBOL_FONT_FAMILY: &str =
+    "'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif";
 
 // ── Low-level SVG primitives ──────────────────────────────────────────────────
 
@@ -108,6 +112,47 @@ fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color:
              stroke-dasharray=\"1,3\" stroke-linecap=\"round\"/>\n",
             font_size * 0.07
         ));
+    }
+}
+
+/// Render `text` at (x, y), splitting runs of Unicode symbol characters
+/// (codepoint ≥ U+2000) into separate `<text>` elements with SYMBOL_FONT_FAMILY.
+///
+/// This prevents a symbol character like ⚭ from sharing a `<text>` element with
+/// Latin characters — svg2pdf 0.13 corrupts cross-font text runs in the PDF.
+fn render_mixed_text(
+    out: &mut String,
+    x: f64, y: f64,
+    text: &str,
+    primary_family: &str,
+    font_size: f64,
+    cw: f64,
+) {
+    if text.is_empty() {
+        out.push_str(&svg_text(x, y, text, primary_family, font_size));
+        return;
+    }
+
+    let mut cur_x   = x;
+    let mut seg_start = 0usize;
+    let mut in_symbol = (text.chars().next().map_or(0, |c| c as u32)) >= 0x2000;
+
+    for (byte_pos, c) in text.char_indices() {
+        let is_sym = (c as u32) >= 0x2000;
+        if is_sym != in_symbol {
+            let seg = &text[seg_start..byte_pos];
+            let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
+            out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
+            cur_x    += seg.chars().count() as f64 * cw;
+            seg_start = byte_pos;
+            in_symbol = is_sym;
+        }
+    }
+    // flush final segment
+    let seg = &text[seg_start..];
+    if !seg.is_empty() {
+        let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
+        out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
     }
 }
 
@@ -272,7 +317,7 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
         // Name
         let name = format_name(indi, prefs);
-        out.push_str(&svg_text(x_base + gpw, y, &name, &font_family, font_size));
+        render_mixed_text(&mut out, x_base + gpw, y, &name, &font_family, font_size, cw);
 
         // Tight estimate of actual rendered text end (for name→birth dot-leader x1 only).
         let name_end_tight = x_base + gpw
@@ -284,21 +329,21 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
             if dot_leaders {
                 dot_leader(&mut out, name_end_tight, x_birth, y, font_size, &conn_color);
             }
-            out.push_str(&svg_text(x_birth, y, s, &font_family, font_size));
+            render_mixed_text(&mut out, x_birth, y, s, &font_family, font_size, cw);
             last_x = x_birth + text_w(s);
         }
 
         // Death (with optional dot leader)
         if let Some(ref s) = death_s {
             if dot_leaders { dot_leader(&mut out, last_x, x_death, y, font_size, &conn_color); }
-            out.push_str(&svg_text(x_death, y, s, &font_family, font_size));
+            render_mixed_text(&mut out, x_death, y, s, &font_family, font_size, cw);
             last_x = x_death + text_w(s);
         }
 
         // Marriage — spouse only (with optional dot leader)
         if let Some(ref s) = marr_s {
             if dot_leaders { dot_leader(&mut out, last_x, x_marriage, y, font_size, &conn_color); }
-            out.push_str(&svg_text(x_marriage, y, s, &font_family, font_size));
+            render_mixed_text(&mut out, x_marriage, y, s, &font_family, font_size, cw);
         }
     }
 
@@ -708,6 +753,34 @@ mod tests {
         assert_eq!(hex_color(0x000), "#000000");
         assert_eq!(hex_color(0xFFF), "#FFFFFF");
         assert_eq!(hex_color(0x222), "#222222");
+    }
+
+    #[test]
+    fn test_svg_symbol_in_separate_element() {
+        // Verify that a marriage string starting with ⚭ (U+26AD, codepoint ≥ U+2000)
+        // is split: ⚭ must appear in an element whose font-family is the symbol list,
+        // and "JAN" (Latin) must appear in an element whose font-family starts with the
+        // primary font.
+        let mut prefs = simple_prefs();
+        prefs.show.marriage = true;
+        prefs.format.marriage = "⚭ {date}".into();
+        prefs.output.style.fonts.names = "Georgia 14".into();
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+
+        // The ⚭ character must be in a text element that does NOT start with Georgia.
+        // SYMBOL_FONT_FAMILY starts with "'Apple Symbols'".
+        let symbol_in_apple = out.lines().any(|l| {
+            l.contains("Apple Symbols") && l.contains("⚭")
+        });
+        assert!(symbol_in_apple,
+            "⚭ should be in a text element using the symbol font: {out}");
+
+        // Latin characters ("APR") must not be in a symbol-font element.
+        let latin_in_georgia = out.lines().any(|l| {
+            l.contains("Georgia") && l.contains("APR")
+        });
+        assert!(latin_in_georgia,
+            "Latin text should be in the primary-font element: {out}");
     }
 
     #[test]
