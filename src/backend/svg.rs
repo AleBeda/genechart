@@ -63,7 +63,7 @@ fn parsed_font(font_pref: &str) -> (String, f64) {
 
 /// Return paper dimensions `(width_mm, height_mm)` from preferences,
 /// or `None` when the paper size is absent or unrecognised.
-fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
+pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
     let (w, h): (f64, f64) = match prefs.output.paper.size.trim().to_uppercase().as_str() {
         "A0"     => (841.0, 1189.0),
         "A1"     => (594.0,  841.0),
