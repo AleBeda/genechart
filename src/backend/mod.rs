@@ -3,6 +3,7 @@
 pub mod text;
 pub mod svg;
 pub mod pdf;
+pub(crate) mod font_metrics;
 
 pub trait Renderer {
     fn render(

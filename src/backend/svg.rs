@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use crate::backend::Renderer;
+use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use std::collections::HashMap;
 use crate::layout::simple::SimpleGeo;
@@ -206,16 +207,22 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     let indent_px  = (prefs.layout.simple.indent as f64 * cw).max(cw);
 
     // Width (in px) of the generation-number prefix "N. " for a given generation.
+    // Uses exact font metrics when the font is available, falls back to estimate.
     let gen_prefix_w = |generation: usize| -> f64 {
         if prefs.show.generation_num {
-            format!("{}. ", generation).chars().count() as f64 * cw
+            let s = format!("{}. ", generation);
+            font_metrics::measure_text(&s, &font_family_base, font_size)
+                .unwrap_or_else(|| s.chars().count() as f64 * cw)
         } else {
             0.0
         }
     };
 
-    // Estimated pixel width of a string.
-    let text_w = |s: &str| -> f64 { s.chars().count() as f64 * cw };
+    // Pixel width of a string: exact when font is available, estimate otherwise.
+    let text_w = |s: &str| -> f64 {
+        font_metrics::measure_text(s, &font_family_base, font_size)
+            .unwrap_or_else(|| s.chars().count() as f64 * cw)
+    };
 
     // ── Compute pixel column positions ────────────────────────────────────────
 
