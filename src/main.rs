@@ -20,8 +20,8 @@ fn run() -> anyhow::Result<()> {
     // 2. Resolve GEDCOM path
     let gedcom_path = cli::resolve_gedcom_path(&args)?;
 
-    // 3. Load preferences (merging all sources + --pref overrides)
-    let mut prefs = preferences::load(Some(&gedcom_path), &args.prefs)?;
+    // 3. Load preferences (merging all sources + --preff file + --pref overrides)
+    let mut prefs = preferences::load(Some(&gedcom_path), args.preff.as_deref(), &args.prefs)?;
 
     // 4. Apply CLI shortcuts (override preference-file values)
     if let Some(root) = &args.root {

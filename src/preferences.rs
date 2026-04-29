@@ -299,7 +299,19 @@ pub struct BoxedCouplesSpacingPrefs {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /// Load and merge all preference sources, applying CLI overrides last.
-pub fn load(gedcom_path: Option<&Path>, pref_overrides: &[String]) -> Result<Prefs> {
+///
+/// Merge order (lowest → highest priority):
+/// 1. Embedded `defaults.toml`
+/// 2. `~/.genechart.toml`
+/// 3. `<gedcom_dir>/genechart.toml`
+/// 4. `<gedcom_basename>.toml`
+/// 5. `preff_path` (the `--preff` file, if supplied — errors if the path does not exist)
+/// 6. `pref_overrides` (each `--pref` assignment string)
+pub fn load(
+    gedcom_path: Option<&Path>,
+    preff_path: Option<&Path>,
+    pref_overrides: &[String],
+) -> Result<Prefs> {
     let mut base: Value = DEFAULTS_TOML
         .parse::<Value>()
         .context("failed to parse embedded defaults.toml")?;
@@ -321,7 +333,12 @@ pub fn load(gedcom_path: Option<&Path>, pref_overrides: &[String]) -> Result<Pre
         merge_file(&mut base, &ged.with_extension("toml"));
     }
 
-    // Level 5: --pref overrides
+    // Level 5: --preff explicit file (must exist; warn-and-continue is not appropriate here)
+    if let Some(preff) = preff_path {
+        merge_file_required(&mut base, preff)?;
+    }
+
+    // Level 6: --pref overrides
     for pref_str in pref_overrides {
         merge_pref_str(&mut base, pref_str);
     }
@@ -353,6 +370,18 @@ fn merge_file(base: &mut Value, path: &Path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => eprintln!("warning: failed to read {}: {e}", path.display()),
     }
+}
+
+/// Like `merge_file`, but returns an error instead of silently skipping a missing file.
+/// Used for `--preff` where the user explicitly named the file.
+fn merge_file_required(base: &mut Value, path: &Path) -> Result<()> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("--preff: failed to read '{}'", path.display()))?;
+    let overlay = content
+        .parse::<Value>()
+        .with_context(|| format!("--preff: failed to parse '{}'", path.display()))?;
+    merge_toml(base, overlay);
+    Ok(())
 }
 
 /// Split `s` on commas that are not inside a quoted TOML string.
@@ -441,7 +470,7 @@ mod tests {
 
     #[test]
     fn defaults_load() {
-        let prefs = load(None, &[]).unwrap();
+        let prefs = load(None, None, &[]).unwrap();
         assert_eq!(prefs.scope.generations, 4);
         assert_eq!(prefs.scope.direction, "descendants");
         assert_eq!(prefs.layout.layout_type, "simple");
@@ -484,7 +513,7 @@ mod tests {
 
     #[test]
     fn missing_file_silent() {
-        let result = load(Some(Path::new("/nonexistent/path/family.ged")), &[]);
+        let result = load(Some(Path::new("/nonexistent/path/family.ged")), None, &[]);
         assert!(result.is_ok());
     }
 
@@ -494,6 +523,35 @@ mod tests {
         let serialized = toml::to_string(&prefs).unwrap();
         let deserialized: Prefs = toml::from_str(&serialized).unwrap();
         assert_eq!(prefs, deserialized);
+    }
+
+    #[test]
+    fn preff_overrides_basename_toml() {
+        let tmp = std::env::temp_dir().join("genechart_test_preff.toml");
+        fs::write(&tmp, "scope.generations = 42\n").unwrap();
+        let prefs = load(None, Some(&tmp), &[]).unwrap();
+        assert_eq!(prefs.scope.generations, 42, "--preff should override defaults");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn pref_overrides_preff() {
+        let tmp = std::env::temp_dir().join("genechart_test_preff2.toml");
+        fs::write(&tmp, "scope.generations = 42\n").unwrap();
+        let prefs = load(None, Some(&tmp), &["scope.generations = 99".into()]).unwrap();
+        assert_eq!(prefs.scope.generations, 99, "--pref should override --preff");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn preff_missing_file_is_error() {
+        let result = load(None, Some(Path::new("/nonexistent/preff_xyz.toml")), &[]);
+        assert!(result.is_err(), "missing --preff file should be an error");
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            msg.contains("preff") || msg.contains("nonexistent"),
+            "error message should mention the file: {msg}"
+        );
     }
 
     #[test]

@@ -19,6 +19,10 @@ pub struct Args {
     #[arg(long = "pref")]
     pub prefs: Vec<String>,
 
+    /// TOML preferences file to load after the gedcom-basename file and before --pref overrides
+    #[arg(long = "preff", value_name = "FILE")]
+    pub preff: Option<PathBuf>,
+
     #[arg(long, hide = true)]
     pub strict: bool,
 }
@@ -75,6 +79,12 @@ mod tests {
         let args =
             Args::try_parse_from(["genechart", "--pref", "a=1", "--pref", "b=2"]).unwrap();
         assert_eq!(args.prefs, vec!["a=1", "b=2"]);
+    }
+
+    #[test]
+    fn preff_arg() {
+        let args = Args::try_parse_from(["genechart", "--preff", "/tmp/my.toml"]).unwrap();
+        assert_eq!(args.preff.as_deref(), Some(std::path::Path::new("/tmp/my.toml")));
     }
 
     #[test]
