@@ -191,8 +191,10 @@ pub struct TextPrefs {
     pub copyright: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StylePrefs {
+    #[serde(default = "default_true")]
+    pub dot_leaders: bool,
     #[serde(default)]
     pub boxes: BoxStylePrefs,
     #[serde(default)]
@@ -203,6 +205,19 @@ pub struct StylePrefs {
     pub alignment: AlignmentPrefs,
     #[serde(default)]
     pub spacing: SpacingPrefs,
+}
+
+impl Default for StylePrefs {
+    fn default() -> Self {
+        Self {
+            dot_leaders: true,
+            boxes: BoxStylePrefs::default(),
+            connectors: ConnectorStylePrefs::default(),
+            fonts: FontPrefs::default(),
+            alignment: AlignmentPrefs::default(),
+            spacing: SpacingPrefs::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

@@ -113,9 +113,17 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
 
 // ── String helpers ────────────────────────────────────────────────────────────
 
-fn write_at_col(s: &mut String, col: usize, text: &str) {
-    if display_len(s) < col {
-        s.extend(std::iter::repeat(' ').take(col - display_len(s)));
+fn write_at_col(s: &mut String, col: usize, text: &str, dot_leaders: bool) {
+    let cur = display_len(s);
+    if cur < col {
+        let gap = col - cur;
+        if dot_leaders && gap >= 4 {
+            s.push(' ');
+            s.extend(std::iter::repeat('.').take(gap - 2));
+            s.push(' ');
+        } else {
+            s.extend(std::iter::repeat(' ').take(gap));
+        }
     } else {
         s.push_str("  ");
     }
@@ -194,10 +202,11 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
             None
         };
 
+        let dl = prefs.output.style.dot_leaders;
         let mut line = format!("{indent}{gen_prefix}{name}");
-        if let Some(b) = birth_str  { write_at_col(&mut line, cols.birth,    &b); }
-        if let Some(d) = death_str  { write_at_col(&mut line, cols.death,    &d); }
-        if let Some(m) = marr_str   { write_at_col(&mut line, cols.marriage, &m); }
+        if let Some(b) = birth_str  { write_at_col(&mut line, cols.birth,    &b, dl); }
+        if let Some(d) = death_str  { write_at_col(&mut line, cols.death,    &d, dl); }
+        if let Some(m) = marr_str   { write_at_col(&mut line, cols.marriage, &m, dl); }
 
         lines[geo.line] = line;
     }
@@ -206,7 +215,13 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
     // Collect per-line columns, then insert right-to-left to preserve byte positions.
     let mut conn_per_line: HashMap<usize, BTreeSet<usize>> = HashMap::new();
     for (_, _, geo) in &entries {
-        let col = (geo.indent + 1) * indent_chars;
+        // Align with the first character of the parent's name (after gen-prefix).
+        let parent_gen_prefix = if prefs.show.generation_num {
+            format!("{}. ", geo.generation + 1).len()
+        } else {
+            0
+        };
+        let col = (geo.indent + 1) * indent_chars + parent_gen_prefix;
         for &lnum in geo.connectors_above.iter().chain(geo.connectors_below.iter()) {
             if lnum < lines.len() {
                 conn_per_line.entry(lnum).or_default().insert(col);

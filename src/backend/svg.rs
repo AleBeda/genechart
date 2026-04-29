@@ -91,6 +91,21 @@ fn hex_color(val: i64) -> String {
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
 }
 
+/// Draw a dotted leader line from `x1` to `x2` at text baseline `y`.
+/// Only emits the element when there is meaningful space (> font_size px).
+fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color: &str) {
+    let x1 = x1 + font_size * 0.3; // small gap after preceding text
+    let x2 = x2 - font_size * 0.3; // small gap before next text
+    if x2 > x1 + font_size {
+        out.push_str(&format!(
+            "  <line x1=\"{x1:.1}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
+             stroke=\"{color}\" stroke-width=\"{:.2}\" \
+             stroke-dasharray=\"1,3\" stroke-linecap=\"round\"/>\n",
+            font_size * 0.07
+        ));
+    }
+}
+
 fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -109,7 +124,11 @@ fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
 
 fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // Font metrics
-    let (font_family, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    let (font_family_base, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    // Include symbol-font fallbacks so PDF renderers can find glyphs for ⚭, ×, etc.
+    let font_family = format!(
+        "{font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
+    );
     let line_height = font_size * (LINE_HEIGHT / FONT_SIZE);
     let cw          = font_size * CHAR_WIDTH_RATIO; // estimated character width
 
@@ -215,11 +234,30 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
 
+    let dot_leaders = prefs.output.style.dot_leaders;
+
     // ── Text elements ─────────────────────────────────────────────────────────
     for (indi, geo) in &entries {
         let y      = MARGIN + (geo.line as f64 + 1.0) * line_height;
         let x_base = MARGIN + geo.indent as f64 * indent_px;
         let gpw    = gen_prefix_w(geo.generation);
+
+        // Pre-compute event strings (needed for dot-leader geometry).
+        let birth_s: Option<String> = if prefs.show.birth {
+            indi.birth.as_ref().and_then(|e| {
+                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+            })
+        } else { None };
+        let death_s: Option<String> = if prefs.show.death {
+            indi.death.as_ref().and_then(|e| {
+                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+            })
+        } else { None };
+        let marr_s: Option<String> = if geo.is_spouse && prefs.show.marriage {
+            find_marriage(indi, genrep).and_then(|e| {
+                format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
+            })
+        } else { None };
 
         // Generation number (non-spouse only)
         if prefs.show.generation_num && !geo.is_spouse {
@@ -227,69 +265,63 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
             out.push_str(&svg_text(x_base, y, &prefix, &font_family, font_size));
         }
 
-        // Name (starts after gen-prefix, same column for spouse and non-spouse)
+        // Name
         let name = format_name(indi, prefs);
         out.push_str(&svg_text(x_base + gpw, y, &name, &font_family, font_size));
 
-        // Birth
-        if prefs.show.birth {
-            if let Some(s) = indi.birth.as_ref().and_then(|e| {
-                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-            }) {
-                out.push_str(&svg_text(x_birth, y, &s, &font_family, font_size));
-            }
+        let mut last_x = x_base + gpw + text_w(&name);
+
+        // Birth (with optional dot leader)
+        if let Some(ref s) = birth_s {
+            if dot_leaders { dot_leader(&mut out, last_x, x_birth, y, font_size, &conn_color); }
+            out.push_str(&svg_text(x_birth, y, s, &font_family, font_size));
+            last_x = x_birth + text_w(s);
         }
 
-        // Death
-        if prefs.show.death {
-            if let Some(s) = indi.death.as_ref().and_then(|e| {
-                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-            }) {
-                out.push_str(&svg_text(x_death, y, &s, &font_family, font_size));
-            }
+        // Death (with optional dot leader)
+        if let Some(ref s) = death_s {
+            if dot_leaders { dot_leader(&mut out, last_x, x_death, y, font_size, &conn_color); }
+            out.push_str(&svg_text(x_death, y, s, &font_family, font_size));
+            last_x = x_death + text_w(s);
         }
 
-        // Marriage (spouse only)
-        if geo.is_spouse && prefs.show.marriage {
-            if let Some(evt) = find_marriage(indi, genrep) {
-                if let Some(s) = format_event(&prefs.format.marriage, evt.date.as_ref(), evt.place.as_deref()) {
-                    out.push_str(&svg_text(x_marriage, y, &s, &font_family, font_size));
-                }
-            }
+        // Marriage — spouse only (with optional dot leader)
+        if let Some(ref s) = marr_s {
+            if dot_leaders { dot_leader(&mut out, last_x, x_marriage, y, font_size, &conn_color); }
+            out.push_str(&svg_text(x_marriage, y, s, &font_family, font_size));
         }
     }
 
     // ── Connector <line> elements (ancestors mode) ────────────────────────────
     //
-    // connectors_above[i] / connectors_below[i] hold the logical line numbers
-    // of blank rows between an individual and their father / mother.
-    // We draw one vertical line per connector group from the centre of the
-    // parent row to the centre of the child row.
-    //
-    // x position: one indent step to the right of the individual (= parent indent).
+    // x: aligned with the first character of the parent's name (after gen-prefix).
+    // y: lines stop at the TOP / BOTTOM of the child row so they do not cross the name.
     for (_, geo) in &entries {
-        let x_conn = MARGIN + (geo.indent + 1) as f64 * indent_px;
-        let y_ctr  = |line: usize| MARGIN + (line as f64 + 0.5) * line_height;
+        // x at the parent's name-start (parent is one generation deeper = geo.generation + 1).
+        let x_conn = MARGIN
+            + (geo.indent + 1) as f64 * indent_px
+            + gen_prefix_w(geo.generation + 1);
+        let y_ctr = |line: usize| MARGIN + (line as f64 + 0.5) * line_height;
+        let y_top = |line: usize| MARGIN +  line as f64         * line_height;
+        let y_bot = |line: usize| MARGIN + (line as f64 + 1.0)  * line_height;
 
         if !geo.connectors_above.is_empty() {
-            // Derive parent (father) line from the first blank line above.
             let first = *geo.connectors_above.iter().min().unwrap();
             if first > 0 {
                 let father_line = first - 1;
                 out.push_str(&svg_line(
                     x_conn, y_ctr(father_line),
-                    x_conn, y_ctr(geo.line),
+                    x_conn, y_top(geo.line),
                     &conn_color, conn_width,
                 ));
             }
         }
 
         if !geo.connectors_below.is_empty() {
-            // Derive parent (mother) line from the last blank line below.
             let last = *geo.connectors_below.iter().max().unwrap();
             let mother_line = last + 1;
             out.push_str(&svg_line(
-                x_conn, y_ctr(geo.line),
+                x_conn, y_bot(geo.line),
                 x_conn, y_ctr(mother_line),
                 &conn_color, conn_width,
             ));
@@ -603,15 +635,40 @@ mod tests {
         let mut prefs = simple_prefs();
         prefs.output.style.fonts.names = "Helvetica 16".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("font-family=\"Helvetica\""), "custom font family: {out}");
-        assert!(out.contains("font-size=\"16\""),          "custom font size: {out}");
+        // Font-family includes the base name plus fallbacks; check for base name presence.
+        assert!(out.contains("Helvetica"),      "custom font family: {out}");
+        assert!(out.contains("font-size=\"16\""), "custom font size: {out}");
     }
 
     #[test]
     fn test_svg_default_font_fallback() {
         let prefs = simple_prefs();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("font-family=\"monospace\""), "default font: {out}");
+        assert!(out.contains("monospace"), "default font: {out}");
+    }
+
+    // ── Dot leaders ──
+
+    #[test]
+    fn test_svg_dot_leaders_present_when_enabled() {
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = true;
+        prefs.format.birth = "* {date}".into();
+        prefs.output.style.dot_leaders = true;
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        assert!(out.contains("stroke-dasharray"), "dot-leader lines expected: {out}");
+    }
+
+    #[test]
+    fn test_svg_dot_leaders_absent_when_disabled() {
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = true;
+        prefs.format.birth = "* {date}".into();
+        prefs.output.style.dot_leaders = false;
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        assert!(!out.contains("stroke-dasharray"), "no dot leaders expected: {out}");
     }
 
     // ── Unit helpers ──

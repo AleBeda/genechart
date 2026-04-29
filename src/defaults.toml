@@ -22,7 +22,7 @@ notes = false
 individual = "{firstname} {lastname} {sex}"
 # {date} expands to the raw GEDCOM date string (e.g. "1 JAN 1812").
 # Date reformatting (e.g. {date:%d %b %Y}) requires a GEDCOM date parser — deferred feature.
-birth = "* {date}, {location}"
+birth = "∗ {date}, {location}"
 death = "× {date}, {location}"
 marriage = "⚭ {date}, {location}"
 
@@ -67,6 +67,7 @@ title = "{gedcom}"
 copyright = "© 2026 Alex Bedarida"
 
 [output.style]
+dot_leaders = true
 
 [output.style.boxes]
 width = 0.5
