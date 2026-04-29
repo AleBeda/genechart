@@ -33,7 +33,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
         let pdf = svg2pdf::to_pdf(
             &tree,
-            svg2pdf::ConversionOptions::default(),
+            svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() },
             svg2pdf::PageOptions { dpi: 96.0 },
         ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
         return Ok(pdf);
@@ -74,18 +74,45 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let w_str = format!("{page_w_mm}mm");
     let h_str = format!("{page_h_mm}mm");
 
-    let conv_opts = svg2pdf::ConversionOptions::default();
+    let conv_opts = svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() };
     let mut tiles: Vec<(String, f32, f32)> = Vec::new();
 
     for r in 0..rows {
         for c in 0..columns {
             let tile_x = vbx0 + c as f64 * step_x;
             let tile_y = vby0 + r as f64 * step_y;
-            let tile_svg = patch_svg_header(
+            let mut tile_svg = patch_svg_header(
                 &svg_string,
                 tile_x, tile_y, page_user_w, page_user_h,
                 &w_str, &h_str,
             );
+
+            // Alignment lines mark the start of unique (non-overlapping) content.
+            // Skip tile (0, 0) — no overlap region to mark there.
+            if prefs.output.poster.alignment_lines && (r > 0 || c > 0) {
+                let color = crate::backend::svg::hex_color(
+                    prefs.output.poster.alignment_lines_color
+                );
+                let mut al_svg = String::new();
+                if c > 0 {
+                    let ax = tile_x + overlap_user;
+                    al_svg.push_str(&format!(
+                        "  <line x1=\"{ax:.3}\" y1=\"{:.3}\" x2=\"{ax:.3}\" y2=\"{:.3}\" \
+                         stroke=\"{color}\" stroke-width=\"0.5\" opacity=\"0.5\"/>\n",
+                        tile_y, tile_y + page_user_h
+                    ));
+                }
+                if r > 0 {
+                    let ay = tile_y + overlap_user;
+                    al_svg.push_str(&format!(
+                        "  <line x1=\"{:.3}\" y1=\"{ay:.3}\" x2=\"{:.3}\" y2=\"{ay:.3}\" \
+                         stroke=\"{color}\" stroke-width=\"0.5\" opacity=\"0.5\"/>\n",
+                        tile_x, tile_x + page_user_w
+                    ));
+                }
+                tile_svg = tile_svg.replace("</svg>", &format!("{al_svg}</svg>"));
+            }
+
             tiles.push((tile_svg, page_pt_w, page_pt_h));
         }
     }
@@ -304,5 +331,43 @@ mod tests {
         assert!(bytes.starts_with(b"%PDF-"), "missing PDF header");
         let pdf_str = String::from_utf8_lossy(&bytes);
         assert!(pdf_str.contains("/Count 2"), "expected 2 pages in PDF");
+    }
+
+    #[test]
+    fn test_alignment_lines_in_multipage() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.layout.layout_type = "simple".into();
+        prefs.output.paper.size = "A4".into();
+        prefs.output.paper.orientation = "portrait".into();
+        prefs.output.poster.rows    = 1;
+        prefs.output.poster.columns = 2;
+        prefs.output.poster.overlap_mm = 10.0;
+        prefs.output.poster.alignment_lines = true;
+        let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();
+        assert!(bytes.len() > 500, "PDF with alignment lines unexpectedly small");
+        assert!(bytes.starts_with(b"%PDF-"));
+    }
+
+    #[test]
+    fn test_pdf_unicode_marriage_symbol() {
+        const GED_MARR: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME John /Smith/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Jane /Smith/\n1 SEX F\n1 FAMS @F1@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 MARR\n2 DATE 1 JAN 1900\n0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.layout.layout_type = "simple".into();
+        prefs.show.marriage = true;
+        prefs.format.marriage = "⚭ {date}, {location}".into();
+
+        let mut genrep = crate::parser::parse_str(GED_MARR).unwrap();
+        crate::parser::compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let layout_out = crate::layout::run_layout(&genrep, &prefs).unwrap();
+        let bytes = render_to_bytes(&layout_out, &prefs).unwrap();
+        assert!(bytes.starts_with(b"%PDF-"), "missing PDF magic bytes");
+        assert!(bytes.len() > 200, "PDF suspiciously small");
     }
 }

@@ -18,6 +18,11 @@ const FONT_FAMILY: &str = "monospace";
 // Estimated average character width as a fraction of font-size.
 // Used for column-position arithmetic when exact glyph metrics are unavailable.
 const CHAR_WIDTH_RATIO: f64 = 0.6;
+// More conservative estimate used only for dot-leader x1 placement.
+// Proportional fonts (Georgia, etc.) average closer to 0.50× font-size.
+const CHAR_WIDTH_RATIO_TIGHT: f64 = 0.50;
+// Fixed pixel gap between text and the start/end of a dot leader.
+const DOT_LEADER_GAP: f64 = 3.0;
 
 // ── Low-level SVG primitives ──────────────────────────────────────────────────
 
@@ -84,7 +89,7 @@ pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
 }
 
 /// Convert a 12-bit 0xRGB colour preference value to a CSS hex string.
-fn hex_color(val: i64) -> String {
+pub(crate) fn hex_color(val: i64) -> String {
     let r = (val >> 8) & 0xF;
     let g = (val >> 4) & 0xF;
     let b =  val       & 0xF;
@@ -94,8 +99,8 @@ fn hex_color(val: i64) -> String {
 /// Draw a dotted leader line from `x1` to `x2` at text baseline `y`.
 /// Only emits the element when there is meaningful space (> font_size px).
 fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color: &str) {
-    let x1 = x1 + font_size * 0.3; // small gap after preceding text
-    let x2 = x2 - font_size * 0.3; // small gap before next text
+    let x1 = x1 + DOT_LEADER_GAP;
+    let x2 = x2 - DOT_LEADER_GAP;
     if x2 > x1 + font_size {
         out.push_str(&format!(
             "  <line x1=\"{x1:.1}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
@@ -269,11 +274,16 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         let name = format_name(indi, prefs);
         out.push_str(&svg_text(x_base + gpw, y, &name, &font_family, font_size));
 
+        // Tight estimate of actual rendered text end (for name→birth dot-leader x1 only).
+        let name_end_tight = x_base + gpw
+            + name.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO_TIGHT;
         let mut last_x = x_base + gpw + text_w(&name);
 
-        // Birth (with optional dot leader)
+        // Birth (with optional dot leader; use tight estimate for the left edge)
         if let Some(ref s) = birth_s {
-            if dot_leaders { dot_leader(&mut out, last_x, x_birth, y, font_size, &conn_color); }
+            if dot_leaders {
+                dot_leader(&mut out, name_end_tight, x_birth, y, font_size, &conn_color);
+            }
             out.push_str(&svg_text(x_birth, y, s, &font_family, font_size));
             last_x = x_birth + text_w(s);
         }
@@ -698,5 +708,19 @@ mod tests {
         assert_eq!(hex_color(0x000), "#000000");
         assert_eq!(hex_color(0xFFF), "#FFFFFF");
         assert_eq!(hex_color(0x222), "#222222");
+    }
+
+    #[test]
+    fn test_svg_dot_leader_gap_is_small() {
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = true;
+        prefs.format.birth = "* {date}".into();
+        prefs.output.style.dot_leaders = true;
+        prefs.output.style.fonts.names = "monospace 14".into();
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        assert!(out.contains("stroke-dasharray"));
+        let has_leader_line = out.lines().any(|l| l.contains("stroke-dasharray") && l.contains("x1="));
+        assert!(has_leader_line, "no dot leader line found: {out}");
     }
 }

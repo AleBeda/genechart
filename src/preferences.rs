@@ -173,7 +173,7 @@ pub struct CustomPaperPrefs {
     pub height: f64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PosterPrefs {
     #[serde(default)]
     pub rows: u32,
@@ -181,6 +181,22 @@ pub struct PosterPrefs {
     pub columns: u32,
     #[serde(default, deserialize_with = "de_f64")]
     pub overlap_mm: f64,
+    #[serde(default = "default_true")]
+    pub alignment_lines: bool,
+    #[serde(default)]
+    pub alignment_lines_color: i64,
+}
+
+impl Default for PosterPrefs {
+    fn default() -> Self {
+        Self {
+            rows: 0,
+            columns: 0,
+            overlap_mm: 0.0,
+            alignment_lines: true,
+            alignment_lines_color: 0xF80,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

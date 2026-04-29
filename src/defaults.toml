@@ -61,6 +61,8 @@ height = 297.0 # mm
 rows = 1
 columns = 1
 overlap_mm = 0.0
+alignment_lines = true
+alignment_lines_color = 0xF80
 
 [output.text]
 title = "{gedcom}"
