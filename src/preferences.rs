@@ -355,14 +355,33 @@ fn merge_file(base: &mut Value, path: &Path) {
     }
 }
 
+/// Split `s` on commas that are not inside a quoted TOML string.
+/// This allows values like `format.marriage = "a, b"` in a single --pref argument.
+fn split_pref_assignments(s: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut in_double = false;
+    let mut in_single = false;
+    let bytes = s.as_bytes();
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'"'  if !in_single => in_double = !in_double,
+            b'\'' if !in_double => in_single = !in_single,
+            b','  if !in_double && !in_single => {
+                let seg = s[start..i].trim();
+                if !seg.is_empty() { result.push(seg); }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = s[start..].trim();
+    if !last.is_empty() { result.push(last); }
+    result
+}
+
 fn merge_pref_str(base: &mut Value, pref_str: &str) {
-    // Split comma-separated assignments, join with newlines to form valid TOML
-    let toml_doc: String = pref_str
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let toml_doc: String = split_pref_assignments(pref_str).join("\n");
 
     match toml_doc.parse::<Value>() {
         Ok(overlay) => merge_toml(base, overlay),
@@ -475,5 +494,25 @@ mod tests {
         let serialized = toml::to_string(&prefs).unwrap();
         let deserialized: Prefs = toml::from_str(&serialized).unwrap();
         assert_eq!(prefs, deserialized);
+    }
+
+    #[test]
+    fn pref_str_with_comma_in_quoted_value() {
+        let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
+        // format.marriage value contains a comma; output.type must still be applied.
+        merge_pref_str(&mut base, r#"format.marriage = "m. {date}, {location}", output.type = "pdf""#);
+        let prefs: Prefs = base.try_into().unwrap();
+        assert_eq!(prefs.output.output_type, "pdf",
+            "output.type should be overridden even when a quoted value contains a comma");
+        assert!(prefs.format.marriage.contains(", "),
+            "marriage format should preserve the comma: {}", prefs.format.marriage);
+    }
+
+    #[test]
+    fn pref_str_single_assignment_no_comma() {
+        let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
+        merge_pref_str(&mut base, r#"output.type = "svg""#);
+        let prefs: Prefs = base.try_into().unwrap();
+        assert_eq!(prefs.output.output_type, "svg");
     }
 }

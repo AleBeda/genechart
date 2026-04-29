@@ -49,7 +49,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
                 .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
             let pdf = svg2pdf::to_pdf(
                 &tree,
-                svg2pdf::ConversionOptions::default(),
+                svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() },
                 svg2pdf::PageOptions { dpi: 96.0 },
             ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
             return Ok(pdf);
