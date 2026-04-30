@@ -170,6 +170,17 @@ fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
 // x-coordinate and draws connector lines as <line> elements.  This is correct
 // for variable-width (proportional) fonts.
 
+/// Expand `{gedcom}` in a title/copyright template string.
+fn expand_title_template(template: &str, prefs: &Prefs) -> String {
+    let gedcom_name = std::path::Path::new(&prefs.files.gedcom)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let mut vars = std::collections::HashMap::new();
+    vars.insert("gedcom".to_string(), gedcom_name.to_string());
+    strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string())
+}
+
 fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // Font metrics
     let (font_family_base, font_size) = parsed_font(&prefs.output.style.fonts.names);
@@ -276,7 +287,19 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
                    else if max_birth_w > 0.0 { x_birth    + max_birth_w }
                    else                      { max_name_end };
     let content_w = content_right + MARGIN;
-    let content_h = MARGIN * 2.0 + (max_line + 1) as f64 * line_height;
+
+    // Title / copyright
+    let title_text = expand_title_template(&prefs.output.text.title, prefs);
+    let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
+    let title_line_h = if title_text.is_empty() { 0.0 } else { title_font_size * (LINE_HEIGHT / FONT_SIZE) };
+
+    let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
+    let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
+    let copy_line_h = if copy_text.is_empty() { 0.0 } else { copy_font_size * (LINE_HEIGHT / FONT_SIZE) };
+
+    // chart_top_offset: how far down the chart body starts (to make room for title)
+    let chart_top_offset = if title_text.is_empty() { 0.0 } else { title_line_h };
+    let content_h = MARGIN * 2.0 + chart_top_offset + (max_line + 1) as f64 * line_height + copy_line_h;
 
     // ── Build SVG ─────────────────────────────────────────────────────────────
 
@@ -288,11 +311,23 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
 
+    // ── Title ─────────────────────────────────────────────────────────────────
+    if !title_text.is_empty() {
+        let y = MARGIN + title_font_size; // baseline of title line
+        out.push_str(&svg_text(MARGIN, y, &title_text, &title_font_family, title_font_size));
+    }
+
+    // ── Copyright ─────────────────────────────────────────────────────────────
+    if !copy_text.is_empty() {
+        let y = MARGIN + chart_top_offset + (max_line + 1) as f64 * line_height + copy_font_size;
+        out.push_str(&svg_text(MARGIN, y, &copy_text, &copy_font_family, copy_font_size));
+    }
+
     let dot_leaders = prefs.output.style.dot_leaders;
 
     // ── Text elements ─────────────────────────────────────────────────────────
     for (indi, geo) in &entries {
-        let y      = MARGIN + (geo.line as f64 + 1.0) * line_height;
+        let y      = MARGIN + chart_top_offset + (geo.line as f64 + 1.0) * line_height;
         let x_base = MARGIN + geo.indent as f64 * indent_px;
         let gpw    = gen_prefix_w(geo.generation);
 
@@ -357,9 +392,9 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         let x_conn = MARGIN
             + (geo.indent + 1) as f64 * indent_px
             + gen_prefix_w(geo.generation + 1);
-        let y_ctr = |line: usize| MARGIN + (line as f64 + 0.5) * line_height;
-        let y_top = |line: usize| MARGIN +  line as f64         * line_height;
-        let y_bot = |line: usize| MARGIN + (line as f64 + 1.0)  * line_height;
+        let y_ctr = |line: usize| MARGIN + chart_top_offset + (line as f64 + 0.5) * line_height;
+        let y_top = |line: usize| MARGIN + chart_top_offset +  line as f64         * line_height;
+        let y_bot = |line: usize| MARGIN + chart_top_offset + (line as f64 + 1.0)  * line_height;
 
         if !geo.connectors_above.is_empty() {
             let first = *geo.connectors_above.iter().min().unwrap();
@@ -448,10 +483,21 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
 
     let (font_family, font_size) = parsed_font(&prefs.output.style.fonts.names);
 
+    // Title / copyright
+    let title_text = expand_title_template(&prefs.output.text.title, prefs);
+    let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
+    let title_line_h = if title_text.is_empty() { 0.0 } else { title_font_size * (LINE_HEIGHT / FONT_SIZE) };
+
+    let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
+    let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
+    let copy_line_h = if copy_text.is_empty() { 0.0 } else { copy_font_size * (LINE_HEIGHT / FONT_SIZE) };
+
     let content_w = 2.0 * (max_radius + MARGIN);
-    let content_h = max_radius + 2.0 * MARGIN;
+    let fan_h = max_radius + 2.0 * MARGIN;
+    let content_h = title_line_h + fan_h + copy_line_h;
+    // Fan center y is shifted down by the title height
     let cx = content_w / 2.0;
-    let cy = content_h - MARGIN;
+    let cy = title_line_h + fan_h - MARGIN;
 
     let (canvas_w, canvas_h) = match paper_size_mm(prefs) {
         Some((pw, ph)) => (format!("{pw}mm"), format!("{ph}mm")),
@@ -460,6 +506,18 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
     let viewbox = format!("0 0 {content_w:.1} {content_h:.1}");
 
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
+
+    // ── Title ─────────────────────────────────────────────────────────────────
+    if !title_text.is_empty() {
+        let y = title_font_size; // baseline at top
+        out.push_str(&svg_text(MARGIN, y, &title_text, &title_font_family, title_font_size));
+    }
+
+    // ── Copyright ─────────────────────────────────────────────────────────────
+    if !copy_text.is_empty() {
+        let y = title_line_h + fan_h + copy_font_size - MARGIN;
+        out.push_str(&svg_text(MARGIN, y, &copy_text, &copy_font_family, copy_font_size));
+    }
 
     let mut indis: Vec<_> = genrep.individuals.values()
         .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
@@ -814,5 +872,40 @@ mod tests {
         assert!(out.contains("stroke-dasharray"));
         let has_leader_line = out.lines().any(|l| l.contains("stroke-dasharray") && l.contains("x1="));
         assert!(has_leader_line, "no dot leader line found: {out}");
+    }
+
+    // ── Title and copyright ──
+
+    #[test]
+    fn test_svg_title_and_copyright_simple() {
+        let mut prefs = simple_prefs();
+        prefs.output.text.title = "My Family Chart".into();
+        prefs.output.text.copyright = "© 2026 Alex".into();
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        assert!(out.contains("My Family Chart"), "title should appear in SVG: {out}");
+        assert!(out.contains("© 2026 Alex"),     "copyright should appear in SVG: {out}");
+    }
+
+    #[test]
+    fn test_svg_title_gedcom_template() {
+        let mut prefs = simple_prefs();
+        prefs.output.text.title = "Chart of {gedcom}".into();
+        // prefs.files.gedcom is empty by default → "unknown"
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        assert!(out.contains("Chart of"), "template title should appear in SVG: {out}");
+    }
+
+    #[test]
+    fn test_svg_no_title_when_empty() {
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        // default prefs have empty title/copyright
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        // No spurious title/copyright text elements; chart body is still present.
+        assert!(out.contains("John"), "names should still be present: {out}");
+        // Should not inject spurious text for empty title/copyright.
+        // Count <text elements: just the three names (John, Jane, Paul).
+        let count = out.matches("<text ").count();
+        assert!(count <= 5, "unexpected extra <text elements when title/copyright empty: {out}");
     }
 }

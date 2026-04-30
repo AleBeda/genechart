@@ -20,6 +20,53 @@ fn matches_direction(input: &str, canonical: &str) -> bool {
     !input.is_empty() && canonical.starts_with(input)
 }
 
+/// Parse a GEDCOM raw date string into a sortable `(year, month, day)` key.
+///
+/// Supported formats: `"1 JAN 1812"`, `"JAN 1812"`, `"1812"`, `"BEF 1900"`,
+/// `"ABT 1850"`, `"FROM 1800 TO 1850"`, etc.
+/// Prefix qualifiers (BEF, AFT, ABT, CAL, EST, FROM, TO, AND, INT, …) are ignored.
+/// Dates with no year return `(u32::MAX, 0, 0)` so they sort last.
+fn date_sort_key(raw: &str) -> (u32, u32, u32) {
+    const MONTHS: &[&str] = &[
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    const QUALIFIERS: &[&str] = &[
+        "BEF", "AFT", "ABT", "CAL", "EST", "FROM", "TO", "AND", "INT", "ABOUT",
+        "BEFORE", "AFTER", "BETWEEN", "CALCULATED", "ESTIMATED",
+    ];
+
+    let mut year: Option<u32>  = None;
+    let mut month: u32         = 0;
+    let mut day: u32           = 0;
+
+    for token in raw.split_whitespace() {
+        let up = token.to_uppercase();
+        if QUALIFIERS.contains(&up.as_str()) {
+            continue;
+        }
+        if let Some(pos) = MONTHS.iter().position(|&m| m == up.as_str()) {
+            month = (pos + 1) as u32;
+        } else if let Ok(n) = token.parse::<u32>() {
+            if n > 31 {
+                // Likely a year (GEDCOM years are 4-digit).
+                // Only record the first year seen (FROM 1800 TO 1850 → 1800).
+                if year.is_none() {
+                    year = Some(n);
+                }
+            } else if year.is_none() {
+                // Small number before a year token → day
+                day = n;
+            }
+        }
+    }
+
+    match year {
+        Some(y) => (y, month, day),
+        None    => (u32::MAX, 0, 0),
+    }
+}
+
 fn root_id(genrep: &Genrep, prefs: &Prefs) -> Option<String> {
     let r = prefs.scope.root.trim();
     if !r.is_empty() {
@@ -69,7 +116,15 @@ fn visit(
     );
     *line += 1 + spacing;
 
-    let fams = indi.fams.clone();
+    // Sort families by marriage date (earliest first, undated last).
+    let mut fams = indi.fams.clone();
+    fams.sort_by_key(|fam_id| {
+        genrep.families.get(fam_id)
+            .and_then(|f| f.marriage.as_ref())
+            .and_then(|e| e.date.as_ref())
+            .map(|d| date_sort_key(&d.raw))
+            .unwrap_or((u32::MAX, 0, 0))
+    });
 
     for fam_id in &fams {
         let fam = match genrep.families.get(fam_id) {
@@ -486,5 +541,92 @@ mod tests {
         assert_eq!(output.individuals["I5"].geo.as_ref().unwrap().line, 2);
         assert_eq!(output.individuals["I3"].geo.as_ref().unwrap().line, 3);
         assert_eq!(output.individuals["I2"].geo.as_ref().unwrap().line, 4);
+    }
+
+    // ── date_sort_key ──
+
+    #[test]
+    fn test_date_sort_key_full_date() {
+        assert_eq!(date_sort_key("1 JAN 1812"), (1812, 1, 1));
+        assert_eq!(date_sort_key("4 APR 1843"), (1843, 4, 4));
+    }
+
+    #[test]
+    fn test_date_sort_key_partial_dates() {
+        assert_eq!(date_sort_key("JAN 1812"), (1812, 1, 0));
+        assert_eq!(date_sort_key("1812"),     (1812, 0, 0));
+    }
+
+    #[test]
+    fn test_date_sort_key_qualifiers_ignored() {
+        assert_eq!(date_sort_key("BEF 1900"),        (1900, 0, 0));
+        assert_eq!(date_sort_key("ABT 1850"),         (1850, 0, 0));
+        assert_eq!(date_sort_key("CAL 1760"),         (1760, 0, 0));
+        assert_eq!(date_sort_key("EST 1800"),         (1800, 0, 0));
+        assert_eq!(date_sort_key("FROM 1800 TO 1850"),(1800, 0, 0));
+    }
+
+    #[test]
+    fn test_date_sort_key_no_year() {
+        assert_eq!(date_sort_key(""),           (u32::MAX, 0, 0));
+        assert_eq!(date_sort_key("JAN"),        (u32::MAX, 0, 0));
+        assert_eq!(date_sort_key("unknown"),    (u32::MAX, 0, 0));
+    }
+
+    // ── Spouse sort order ──
+
+    /// GEDCOM with one root who has two spouses married in different years:
+    /// I2 married in 1900, I3 married in 1850. I3 (earlier) must appear first.
+    const GEDCOM_TWO_SPOUSES: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Root /Person/
+1 SEX M
+1 FAMS @F1@
+1 FAMS @F2@
+0 @I2@ INDI
+1 NAME Later /Spouse/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Earlier /Spouse/
+1 SEX F
+1 FAMS @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 5 JUN 1900
+0 @F2@ FAM
+1 HUSB @I1@
+1 WIFE @I3@
+1 MARR
+2 DATE 10 MAR 1850
+0 TRLR
+";
+
+    #[test]
+    fn test_spouses_sorted_by_marriage_date() {
+        let mut genrep = parse_str(GEDCOM_TWO_SPOUSES).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".to_string();
+        prefs.scope.direction = "descendants".to_string();
+
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        let i1_line = result.individuals["I1"].geo.as_ref().unwrap().line;
+        let i2_line = result.individuals["I2"].geo.as_ref().unwrap().line; // 1900
+        let i3_line = result.individuals["I3"].geo.as_ref().unwrap().line; // 1850
+
+        // I3 (married 1850) must appear on an earlier line than I2 (married 1900).
+        assert!(i3_line < i2_line,
+            "Earlier spouse (I3, 1850) should appear before later spouse (I2, 1900): \
+             I1={i1_line}, I2={i2_line}, I3={i3_line}");
+        // Root must be on line 0
+        assert_eq!(i1_line, 0, "root must be on line 0");
     }
 }

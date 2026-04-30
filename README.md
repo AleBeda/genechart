@@ -16,10 +16,17 @@ genechart [OPTIONS] [GEDCOM_FILE]
 
 | Flag | Description |
 |---|---|
-| `--root <ID>` | Root individual ID (default: first individual in file) |
-| `-g <N>` / `--generations <N>` | Number of generations to show |
-| `--preff <FILE>` | Load an explicit TOML preferences file (see priority below) |
+| `-r` / `--root <ID>` | Root individual ID (default: first individual in file) |
+| `-g <N>` / `--generations <N>` / `--gen <N>` | Number of generations to show |
+| `--dir <DIRECTION>` | Chart direction: `descendants`, `ancestors`, `pedigree`, `forest` |
+| `--type <TYPE>` | Layout algorithm: `simple`, `fan`, `boxed_couples` |
+| `--text` | Output as plain text |
+| `--svg` | Output as SVG |
+| `--pdf` | Output as PDF |
+| `-o` / `--output <FILE>` | Output file (extension infers type if no `--text`/`--svg`/`--pdf` flag) |
 | `--pref '<key=val, ...>'` | Override any preference inline (TOML syntax, repeatable) |
+| `--pref` | Bare `--pref` (no value): dump merged preferences to stdout and exit |
+| `--preff <FILE>` | Load an explicit TOML preferences file (see priority below) |
 | `-h` / `--help` | Show help |
 | `--version` | Show version |
 
@@ -27,10 +34,16 @@ genechart [OPTIONS] [GEDCOM_FILE]
 
 ```sh
 # Generate a 4-generation descendant chart as SVG
-genechart family.ged --root I1 -g 4
+genechart family.ged -r I1 -g 4 --svg -o chart.svg
 
-# Generate a pedigree fan chart as PDF
-genechart family.ged --root I1 --pref 'layout.type = "fan", output.type = "pdf"'
+# Generate a pedigree fan chart as PDF (type inferred from extension)
+genechart family.ged -r I1 --type fan -o chart.pdf
+
+# Ancestor chart, plain text, 3 generations
+genechart family.ged -r I1 --dir ancestors -g 3 --text
+
+# Dump merged preferences (useful for debugging)
+genechart family.ged --pref
 
 # Use a shared preferences file for a project-specific style
 genechart family.ged --preff ~/projects/genealogy/style.toml

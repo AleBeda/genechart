@@ -8,15 +8,45 @@ pub struct Args {
     pub gedcom: Option<PathBuf>,
 
     /// GEDCOM individual ID to use as chart root (without @ delimiters)
-    #[arg(long)]
+    #[arg(short = 'r', long)]
     pub root: Option<String>,
 
     /// Number of generations to include
-    #[arg(short = 'g', long)]
+    #[arg(short = 'g', long, alias = "gen")]
     pub generations: Option<u32>,
 
-    /// TOML-style preference overrides, e.g. 'layout.type = "fan"' (repeatable)
-    #[arg(long = "pref")]
+    /// Set scope.direction (e.g. descendants, ancestors)
+    #[arg(long, value_name = "DIRECTION")]
+    pub dir: Option<String>,
+
+    /// Set layout algorithm (simple, fan, boxed_couples)
+    #[arg(long = "type", value_name = "TYPE")]
+    pub layout_type: Option<String>,
+
+    /// Output as plain text
+    #[arg(long)]
+    pub text: bool,
+
+    /// Output as SVG
+    #[arg(long)]
+    pub svg: bool,
+
+    /// Output as PDF
+    #[arg(long)]
+    pub pdf: bool,
+
+    /// Output file path
+    #[arg(short = 'o', long, value_name = "FILE")]
+    pub output: Option<PathBuf>,
+
+    /// TOML-style preference overrides, e.g. 'layout.type = "fan"' (repeatable).
+    /// Bare --pref (no value) dumps the merged preferences and exits.
+    #[arg(
+        long = "pref",
+        value_name = "TOML-ASSIGNMENT",
+        num_args = 0..=1,
+        default_missing_value = "",
+    )]
     pub prefs: Vec<String>,
 
     /// TOML preferences file to load after the gedcom-basename file and before --pref overrides
@@ -75,10 +105,68 @@ mod tests {
     }
 
     #[test]
+    fn root_short_flag() {
+        let args = Args::try_parse_from(["genechart", "-r", "I10"]).unwrap();
+        assert_eq!(args.root.as_deref(), Some("I10"));
+    }
+
+    #[test]
+    fn gen_alias() {
+        let args = Args::try_parse_from(["genechart", "--gen", "5"]).unwrap();
+        assert_eq!(args.generations, Some(5));
+    }
+
+    #[test]
+    fn dir_flag() {
+        let args = Args::try_parse_from(["genechart", "--dir", "ancestors"]).unwrap();
+        assert_eq!(args.dir.as_deref(), Some("ancestors"));
+    }
+
+    #[test]
+    fn type_flag() {
+        let args = Args::try_parse_from(["genechart", "--type", "fan"]).unwrap();
+        assert_eq!(args.layout_type.as_deref(), Some("fan"));
+    }
+
+    #[test]
+    fn output_type_flags() {
+        let args = Args::try_parse_from(["genechart", "--svg"]).unwrap();
+        assert!(args.svg);
+        assert!(!args.pdf);
+        assert!(!args.text);
+
+        let args = Args::try_parse_from(["genechart", "--pdf"]).unwrap();
+        assert!(args.pdf);
+
+        let args = Args::try_parse_from(["genechart", "--text"]).unwrap();
+        assert!(args.text);
+    }
+
+    #[test]
+    fn output_path_short() {
+        let args = Args::try_parse_from(["genechart", "-o", "/tmp/chart.svg"]).unwrap();
+        assert_eq!(args.output.as_deref(), Some(std::path::Path::new("/tmp/chart.svg")));
+    }
+
+    #[test]
+    fn output_path_long() {
+        let args = Args::try_parse_from(["genechart", "--output", "/tmp/chart.pdf"]).unwrap();
+        assert_eq!(args.output.as_deref(), Some(std::path::Path::new("/tmp/chart.pdf")));
+    }
+
+    #[test]
     fn multiple_prefs() {
         let args =
             Args::try_parse_from(["genechart", "--pref", "a=1", "--pref", "b=2"]).unwrap();
         assert_eq!(args.prefs, vec!["a=1", "b=2"]);
+    }
+
+    #[test]
+    fn bare_pref_dump_mode() {
+        let args = Args::try_parse_from(["genechart", "--pref"]).unwrap();
+        assert_eq!(args.prefs, vec![""]);
+        assert!(args.prefs.iter().any(|s| s.is_empty()),
+            "bare --pref should set dump mode");
     }
 
     #[test]
