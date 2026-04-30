@@ -31,8 +31,8 @@ type = "simple" # Valid values: "simple", "boxed_couples", "fan"
 root_pos = "bottom" # Valid values: "bot[tom]", "top"
 
 [layout.simple]
-indent = 2
-vert_spacing = 1
+indent = 3
+vert_spacing = 0
 
 [layout.boxed_couples]
 box_width = 220.0
@@ -42,8 +42,8 @@ gap_height = 80.0
 box_width_2_spouses = 480.0 # must be >= 2 * box_width + gap_width
 
 [layout.fan]
-ring_height = 80   # radial thickness of each generation ring (canvas units)
-ring_gap = 20      # gap between rings
+ring_height = 90   # radial thickness of each generation ring (canvas units)
+ring_gap = 10      # gap between rings
 
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"
@@ -103,5 +103,5 @@ spouse_separation = 10.0
 [diagnostics]
 errors = true
 warnings = false
-messages = false
+info = false
 debug = false

@@ -19,14 +19,14 @@ pub struct DiagnosticsPrefs {
     #[serde(default)]
     pub warnings: bool,
     #[serde(default)]
-    pub messages: bool,
+    pub info: bool,
     #[serde(default)]
     pub debug: bool,
 }
 
 impl Default for DiagnosticsPrefs {
     fn default() -> Self {
-        Self { errors: true, warnings: false, messages: false, debug: false }
+        Self { errors: true, warnings: false, info: false, debug: false }
     }
 }
 
