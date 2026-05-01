@@ -452,6 +452,22 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
 
     commit_record(&mut ctx, &mut individuals, &mut families);
 
+    // Repair incomplete FAMS cross-references: if a FAM record names a HUSB or WIFE
+    // that does not already list that family in their fams, add it. This makes parsing
+    // robust to GEDCOM files where the INDI/FAMS back-pointer was omitted.
+    for (fam_id, fam) in &families {
+        for individual_id in [fam.husband_id.as_deref(), fam.wife_id.as_deref()]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(indi) = individuals.get_mut(individual_id) {
+                if !indi.fams.contains(fam_id) {
+                    indi.fams.push(fam_id.clone());
+                }
+            }
+        }
+    }
+
     Ok(Genrep { individuals, families, first_individual_id: first_indi_id })
 }
 
@@ -842,5 +858,27 @@ mod tests {
 
         let f1 = gr.get_family("F1").unwrap();
         assert_eq!(f1.jmar.as_deref(), Some("ref-12345"));
+    }
+
+    #[test]
+    fn test_fams_cross_reference_repair() {
+        // @I1@ INDI has only FAMS @F1@, but also appears as HUSB in @F2@.
+        // After parsing, @I1@.fams should contain both F1 and F2.
+        let gedcom = "0 @I1@ INDI\n\
+                      1 NAME John /Doe/\n\
+                      1 FAMS @F1@\n\
+                      0 @F1@ FAM\n\
+                      1 HUSB @I1@\n\
+                      1 CHIL @I3@\n\
+                      0 @F2@ FAM\n\
+                      1 HUSB @I1@\n\
+                      1 CHIL @I4@\n\
+                      0 TRLR\n";
+        let gr = parse_str(gedcom).unwrap();
+        let i1 = gr.get_individual("I1").unwrap();
+        assert!(i1.fams.contains(&"F1".to_string()), "F1 should be in I1.fams");
+        assert!(i1.fams.contains(&"F2".to_string()), "F2 should be in I1.fams (repaired)");
+        let f2 = gr.get_family("F2").unwrap();
+        assert_eq!(f2.children_ids, vec!["I4"], "F2 children must be parsed");
     }
 }

@@ -66,6 +66,22 @@ fn svg_text_mid(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
     )
 }
 
+fn font_weight_from_pref(pref: &str) -> &str {
+    match pref.trim().to_lowercase().as_str() {
+        "bold" | "bolder" => "bold",
+        "light" | "lighter" => "lighter",
+        _ => "normal",
+    }
+}
+
+fn svg_text_w(x: f64, y: f64, text: &str, family: &str, size: f64, weight: &str) -> String {
+    format!(
+        "  <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+         font-size=\"{size}\" font-weight=\"{weight}\" xml:space=\"preserve\">{}</text>\n",
+        xml_escape(text)
+    )
+}
+
 // ── Preference helpers ────────────────────────────────────────────────────────
 
 /// Parse "Family Name Size" preference string → (family, size).
@@ -339,6 +355,10 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
     let dot_leaders = prefs.output.style.dot_leaders;
 
+    // Compute font weights for descendants and spouses
+    let descendant_weight = font_weight_from_pref(&prefs.output.style.fonts.descendant);
+    let spouse_weight     = font_weight_from_pref(&prefs.output.style.fonts.spouse);
+
     // ── Text elements ─────────────────────────────────────────────────────────
     for (indi, geo) in &entries {
         let y      = MARGIN + chart_top_offset + (geo.line as f64 + 1.0) * line_height;
@@ -371,7 +391,8 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         // Name — rendered as a single element so sex symbols (♂/♀) at the end
         // stay flush with the name text (no positioning gap from our width estimate).
         let name = format_name(indi, prefs);
-        out.push_str(&svg_text(x_base + gpw, y, &name, &font_family, font_size));
+        let name_weight = if geo.is_spouse { spouse_weight } else { descendant_weight };
+        out.push_str(&svg_text_w(x_base + gpw, y, &name, &font_family, font_size, name_weight));
         let mut last_x = x_base + gpw + text_w(&name);
 
         // Birth (with optional dot leader)
@@ -1351,6 +1372,21 @@ mod tests {
         assert!(out.contains("John"), "root name missing");
         assert!(out.contains("Jane"), "spouse name missing");
         assert!(out.contains("Paul"), "child name missing");
+    }
+
+    #[test]
+    fn test_simple_svg_font_weight_applied() {
+        let mut prefs = simple_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.output.style.fonts.descendant = "bold".into();
+        prefs.output.style.fonts.spouse     = "regular".into();
+        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        // Descendant name must carry bold weight
+        assert!(out.contains("font-weight=\"bold\""),
+            "descendant name must have font-weight=bold");
+        // Spouse name must carry normal weight (regular maps to normal)
+        assert!(out.contains("font-weight=\"normal\""),
+            "spouse name must have font-weight=normal");
     }
 
 }

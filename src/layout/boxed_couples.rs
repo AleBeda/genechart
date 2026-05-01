@@ -167,11 +167,17 @@ fn build_family_geo(
     box_w: f64,
     box_w2: f64,
 ) -> Option<BoxedCouplesGeo> {
-    let parent_id = fam.husband_id.as_deref().or(fam.wife_id.as_deref())?;
-    let parent = out.get(parent_id)?;
+    let is_placed = |id: &&str| matches!(
+        out.get(*id).and_then(|i| i.geo.as_ref()),
+        Some(BoxedCouplesGeo::Individual(_))
+    );
+    let parent_id = fam.husband_id.as_deref()
+        .filter(is_placed)
+        .or_else(|| fam.wife_id.as_deref().filter(is_placed))?;
+    let parent = out.get(parent_id).unwrap(); // safe: is_placed guarantees presence
     let geo = match &parent.geo {
         Some(BoxedCouplesGeo::Individual(g)) => g,
-        _ => return None,
+        _ => return None, // unreachable; kept for exhaustiveness
     };
 
     let has_spouse2 = geo.width > box_w + 1.0;
@@ -839,5 +845,43 @@ mod tests {
             (x_root + conn_out2_offset - x_child).abs() < 1e-6,
             "expected x_root({x_root}) + offset({conn_out2_offset}) == x_child({x_child})"
         );
+    }
+
+    #[test]
+    fn build_family_geo_wife_is_placed_individual() {
+        // Family where WIFE is the placed descendant, HUSBAND is a spouse (None geo).
+        let mut out: HashMap<String, Individual<BoxedCouplesGeo>> = HashMap::new();
+        out.insert("I_wife".to_string(), Individual {
+            id: "I_wife".to_string(),
+            given: None, surname: None, sex: Some('F'),
+            birth: None, death: None,
+            fams: vec!["F1".to_string()], famc: vec![],
+            alt_name: None, name_heb: None, living: None,
+            in_scope: true,
+            geo: Some(BoxedCouplesGeo::Individual(IndividualGeo {
+                x: 0.0, y: 0.0, width: 220.0, height: 160.0,
+                conn_in_x: 0.0, conn_in_y: -80.0,
+            })),
+        });
+        out.insert("I_husb".to_string(), Individual {
+            id: "I_husb".to_string(),
+            given: None, surname: None, sex: Some('M'),
+            birth: None, death: None,
+            fams: vec!["F1".to_string()], famc: vec![],
+            alt_name: None, name_heb: None, living: None,
+            in_scope: true,
+            geo: None, // spouse — not placed
+        });
+        let fam = Family {
+            id: "F1".to_string(),
+            husband_id: Some("I_husb".to_string()),
+            wife_id: Some("I_wife".to_string()),
+            children_ids: vec![],
+            marriage: None, jmar: None,
+            in_scope: true,
+            geo: None,
+        };
+        let result = build_family_geo(&fam, &out, 160.0, 220.0, 480.0);
+        assert!(result.is_some(), "build_family_geo must succeed when wife is the placed individual");
     }
 }
