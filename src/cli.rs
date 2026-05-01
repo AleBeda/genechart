@@ -53,6 +53,16 @@ pub struct Args {
     #[arg(long = "preff", value_name = "FILE")]
     pub preff: Option<PathBuf>,
 
+    /// Enable structured trace output for the named component (repeatable).
+    /// Known component: "prefs".  Bare --trace enables all components.
+    #[arg(
+        long = "trace",
+        value_name = "COMPONENT",
+        num_args = 0..=1,
+        default_missing_value = "all",
+    )]
+    pub trace: Vec<String>,
+
     #[arg(long, hide = true)]
     pub strict: bool,
 }
@@ -185,5 +195,17 @@ mod tests {
     fn version_does_not_panic() {
         let result = Args::try_parse_from(["genechart", "--version"]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn trace_flag_bare() {
+        let args = Args::try_parse_from(["genechart", "--trace"]).unwrap();
+        assert_eq!(args.trace, vec!["all"]);
+    }
+
+    #[test]
+    fn trace_flag_component() {
+        let args = Args::try_parse_from(["genechart", "--trace", "prefs"]).unwrap();
+        assert_eq!(args.trace, vec!["prefs"]);
     }
 }

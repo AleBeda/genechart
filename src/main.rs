@@ -3,6 +3,7 @@ mod preferences;
 mod parser;
 mod layout;
 mod backend;
+mod trace;
 
 use backend::Renderer as _;
 
@@ -17,10 +18,13 @@ fn run() -> anyhow::Result<()> {
     // 1. Parse CLI
     let args = cli::parse();
 
-    // 2. Resolve GEDCOM path
+    // 2. Create tracer
+    let tracer = trace::Tracer::new(&args.trace);
+
+    // 3. Resolve GEDCOM path
     let gedcom_path = cli::resolve_gedcom_path(&args)?;
 
-    // 3. Detect dump mode (bare --pref with no value)
+    // 4. Detect dump mode (bare --pref with no value)
     let dump_mode = args.prefs.iter().any(|s| s.is_empty());
 
     // Filter out empty strings (dump-mode sentinels) before passing to preferences::load
@@ -29,10 +33,10 @@ fn run() -> anyhow::Result<()> {
         .cloned()
         .collect();
 
-    // 4. Load preferences (merging all sources + --preff file + --pref overrides)
-    let mut prefs = preferences::load(Some(&gedcom_path), args.preff.as_deref(), &pref_overrides)?;
+    // 5. Load preferences (merging all sources + --preff file + --pref overrides)
+    let mut prefs = preferences::load(Some(&gedcom_path), args.preff.as_deref(), &pref_overrides, &tracer)?;
 
-    // 5. Apply CLI shortcuts (override preference-file values)
+    // 6. Apply CLI shortcuts (override preference-file values)
     //    Order: dir → type → output path → root → generations → output type
 
     if let Some(dir) = &args.dir {
@@ -78,7 +82,7 @@ fn run() -> anyhow::Result<()> {
     // Store the resolved GEDCOM path for use in title/copyright templates
     prefs.files.gedcom = gedcom_path.display().to_string();
 
-    // 6. Dump mode: print merged prefs and exit
+    // 7. Dump mode: print merged prefs and exit
     if dump_mode {
         let serialized = toml::to_string_pretty(&prefs)
             .unwrap_or_else(|_| toml::to_string(&prefs).unwrap_or_default());
@@ -86,26 +90,26 @@ fn run() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 7. Parse GEDCOM
+    // 8. Parse GEDCOM
     parser::set_diagnostics(prefs.diagnostics.clone());
     let mut genrep = parser::parse(&gedcom_path)?;
 
-    // 8. Compute scope
+    // 9. Compute scope
     let root_id = (!prefs.scope.root.is_empty()).then(|| prefs.scope.root.as_str());
     let gens = (prefs.scope.generations > 0).then_some(prefs.scope.generations);
     parser::compute_scope(&mut genrep, root_id, &prefs.scope.direction, gens);
 
-    // 9. Run layout
+    // 10. Run layout
     let layout_output = layout::run_layout(&genrep, &prefs)?;
 
-    // 10. Open output (file or stdout)
+    // 11. Open output (file or stdout)
     let mut writer: Box<dyn std::io::Write> = if prefs.output.path.is_empty() {
         Box::new(std::io::stdout())
     } else {
         Box::new(std::fs::File::create(&prefs.output.path)?)
     };
 
-    // 11. Render
+    // 12. Render
     match prefs.output.output_type.to_lowercase().as_str() {
         "svg" => backend::svg::SvgRenderer.render(&layout_output, &prefs, &mut writer)?,
         "pdf" => backend::pdf::PdfRenderer.render(&layout_output, &prefs, &mut writer)?,
