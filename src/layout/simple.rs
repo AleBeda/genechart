@@ -116,15 +116,24 @@ fn visit(
     );
     *line += 1 + spacing;
 
-    // Sort families by marriage date (earliest first, undated last).
+    // Sort families by marriage date, but only if all have dates.
+    // Otherwise, preserve FAMS tag order.
     let mut fams = indi.fams.clone();
-    fams.sort_by_key(|fam_id| {
+    let all_have_dates = fams.iter().all(|fam_id| {
         genrep.families.get(fam_id)
             .and_then(|f| f.marriage.as_ref())
             .and_then(|e| e.date.as_ref())
-            .map(|d| date_sort_key(&d.raw))
-            .unwrap_or((u32::MAX, 0, 0))
+            .is_some()
     });
+    if all_have_dates {
+        fams.sort_by_key(|fam_id| {
+            genrep.families.get(fam_id)
+                .and_then(|f| f.marriage.as_ref())
+                .and_then(|e| e.date.as_ref())
+                .map(|d| date_sort_key(&d.raw))
+                .unwrap_or((u32::MAX, 0, 0))
+        });
+    }
 
     for fam_id in &fams {
         let fam = match genrep.families.get(fam_id) {

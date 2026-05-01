@@ -53,7 +53,7 @@ fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> Stri
 fn svg_rect(x: f64, y: f64, w: f64, h: f64, fill: &str, stroke: &str, sw: f64) -> String {
     format!(
         "  <rect x=\"{x:.1}\" y=\"{y:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" \
-         rx=\"4\" ry=\"4\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
+         rx=\"0\" ry=\"0\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
     )
 }
 
@@ -319,10 +319,8 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
     // ── Build SVG ─────────────────────────────────────────────────────────────
 
-    let (canvas_w, canvas_h) = match paper_size_mm(prefs) {
-        Some((pw, ph)) => (format!("{pw}mm"), format!("{ph}mm")),
-        None           => (format!("{content_w:.0}"), format!("{content_h:.0}")),
-    };
+    let canvas_w = format!("{content_w:.0}");
+    let canvas_h = format!("{content_h:.0}");
     let viewbox = format!("0 0 {content_w:.1} {content_h:.1}");
 
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
@@ -605,10 +603,8 @@ fn render_boxed_couples(
     // Step 3: SVG header
     let total_w = content_w;
     let total_h = content_h;
-    let (canvas_w, canvas_h) = match paper_size_mm(prefs) {
-        Some((pw, ph)) => (format!("{pw}mm"), format!("{ph}mm")),
-        None           => (format!("{total_w:.0}"), format!("{total_h:.0}")),
-    };
+    let canvas_w = format!("{total_w:.0}");
+    let canvas_h = format!("{total_h:.0}");
     let viewbox = format!("0 0 {total_w:.1} {total_h:.1}");
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
 
@@ -826,8 +822,9 @@ fn render_boxed_couples(
         };
 
         let parent_id = fam.husband_id.as_deref()
-            .or(fam.wife_id.as_deref())
-            .filter(|pid| placed_geo(pid, genrep).is_some());
+            .filter(|pid| placed_geo(pid, genrep).is_some())
+            .or_else(|| fam.wife_id.as_deref()
+                .filter(|pid| placed_geo(pid, genrep).is_some()));
         let parent_id = match parent_id { Some(p) => p, None => continue };
 
         let parent_ind = &genrep.individuals[parent_id];
@@ -941,10 +938,8 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
     let cx = content_w / 2.0;
     let cy = title_line_h + fan_h - MARGIN;
 
-    let (canvas_w, canvas_h) = match paper_size_mm(prefs) {
-        Some((pw, ph)) => (format!("{pw}mm"), format!("{ph}mm")),
-        None           => (format!("{content_w:.0}"), format!("{content_h:.0}")),
-    };
+    let canvas_w = format!("{content_w:.0}");
+    let canvas_h = format!("{content_h:.0}");
     let viewbox = format!("0 0 {content_w:.1} {content_h:.1}");
 
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
@@ -1153,37 +1148,6 @@ mod tests {
             "content-sized width should be a number, got: {width_val:?}");
     }
 
-    #[test]
-    fn test_svg_paper_a4_portrait() {
-        let mut prefs = simple_prefs();
-        prefs.output.paper.size = "A4".into();
-        prefs.output.paper.orientation = "portrait".into();
-        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("width=\"210mm\""),  "A4 portrait width: {out}");
-        assert!(out.contains("height=\"297mm\""), "A4 portrait height: {out}");
-        assert!(out.contains("viewBox="),         "A4 SVG needs viewBox: {out}");
-    }
-
-    #[test]
-    fn test_svg_paper_a4_landscape() {
-        let mut prefs = simple_prefs();
-        prefs.output.paper.size = "A4".into();
-        prefs.output.paper.orientation = "landscape".into();
-        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("width=\"297mm\""),  "A4 landscape width: {out}");
-        assert!(out.contains("height=\"210mm\""), "A4 landscape height: {out}");
-    }
-
-    #[test]
-    fn test_svg_paper_letter() {
-        let mut prefs = simple_prefs();
-        prefs.output.paper.size = "letter".into();
-        prefs.output.paper.orientation = "portrait".into();
-        let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("width=\"215.9mm\""),  "letter portrait width: {out}");
-        assert!(out.contains("height=\"279.4mm\""), "letter portrait height: {out}");
-    }
-
     // ── Font prefs ──
 
     #[test]
@@ -1389,13 +1353,4 @@ mod tests {
         assert!(out.contains("Paul"), "child name missing");
     }
 
-    #[test]
-    fn test_bc_svg_paper_a4() {
-        let mut prefs = bc_prefs();
-        prefs.output.paper.size = "A4".into();
-        prefs.output.paper.orientation = "portrait".into();
-        let out = render_to_string(&bc_layout(), &prefs).unwrap();
-        assert!(out.contains("width=\"210mm\""),  "A4 portrait width");
-        assert!(out.contains("height=\"297mm\""), "A4 portrait height");
-    }
 }

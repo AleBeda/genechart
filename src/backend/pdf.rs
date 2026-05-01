@@ -29,7 +29,18 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let columns = prefs.output.poster.columns.max(1) as usize;
 
     if rows == 1 && columns == 1 {
-        let tree = svg2pdf::usvg::Tree::from_str(&svg_string, &usvg_opts)
+        // Apply paper sizing if specified.
+        let final_svg = if let Some((pw_mm, ph_mm)) = crate::backend::svg::paper_size_mm(prefs) {
+            const MM_TO_USER: f64 = 96.0 / 25.4;
+            let (vbx, vby, vbw, vbh) = parse_viewbox(&svg_string)
+                .unwrap_or((0.0, 0.0, pw_mm * MM_TO_USER, ph_mm * MM_TO_USER));
+            let w_str = format!("{pw_mm}mm");
+            let h_str = format!("{ph_mm}mm");
+            patch_svg_header(&svg_string, vbx, vby, vbw, vbh, &w_str, &h_str)
+        } else {
+            svg_string.clone()
+        };
+        let tree = svg2pdf::usvg::Tree::from_str(&final_svg, &usvg_opts)
             .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
         let pdf = svg2pdf::to_pdf(
             &tree,
