@@ -355,6 +355,19 @@ impl Layout for BoxedCouplesLayout {
             place_descendants(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals);
         }
 
+        // Add in-scope spouses of placed individuals to the output
+        let placed_ids: Vec<String> = individuals.keys().cloned().collect();
+        for ind_id in placed_ids {
+            let spouses = spouses_of(&ind_id, genrep);
+            for spouse_id in spouses {
+                if !individuals.contains_key(&spouse_id) {
+                    if let Some(spouse) = genrep.get_individual(&spouse_id) {
+                        individuals.insert(spouse_id, copy_individual(spouse, None));
+                    }
+                }
+            }
+        }
+
         let families = copy_families(genrep, &individuals, box_h, box_w, box_w2);
 
         Ok(Genrep {
