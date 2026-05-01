@@ -170,24 +170,6 @@ fn render_mixed_text(
     }
 }
 
-fn render_mixed_text_centred(
-    out: &mut String,
-    cx: f64,
-    y: f64,
-    text: &str,
-    primary_family: &str,
-    font_size: f64,
-) {
-    if !text.chars().any(|c| (c as u32) >= 0x2000) {
-        out.push_str(&svg_text_mid(cx, y, text, primary_family, font_size));
-        return;
-    }
-    let cw = font_size * CHAR_WIDTH_RATIO;
-    let total_w = text.chars().count() as f64 * cw;
-    let x = cx - total_w / 2.0;
-    render_mixed_text(out, x, y, text, primary_family, font_size, cw);
-}
-
 fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -643,6 +625,10 @@ fn render_boxed_couples(
 
     // Step 5: Draw boxes and text
     for (ind_id, geo) in &placed {
+        out.push_str(&format!(
+            "<g><g class=\"individual\" id=\"{}\">\n", xml_escape(ind_id)
+        ));
+
         let box_left_svg = to_svg_x(geo.x - geo.width / 2.0);
         let box_w = geo.width;
         let box_h = geo.height;
@@ -673,19 +659,20 @@ fn render_boxed_couples(
         };
 
         if is_two_spouse {
-            let left_cx_svg = to_svg_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width));
-            let right_cx_svg = to_svg_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width));
+            let left_cx_svg = to_svg_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
+            let right_cx_svg = to_svg_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
+            let ind_cx_svg = to_svg_x(geo.x);
 
-            // Render individual in left section
+            // Render individual in centre of wide box
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            out.push_str(&svg_text_mid(left_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size));
+            out.push_str(&svg_text_mid(ind_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size));
 
             let mut y_pos = name_y;
             if prefs.show.birth {
                 if let Some(ref birth) = ind.birth {
                     if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_centred(&mut out, left_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size);
+                        out.push_str(&svg_text_mid(ind_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size));
                     }
                 }
             }
@@ -693,7 +680,7 @@ fn render_boxed_couples(
                 if let Some(ref death) = ind.death {
                     if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_centred(&mut out, left_cx_svg, y_pos, &death_str, &date_font_family, date_font_size);
+                        out.push_str(&svg_text_mid(ind_cx_svg, y_pos, &death_str, &date_font_family, date_font_size));
                     }
                 }
             }
@@ -708,7 +695,7 @@ fn render_boxed_couples(
                                 if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
-                                    render_mixed_text_centred(&mut out, left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -722,7 +709,7 @@ fn render_boxed_couples(
                             if let Some(ref birth) = sp1.birth {
                                 if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
                                     sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, left_cx_svg, sp_y, &birth_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(left_cx_svg, sp_y, &birth_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -730,7 +717,7 @@ fn render_boxed_couples(
                             if let Some(ref death) = sp1.death {
                                 if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
                                     sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, left_cx_svg, sp_y, &death_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(left_cx_svg, sp_y, &death_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -750,7 +737,7 @@ fn render_boxed_couples(
                             if let Some(ref birth) = sp2.birth {
                                 if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
                                     y_pos += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, right_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(right_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -758,7 +745,7 @@ fn render_boxed_couples(
                             if let Some(ref death) = sp2.death {
                                 if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
                                     y_pos += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, right_cx_svg, y_pos, &death_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(right_cx_svg, y_pos, &death_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -776,7 +763,7 @@ fn render_boxed_couples(
                 if let Some(ref birth) = ind.birth {
                     if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_centred(&mut out, section_cx, y_pos, &birth_str, &date_font_family, date_font_size);
+                        out.push_str(&svg_text_mid(section_cx, y_pos, &birth_str, &date_font_family, date_font_size));
                     }
                 }
             }
@@ -784,7 +771,7 @@ fn render_boxed_couples(
                 if let Some(ref death) = ind.death {
                     if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_centred(&mut out, section_cx, y_pos, &death_str, &date_font_family, date_font_size);
+                        out.push_str(&svg_text_mid(section_cx, y_pos, &death_str, &date_font_family, date_font_size));
                     }
                 }
             }
@@ -797,7 +784,7 @@ fn render_boxed_couples(
                                 if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
-                                    render_mixed_text_centred(&mut out, section_cx, marr_y, &marr_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(section_cx, marr_y, &marr_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -810,7 +797,7 @@ fn render_boxed_couples(
                             if let Some(ref birth) = sp.birth {
                                 if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
                                     sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, section_cx, sp_y, &birth_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(section_cx, sp_y, &birth_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -818,7 +805,7 @@ fn render_boxed_couples(
                             if let Some(ref death) = sp.death {
                                 if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
                                     sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_centred(&mut out, section_cx, sp_y, &death_str, &date_font_family, date_font_size);
+                                    out.push_str(&svg_text_mid(section_cx, sp_y, &death_str, &date_font_family, date_font_size));
                                 }
                             }
                         }
@@ -826,6 +813,8 @@ fn render_boxed_couples(
                 }
             }
         }
+
+        out.push_str("</g></g>\n");
     }
 
     // Step 6: Draw connectors
@@ -855,6 +844,10 @@ fn render_boxed_couples(
             .collect();
         if child_geos.is_empty() { continue }
 
+        out.push_str(&format!(
+            "<g><g class=\"connectors\" id=\"fam-{}\">\n", xml_escape(fam_id)
+        ));
+
         let parent_geo = placed_geo(parent_id, genrep).unwrap();
 
         // The edge of the parent box that faces the children.
@@ -882,6 +875,8 @@ fn render_boxed_couples(
             out.push_str(&svg_line(svg_cx, bar_y, svg_cx, svg_in_y,
                                   &conn_color, conn_width));
         }
+
+        out.push_str("</g></g>\n");
     }
 
     // Step 7: Close SVG

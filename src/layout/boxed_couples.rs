@@ -178,7 +178,7 @@ fn build_family_geo(
 
     let conn_out_y = geo.y + box_h / 2.0;
     let (conn_out1_x, conn_out2_x) = if has_spouse2 {
-        (geo.x - (box_w2 / 2.0 - box_w), geo.x + (box_w2 / 2.0 - box_w))
+        (geo.x - (box_w2 / 2.0 - box_w / 2.0), geo.x + (box_w2 / 2.0 - box_w / 2.0))
     } else {
         (geo.x, geo.x)
     };
@@ -263,8 +263,8 @@ fn place_descendants(
                     place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
                 }
 
-                let conn_out1_offset = -(box_w2 / 2.0 - box_w);
-                let conn_out2_offset = box_w2 / 2.0 - box_w;
+                let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
+                let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
 
                 if !children1.is_empty() {
                     get_x_of(children1.last().unwrap(), out) - conn_out1_offset
@@ -834,7 +834,7 @@ mod tests {
         let x_root = ind_geo(&result, "I20").x;
         let x_child = ind_geo(&result, "I23").x;
 
-        let conn_out2_offset = box_w2 / 2.0 - box_w;
+        let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
         assert!(
             (x_root + conn_out2_offset - x_child).abs() < 1e-6,
             "expected x_root({x_root}) + offset({conn_out2_offset}) == x_child({x_child})"
