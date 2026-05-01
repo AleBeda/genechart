@@ -27,6 +27,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `--pref '<key=val, ...>'` | Override any preference inline (TOML syntax, repeatable) |
 | `--pref` | Bare `--pref` (no value): dump merged preferences to stdout and exit |
 | `--preff <FILE>` | Load an explicit TOML preferences file (see priority below) |
+| `--trace [COMPONENT]` | Print structured diagnostics to stderr for the named component; bare `--trace` traces all components. Known component: `prefs` |
 | `-h` / `--help` | Show help |
 | `--version` | Show version |
 
@@ -44,6 +45,9 @@ genechart family.ged -r I1 --dir ancestors -g 3 --text
 
 # Dump merged preferences (useful for debugging)
 genechart family.ged --pref
+
+# Trace how preferences are resolved across all sources
+genechart family.ged -r I1 -g 5 --trace prefs 2>&1 | head
 
 # Use a shared preferences file for a project-specific style
 genechart family.ged --preff ~/projects/genealogy/style.toml
