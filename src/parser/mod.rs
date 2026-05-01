@@ -528,7 +528,7 @@ fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) 
         }
         indi_scope.insert(id.clone());
 
-        if generations.map_or(true, |g| depth < g) {
+        if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
             let fams: Vec<String> = genrep.individuals.get(&id)
                 .map(|i| i.fams.clone())
                 .unwrap_or_default();
@@ -575,7 +575,7 @@ fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
         }
         indi_scope.insert(id.clone());
 
-        if generations.map_or(true, |g| depth < g) {
+        if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
             let famcs: Vec<String> = genrep.individuals.get(&id)
                 .map(|i| i.famc.clone())
                 .unwrap_or_default();
@@ -683,6 +683,77 @@ mod tests {
         assert!(gr.get_individual("I2").unwrap().in_scope);
         assert!(gr.get_individual("I3").unwrap().in_scope);
         assert!(gr.get_family("F1").unwrap().in_scope);
+    }
+
+    const SAMPLE_4GEN: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Root /Person/
+1 SEX M
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Root /Spouse/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Child /Person/
+1 SEX M
+1 FAMC @F1@
+1 FAMS @F2@
+0 @I4@ INDI
+1 NAME Grandchild /Person/
+1 SEX M
+1 FAMC @F2@
+1 FAMS @F3@
+0 @I5@ INDI
+1 NAME GreatGrandchild /Person/
+1 SEX M
+1 FAMC @F3@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 @F2@ FAM
+1 HUSB @I3@
+1 CHIL @I4@
+0 @F3@ FAM
+1 HUSB @I4@
+1 CHIL @I5@
+0 TRLR
+";
+
+    #[test]
+    fn test_scope_descendants_g3_stops_at_grandchildren() {
+        let mut gr = parse_str(SAMPLE_4GEN).unwrap();
+        compute_scope(&mut gr, Some("I1"), "descendants", Some(3));
+        // gen 1: root
+        assert!(gr.get_individual("I1").unwrap().in_scope, "root must be in scope");
+        // gen 1: root's spouse (same generation as root)
+        assert!(gr.get_individual("I2").unwrap().in_scope, "spouse must be in scope");
+        // gen 2: children
+        assert!(gr.get_individual("I3").unwrap().in_scope, "child must be in scope");
+        // gen 3: grandchildren
+        assert!(gr.get_individual("I4").unwrap().in_scope, "grandchild must be in scope");
+        // gen 4: great-grandchildren — must NOT be shown with g=3
+        assert!(!gr.get_individual("I5").unwrap().in_scope,
+            "great-grandchild must NOT be in scope with g=3");
+    }
+
+    #[test]
+    fn test_scope_ancestors_g3_stops_at_grandparents() {
+        let mut gr = parse_str(SAMPLE_4GEN).unwrap();
+        compute_scope(&mut gr, Some("I5"), "ancestors", Some(3));
+        // gen 1: root
+        assert!(gr.get_individual("I5").unwrap().in_scope, "root must be in scope");
+        // gen 2: parent
+        assert!(gr.get_individual("I4").unwrap().in_scope, "parent must be in scope");
+        // gen 3: grandparent
+        assert!(gr.get_individual("I3").unwrap().in_scope, "grandparent must be in scope");
+        // gen 4: great-grandparent — must NOT be shown with g=3
+        assert!(!gr.get_individual("I1").unwrap().in_scope,
+            "great-grandparent must NOT be in scope with g=3");
     }
 
     #[test]
