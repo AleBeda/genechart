@@ -44,7 +44,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
         let pdf = svg2pdf::to_pdf(
             &tree,
-            svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() },
+            svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() },
             svg2pdf::PageOptions { dpi: 96.0 },
         ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
         return Ok(pdf);
@@ -60,7 +60,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
                 .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
             let pdf = svg2pdf::to_pdf(
                 &tree,
-                svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() },
+                svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() },
                 svg2pdf::PageOptions { dpi: 96.0 },
             ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
             return Ok(pdf);
@@ -85,7 +85,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let w_str = format!("{page_w_mm}mm");
     let h_str = format!("{page_h_mm}mm");
 
-    let conv_opts = svg2pdf::ConversionOptions { embed_text: false, ..svg2pdf::ConversionOptions::default() };
+    let conv_opts = svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() };
     let mut tiles: Vec<(String, f32, f32)> = Vec::new();
 
     for r in 0..rows {

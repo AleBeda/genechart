@@ -90,6 +90,13 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     spouses
 }
 
+fn extend_env(mut env: Vec<f64>, min_len: usize) -> Vec<f64> {
+    if env.len() < min_len {
+        env.resize(min_len, 0.0);
+    }
+    env
+}
+
 fn get_right_envelope(
     ind_id: &str,
     genrep: &Genrep,
@@ -242,7 +249,10 @@ fn place_descendants(
             } else {
                 place_descendants(genrep, &children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
                 for i in 1..children.len() {
-                    let right_env = get_right_envelope(&children[i - 1], genrep, out);
+                    let right_env = extend_env(
+                        get_right_envelope(&children[i - 1], genrep, out),
+                        env_left.len().saturating_sub(1),
+                    );
                     place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
                 }
 
@@ -265,7 +275,10 @@ fn place_descendants(
             } else {
                 place_descendants(genrep, &all_children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
                 for i in 1..all_children.len() {
-                    let right_env = get_right_envelope(&all_children[i - 1], genrep, out);
+                    let right_env = extend_env(
+                        get_right_envelope(&all_children[i - 1], genrep, out),
+                        env_left.len().saturating_sub(1),
+                    );
                     place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
                 }
 
@@ -883,5 +896,46 @@ mod tests {
         };
         let result = build_family_geo(&fam, &out, 160.0, 220.0, 480.0);
         assert!(result.is_some(), "build_family_geo must succeed when wife is the placed individual");
+    }
+
+    #[test]
+    fn test_last_sibling_children_placed() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Spouse /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME FirstChild /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I4@ INDI\n1 NAME SecondChild /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I5@ INDI\n1 NAME GrandparentSpouse /G/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I6@ INDI\n1 NAME Grandchild /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 @F2@ FAM\n1 HUSB @I4@\n1 WIFE @I5@\n1 CHIL @I6@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let i6 = bc.individuals.get("I6")
+            .expect("I6 (grandchild of last sibling) must be placed");
+        assert!(
+            matches!(i6.geo, Some(BoxedCouplesGeo::Individual(_))),
+            "I6 must have an IndividualGeo, not None"
+        );
     }
 }
