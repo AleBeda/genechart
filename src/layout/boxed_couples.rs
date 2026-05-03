@@ -217,6 +217,36 @@ fn get_x_of(id: &str, out: &HashMap<String, Individual<BoxedCouplesGeo>>) -> f64
     }
 }
 
+fn shift_subtree(
+    ind_id: &str,
+    dx: f64,
+    generation: u32,
+    genrep: &Genrep,
+    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
+) {
+    let spouses = prune_spouses(ind_id, genrep);
+    let child_ids: Vec<String> = spouses
+        .iter()
+        .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+        .collect();
+
+    if let Some(ind) = out.get_mut(ind_id) {
+        if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+            g.x += dx;
+            g.conn_in_x += dx;
+            let gen_idx = generation as usize;
+            if gen_idx < global_right.len() {
+                global_right[gen_idx] = global_right[gen_idx].max(g.x + g.width / 2.0);
+            }
+        }
+    }
+
+    for child_id in child_ids {
+        shift_subtree(&child_id, dx, generation + 1, genrep, out, global_right);
+    }
+}
+
 fn place_descendants(
     genrep: &Genrep,
     ind_id: &str,
@@ -270,7 +300,15 @@ fn place_descendants(
                 } else {
                     (get_x_of(&children[n / 2 - 1], out) + get_x_of(&children[n / 2], out)) / 2.0
                 };
-                x_mid.max(x_default)
+                if x_mid < x_default {
+                    let shift = x_default - x_mid;
+                    for child_id in &children {
+                        shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
+                    }
+                    x_default
+                } else {
+                    x_mid
+                }
             }
         }
 
@@ -301,7 +339,15 @@ fn place_descendants(
                 } else {
                     get_x_of(children2.first().unwrap(), out) - conn_out2_offset
                 };
-                x_from_children.max(x_default)
+                if x_from_children < x_default {
+                    let shift = x_default - x_from_children;
+                    for child_id in all_children.iter() {
+                        shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
+                    }
+                    x_default
+                } else {
+                    x_from_children
+                }
             }
         }
     };
@@ -964,22 +1010,28 @@ mod tests {
         use crate::layout::{run_layout, LayoutOutput};
 
         // I1+I2 → [I3, I4(leaf), I5]
-        // I3+I6 → [I7]  (gen-2 cousin of I9)
-        // I5+I8 → [I9]  (must be placed right after I7, not after I4)
+        // I3+I6 → [I7]          (single gen-2 grandchild under I3)
+        // I5+I8 → [I9, I10]     (two gen-2 grandchildren under I5)
+        //
+        // With global-right + shift: I5 is placed at x_default (right next to I4),
+        // centred over its two shifted children I9 and I10.
+        // With "pad last value" I5 would end up further right (I4's right edge becomes
+        // the gen-2 constraint for I9, pushing I5's centre past x_default).
         const GED: &str = "\
 0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
 0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n\
-0 @I2@ INDI\n1 NAME Spouse /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Spouse1 /S/\n1 SEX F\n1 FAMS @F1@\n\
 0 @I3@ INDI\n1 NAME ChildA /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
 0 @I4@ INDI\n1 NAME ChildB /C/\n1 SEX M\n1 FAMC @F1@\n\
 0 @I5@ INDI\n1 NAME ChildC /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
 0 @I6@ INDI\n1 NAME SpouseA /S/\n1 SEX F\n1 FAMS @F2@\n\
 0 @I7@ INDI\n1 NAME GrandchildA /G/\n1 SEX M\n1 FAMC @F2@\n\
 0 @I8@ INDI\n1 NAME SpouseC /S/\n1 SEX F\n1 FAMS @F3@\n\
-0 @I9@ INDI\n1 NAME GrandchildC /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I9@ INDI\n1 NAME GrandchildC1 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME GrandchildC2 /G/\n1 SEX M\n1 FAMC @F3@\n\
 0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n1 CHIL @I5@\n\
 0 @F2@ FAM\n1 HUSB @I3@\n1 WIFE @I6@\n1 CHIL @I7@\n\
-0 @F3@ FAM\n1 HUSB @I5@\n1 WIFE @I8@\n1 CHIL @I9@\n\
+0 @F3@ FAM\n1 HUSB @I5@\n1 WIFE @I8@\n1 CHIL @I9@\n1 CHIL @I10@\n\
 0 TRLR\n";
 
         let mut prefs = Prefs::default();
@@ -997,26 +1049,32 @@ mod tests {
             _ => panic!("expected BoxedCouples layout"),
         };
 
-        let x7 = match &bc.individuals["I7"].geo {
+        let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,
-            _ => panic!("I7 not placed"),
+            _ => panic!("{id} not placed as Individual"),
         };
-        let x9 = match &bc.individuals["I9"].geo {
-            Some(BoxedCouplesGeo::Individual(g)) => g.x,
-            _ => panic!("I9 not placed"),
-        };
+
+        let x4  = get_x("I4");
+        let x5  = get_x("I5");
+        let x9  = get_x("I9");
+        let x10 = get_x("I10");
+
         let box_w = prefs.layout.boxed_couples.box_width;
         let gap_w = prefs.layout.boxed_couples.gap_width;
 
-        // I9 must be at minimum distance from I7 (no overlap)
+        // Parent-centring rule: I5 must be centred over its two children.
         assert!(
-            x9 >= x7 + box_w + gap_w - 1e-6,
-            "I9 overlaps I7: x7={x7}, x9={x9}"
+            (x5 - (x9 + x10) / 2.0).abs() < 1e-6,
+            "I5 not centred over children: x5={x5}, x9={x9}, x10={x10}"
         );
-        // I9 must be tightly packed — constrained by I7's right edge, not I4's
+
+        // Tight-packing: I5 must be at the minimum distance from I4.
+        // (With "pad last value" I5 would be further right because I4's right
+        // edge propagates as the gen-2 constraint for I9, pushing children
+        // and parent rightward.)
         assert!(
-            x9 <= x7 + box_w + gap_w * 2.0 + 1e-6,
-            "I9 placed too far right (not using global right envelope): x7={x7}, x9={x9}"
+            (x5 - (x4 + box_w + gap_w)).abs() < 1e-6,
+            "I5 placed too far right — not using global right envelope: x4={x4}, x5={x5}"
         );
     }
 }
