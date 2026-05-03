@@ -90,9 +90,14 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     spouses
 }
 
-fn extend_env(mut env: Vec<f64>, min_len: usize) -> Vec<f64> {
-    if env.len() < min_len {
-        env.resize(min_len, 0.0);
+fn fill_env_from_global(
+    mut env: Vec<f64>,
+    min_len: usize,
+    global_right: &[f64],
+    base_gen: usize,
+) -> Vec<f64> {
+    for j in env.len()..min_len {
+        env.push(global_right.get(base_gen + j).copied().unwrap_or(0.0));
     }
     env
 }
@@ -223,6 +228,7 @@ fn place_descendants(
     gap_w: f64,
     gap_h: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
 ) {
     let ind = match genrep.get_individual(ind_id) {
         Some(i) => i,
@@ -247,21 +253,24 @@ fn place_descendants(
             if children.is_empty() || env_left.len() <= 1 {
                 x_default
             } else {
-                place_descendants(genrep, &children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
+                place_descendants(genrep, &children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 for i in 1..children.len() {
-                    let right_env = extend_env(
+                    let right_env = fill_env_from_global(
                         get_right_envelope(&children[i - 1], genrep, out),
                         env_left.len().saturating_sub(1),
+                        global_right,
+                        (generation as usize) + 1,
                     );
-                    place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
+                    place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
 
                 let n = children.len();
-                if n % 2 == 1 {
+                let x_mid = if n % 2 == 1 {
                     get_x_of(&children[n / 2], out)
                 } else {
                     (get_x_of(&children[n / 2 - 1], out) + get_x_of(&children[n / 2], out)) / 2.0
-                }
+                };
+                x_mid.max(x_default)
             }
         }
 
@@ -273,23 +282,26 @@ fn place_descendants(
             if all_children.is_empty() || env_left.len() <= 1 {
                 x_default
             } else {
-                place_descendants(genrep, &all_children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
+                place_descendants(genrep, &all_children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 for i in 1..all_children.len() {
-                    let right_env = extend_env(
+                    let right_env = fill_env_from_global(
                         get_right_envelope(&all_children[i - 1], genrep, out),
                         env_left.len().saturating_sub(1),
+                        global_right,
+                        (generation as usize) + 1,
                     );
-                    place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out);
+                    place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
 
                 let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
                 let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
 
-                if !children1.is_empty() {
+                let x_from_children = if !children1.is_empty() {
                     get_x_of(children1.last().unwrap(), out) - conn_out1_offset
                 } else {
                     get_x_of(children2.first().unwrap(), out) - conn_out2_offset
-                }
+                };
+                x_from_children.max(x_default)
             }
         }
     };
@@ -303,6 +315,10 @@ fn place_descendants(
         conn_in_y: y - box_h / 2.0,
     };
     out.insert(ind_id.to_string(), copy_individual(ind, Some(BoxedCouplesGeo::Individual(geo))));
+    if (generation as usize) < global_right.len() {
+        let right_edge = x + width / 2.0;
+        global_right[generation as usize] = global_right[generation as usize].max(right_edge);
+    }
 }
 
 fn place_ancestors(
@@ -316,9 +332,10 @@ fn place_ancestors(
     gap_w: f64,
     gap_h: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
 ) {
     // TODO: implement true ancestors traversal (walk famc, place parents above child)
-    place_descendants(genrep, ind_id, env_left, generation, box_w, box_h, box_w2, gap_w, gap_h, out);
+    place_descendants(genrep, ind_id, env_left, generation, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
 }
 
 pub struct BoxedCouplesLayout;
@@ -365,13 +382,14 @@ impl Layout for BoxedCouplesLayout {
 
         let max_gen = if prefs.scope.generations == 0 { 100 } else { prefs.scope.generations };
         let env_left: Vec<f64> = vec![0.0; max_gen as usize];
+        let mut global_right: Vec<f64> = vec![0.0; max_gen as usize];
 
         let mut individuals: HashMap<String, Individual<BoxedCouplesGeo>> = HashMap::new();
 
         if matches_direction(&dir, "ancestors") {
-            place_ancestors(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals);
+            place_ancestors(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
         } else {
-            place_descendants(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals);
+            place_descendants(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
         }
 
         // Add in-scope spouses of placed individuals to the output
@@ -936,6 +954,69 @@ mod tests {
         assert!(
             matches!(i6.geo, Some(BoxedCouplesGeo::Individual(_))),
             "I6 must have an IndividualGeo, not None"
+        );
+    }
+
+    #[test]
+    fn test_global_right_tight_packing() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        // I1+I2 → [I3, I4(leaf), I5]
+        // I3+I6 → [I7]  (gen-2 cousin of I9)
+        // I5+I8 → [I9]  (must be placed right after I7, not after I4)
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Spouse /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME ChildA /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME ChildB /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I5@ INDI\n1 NAME ChildC /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @I6@ INDI\n1 NAME SpouseA /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I7@ INDI\n1 NAME GrandchildA /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME SpouseC /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I9@ INDI\n1 NAME GrandchildC /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n1 CHIL @I5@\n\
+0 @F2@ FAM\n1 HUSB @I3@\n1 WIFE @I6@\n1 CHIL @I7@\n\
+0 @F3@ FAM\n1 HUSB @I5@\n1 WIFE @I8@\n1 CHIL @I9@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let x7 = match &bc.individuals["I7"].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("I7 not placed"),
+        };
+        let x9 = match &bc.individuals["I9"].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("I9 not placed"),
+        };
+        let box_w = prefs.layout.boxed_couples.box_width;
+        let gap_w = prefs.layout.boxed_couples.gap_width;
+
+        // I9 must be at minimum distance from I7 (no overlap)
+        assert!(
+            x9 >= x7 + box_w + gap_w - 1e-6,
+            "I9 overlaps I7: x7={x7}, x9={x9}"
+        );
+        // I9 must be tightly packed — constrained by I7's right edge, not I4's
+        assert!(
+            x9 <= x7 + box_w + gap_w * 2.0 + 1e-6,
+            "I9 placed too far right (not using global right envelope): x7={x7}, x9={x9}"
         );
     }
 }
