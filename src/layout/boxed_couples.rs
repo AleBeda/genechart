@@ -192,6 +192,40 @@ fn get_right_envelope(
     result
 }
 
+/// Returns the left-side envelope of `ind`'s placed subtree.
+///
+/// `result[0]` = left edge of `ind` itself (`x - width/2`).
+/// `result[k]` = left edge of the leftmost placed box k levels below `ind`.
+///
+/// Used by [`compact_siblings`] to compute the safe shift at each depth.
+fn get_left_envelope(
+    ind_id: &str,
+    genrep: &Genrep,
+    out: &HashMap<String, Individual<BoxedCouplesGeo>>,
+) -> Vec<f64> {
+    let ind = match out.get(ind_id) {
+        Some(i) => i,
+        None => return vec![],
+    };
+    let geo = match &ind.geo {
+        Some(BoxedCouplesGeo::Individual(g)) => g,
+        _ => return vec![],
+    };
+    let mut result = vec![geo.x - geo.width / 2.0];
+
+    let spouses = prune_spouses(ind_id, genrep);
+    let leftmost_child = spouses
+        .iter()
+        .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+        .filter(|cid| out.contains_key(cid.as_str()))
+        .next();
+
+    if let Some(child_id) = leftmost_child {
+        result.extend(get_left_envelope(&child_id, genrep, out));
+    }
+    result
+}
+
 /// Converts an `Individual<()>` into `Individual<BoxedCouplesGeo>` with the supplied geo.
 fn copy_individual(
     src: &Individual<()>,
@@ -324,6 +358,56 @@ fn shift_subtree(
     }
 }
 
+/// Closes excess gaps between already-placed siblings by shifting left-packed ones right.
+///
+/// After the left-to-right sibling loop, a sibling that was pulled right by the parent-centring
+/// rule leaves a larger-than-`gap_w` gap before it.  This right-to-left sweep shifts the
+/// left group rightward to close that gap, but only by the *safe* amount — the minimum over
+/// all depths of `left_env(children[i+1])[j] − right_env(children[i])[j] − gap_w`.
+/// This prevents the shifted subtree from overlapping the next sibling's subtree at any depth.
+fn compact_siblings(
+    children: &[String],
+    generation: u32,
+    gap_w: f64,
+    genrep: &Genrep,
+    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
+) {
+    if children.len() < 2 {
+        return;
+    }
+    for i in (0..children.len() - 1).rev() {
+        let right_env = get_right_envelope(&children[i], genrep, out);
+        let left_env  = get_left_envelope(&children[i + 1], genrep, out);
+
+        if right_env.is_empty() || left_env.is_empty() {
+            continue;
+        }
+
+        // Top-level gap excess — how much we want to shift.
+        let desired_shift = left_env[0] - right_env[0] - gap_w;
+        if desired_shift <= 1e-6 {
+            continue;
+        }
+
+        // Safe shift: the desired shift capped by the tightest clearance at any depth.
+        // zip stops at the shorter envelope, so leaf siblings (envelope length 1) are
+        // unconstrained by deeper generations.
+        let safe_shift = right_env
+            .iter()
+            .zip(left_env.iter())
+            .map(|(r, l)| l - r - gap_w)
+            .fold(desired_shift, f64::min)
+            .max(0.0);
+
+        if safe_shift > 1e-6 {
+            for j in 0..=i {
+                shift_subtree(&children[j], safe_shift, generation, genrep, out, global_right);
+            }
+        }
+    }
+}
+
 /// Recursively places `ind_id` and all its in-scope descendants into `out`.
 ///
 /// ## Parameters
@@ -334,15 +418,15 @@ fn shift_subtree(
 ///   generation `g`; updated after each individual is inserted into `out`.
 ///
 /// ## Algorithm (single-spouse case)
-/// 1. Compute `x_default = env_left[0] + gap_w + width/2` — the leftmost x
-///    that clears the previous sibling (or the origin for the first child).
-/// 2. Place all children recursively, using the right-envelope of each
-///    previous child (extended via `fill_env_from_global`) as `env_left` for
-///    the next child.
-/// 3. Derive the parent's x as the horizontal midpoint of the children.
-/// 4. If that midpoint is left of `x_default` (the column is squeezed),
-///    shift every child subtree rightward by the difference (`shift_subtree`)
-///    so the parent can sit at `x_default` while remaining centred.
+/// 1. Place the first child using `env_left[1..]`.
+/// 2. Place each subsequent child using the right-envelope of the previous child
+///    (extended via `fill_env_from_global`).
+/// 3. Run a right-to-left compact pass (`compact_siblings`) to close excess gaps, limited
+///    by the envelope clearance at every depth so no subtree overlap is introduced.
+/// 4. Derive the parent's x as the horizontal midpoint of the children.
+/// 5. If that midpoint is left of `x_default` (the column is squeezed), shift every child
+///    subtree rightward by the difference (`shift_subtree`) so the parent can sit at
+///    `x_default` while remaining centred.
 ///
 /// The two-spouse case is identical but concatenates both spouses' children
 /// and adjusts the midpoint calculation for the wide-box connector offsets.
@@ -393,6 +477,8 @@ fn place_descendants(
                     place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
 
+                compact_siblings(&children, generation + 1, gap_w, genrep, out, global_right);
+
                 let n = children.len();
                 let x_mid = if n % 2 == 1 {
                     get_x_of(&children[n / 2], out)
@@ -429,6 +515,8 @@ fn place_descendants(
                     );
                     place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
+
+                compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
 
                 let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
                 let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
@@ -1177,6 +1265,142 @@ mod tests {
         assert!(
             (x5 - (x4 + box_w + gap_w)).abs() < 1e-6,
             "I5 placed too far right — not using global right envelope: x4={x4}, x5={x5}"
+        );
+    }
+
+    #[test]
+    fn test_compact_left_packed_siblings() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        // I1+I2 → [I3(leaf), I4(leaf), I5]
+        // I5+I6 → [I7, I8, I9, I10, I11, I12] (6 grandchildren)
+        //
+        // With 6 grandchildren the median of I5's children exceeds I5's x_default,
+        // so I5.x > x_default and the gap between I4 and I5 is larger than gap_w
+        // before compaction. Since I3 and I4 are leaves, safe_shift == desired_shift
+        // and the compact closes the gap exactly.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Spouse1 /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Child1 /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I4@ INDI\n1 NAME Child2 /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I5@ INDI\n1 NAME Child3 /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I6@ INDI\n1 NAME Spouse2 /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I7@ INDI\n1 NAME Grandchild1 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME Grandchild2 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I9@ INDI\n1 NAME Grandchild3 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I10@ INDI\n1 NAME Grandchild4 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I11@ INDI\n1 NAME Grandchild5 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I12@ INDI\n1 NAME Grandchild6 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n1 CHIL @I5@\n\
+0 @F2@ FAM\n1 HUSB @I5@\n1 WIFE @I6@\n1 CHIL @I7@\n1 CHIL @I8@\n1 CHIL @I9@\n1 CHIL @I10@\n1 CHIL @I11@\n1 CHIL @I12@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let get_x = |id: &str| match &bc.individuals[id].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("{id} not placed as Individual"),
+        };
+
+        let box_w = prefs.layout.boxed_couples.box_width;
+        let gap_w = prefs.layout.boxed_couples.gap_width;
+
+        let x_i3 = get_x("I3");
+        let x_i4 = get_x("I4");
+        let x_i5 = get_x("I5");
+
+        let gap_45 = x_i5 - box_w / 2.0 - (x_i4 + box_w / 2.0);
+        assert!((gap_45 - gap_w).abs() < 1e-6,
+            "gap I4→I5 should equal gap_w after compact pass (leaves), got {gap_45}");
+
+        let gap_34 = x_i4 - box_w / 2.0 - (x_i3 + box_w / 2.0);
+        assert!((gap_34 - gap_w).abs() < 1e-6,
+            "relative gap I3→I4 must be preserved, got {gap_34}");
+    }
+
+    #[test]
+    fn test_compact_no_subtree_overlap() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        // I1+I2 → [I3(leaf), I4, I5]
+        // I4+I6 → [I7(leaf)]
+        // I5+I8 → [I9, I10, I11, I12, I13, I14] (6 grandchildren)
+        //
+        // With I4 having child I7, the depth-1 clearance between I7 and I9 is
+        // exactly gap_w before compaction, so safe_shift = 0. No shift should
+        // occur, and I7 must not overlap I9. (Regression test: the WIP implementation
+        // shifted I4 and I7 rightward into I5's subtree.)
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Spouse1 /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Child1 /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I4@ INDI\n1 NAME Child2 /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I5@ INDI\n1 NAME Child3 /C/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @I6@ INDI\n1 NAME Spouse2 /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I7@ INDI\n1 NAME Grandchild1 /G/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME Spouse3 /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I9@ INDI\n1 NAME Grandchild2 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME Grandchild3 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I11@ INDI\n1 NAME Grandchild4 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I12@ INDI\n1 NAME Grandchild5 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I13@ INDI\n1 NAME Grandchild6 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I14@ INDI\n1 NAME Grandchild7 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n1 CHIL @I5@\n\
+0 @F2@ FAM\n1 HUSB @I4@\n1 WIFE @I6@\n1 CHIL @I7@\n\
+0 @F3@ FAM\n1 HUSB @I5@\n1 WIFE @I8@\n1 CHIL @I9@\n1 CHIL @I10@\n1 CHIL @I11@\n1 CHIL @I12@\n1 CHIL @I13@\n1 CHIL @I14@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let get_x = |id: &str| match &bc.individuals[id].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("{id} not placed as Individual"),
+        };
+
+        let box_w = prefs.layout.boxed_couples.box_width;
+        let gap_w = prefs.layout.boxed_couples.gap_width;
+
+        let x_i7 = get_x("I7");
+        let x_i9 = get_x("I9");
+
+        let right_edge_i7 = x_i7 + box_w / 2.0;
+        let left_edge_i9  = x_i9 - box_w / 2.0;
+        assert!(
+            right_edge_i7 <= left_edge_i9 - gap_w + 1e-6,
+            "compact moved I7 into I9 at depth 1: I7.right={right_edge_i7}, I9.left={left_edge_i9}"
         );
     }
 }
