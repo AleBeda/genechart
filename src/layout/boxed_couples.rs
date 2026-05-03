@@ -1,4 +1,23 @@
 //! Recursive box-placement layout for couples with envelope-based spacing.
+//!
+//! ## Coordinate system
+//! - x increases rightward; y = 0 is the root's row.
+//! - Descendants are placed at y = −generation × (box_h + gap_h), so y
+//!   decreases (becomes more negative) further from the root.
+//! - All x/y values in [`IndividualGeo`] are **box centres**.
+//! - Units are layout pixels (≈ SVG pixels at default preferences).
+//!
+//! ## High-level placement algorithm
+//! See [`place_descendants`] for details.  In brief:
+//!
+//! 1. Place the first child using `env_left[1..]` (the left-boundary constraints
+//!    passed in by the caller, shifted by one generation).
+//! 2. Place each subsequent child using the right-envelope of the previous child,
+//!    extended with a global right-boundary array so leaf siblings do not over-
+//!    constrain deeper generations.
+//! 3. Derive the parent's x from the children's positions (centre rule).  If
+//!    the natural centre falls left of the `x_default` constraint, shift the
+//!    entire child subtree rightward rather than clamping the parent.
 
 use anyhow::Result;
 use crate::parser::genrep::{Genrep, Individual, Family};
@@ -6,25 +25,45 @@ use crate::preferences::Prefs;
 use super::Layout;
 use std::collections::HashMap;
 
+/// Layout geometry for a placed descendant box.
 #[derive(Debug, Clone)]
 pub struct IndividualGeo {
+    /// Horizontal centre of the box.
     pub x: f64,
+    /// Vertical centre of the box (root at 0; more negative = deeper generation).
     pub y: f64,
+    /// Box width: `box_w` for 0 or 1 in-scope spouses, `box_w2` for 2.
     pub width: f64,
+    /// Box height (equals the `box_height` preference).
     pub height: f64,
+    /// x of the incoming-connector attachment point (horizontally centred on box).
     pub conn_in_x: f64,
+    /// y of the incoming-connector attachment point (top edge of box).
     pub conn_in_y: f64,
 }
 
+/// Layout geometry for the outgoing connectors of a placed family (parent → children).
 #[derive(Debug, Clone)]
 pub struct FamilyGeo {
+    /// x of the outgoing connector for the first spouse's children.
+    /// For a 1-spouse box this equals the box centre; for a 2-spouse box it
+    /// is offset left to the centre of the first spouse's column.
     pub conn_out1_x: f64,
+    /// y of both outgoing connectors (bottom edge of the parent box).
     pub conn_out1_y: f64,
+    /// x of the outgoing connector for the second spouse's children (right column).
     pub conn_out2_x: f64,
     pub conn_out2_y: f64,
+    /// `true` when the parent box uses the wide `box_w2` form (2 in-scope spouses).
     pub has_spouse2: bool,
 }
 
+/// Geo payload stored in both `Individual.geo` and `Family.geo`.
+///
+/// Only descendants visited by [`place_descendants`] receive an `Individual`
+/// variant.  In-scope spouses of those descendants are inserted into the output
+/// map with `geo = None` so the SVG renderer can look them up.
+/// `Family` variants are assigned in a post-pass by [`build_family_geo`].
 #[derive(Debug, Clone)]
 pub enum BoxedCouplesGeo {
     Individual(IndividualGeo),
@@ -35,6 +74,7 @@ fn matches_direction(input: &str, canonical: &str) -> bool {
     !input.is_empty() && canonical.starts_with(input)
 }
 
+/// Returns the IDs of all in-scope spouses of `ind_id`, in FAMS order.
 fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     let ind = match genrep.get_individual(ind_id) {
         Some(i) => i,
@@ -54,6 +94,7 @@ fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
         .collect()
 }
 
+/// Returns the IDs of in-scope children born to the pairing of `ind_id` and `spouse_id`.
 fn children_with_spouse(ind_id: &str, spouse_id: &str, genrep: &Genrep) -> Vec<String> {
     let ind = match genrep.get_individual(ind_id) {
         Some(i) => i,
@@ -70,6 +111,11 @@ fn children_with_spouse(ind_id: &str, spouse_id: &str, genrep: &Genrep) -> Vec<S
         .collect()
 }
 
+/// Returns at most 2 in-scope spouses, preferring those with children.
+///
+/// The layout can represent at most 2 spouses (a 1-spouse box or a wide
+/// 2-spouse box).  When more exist, spouses without children are dropped from
+/// the end of the list first until at most 2 remain.
 fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     let mut spouses = spouses_of(ind_id, genrep);
     if spouses.len() > 2 {
@@ -90,6 +136,15 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     spouses
 }
 
+/// Extends `env` to `min_len` by filling missing slots from `global_right`.
+///
+/// `env[j]` is the minimum x right-edge that must be cleared by any box at
+/// absolute generation `base_gen + j`.  When a previous sibling is a leaf its
+/// right-envelope has length 1 (only its own right-edge), leaving the deeper
+/// slots undefined.  Filling from `global_right[base_gen + j]` — the
+/// rightmost right-edge already placed at that generation across the whole
+/// traversal — gives the correct tight constraint without over-constraining by
+/// propagating a shallower boundary downward.
 fn fill_env_from_global(
     mut env: Vec<f64>,
     min_len: usize,
@@ -102,6 +157,14 @@ fn fill_env_from_global(
     env
 }
 
+/// Returns the right-side envelope of `ind`'s placed subtree.
+///
+/// `result[0]` = right edge of `ind` itself (`x + width/2`).
+/// `result[k]` = right edge of the rightmost placed box k levels below `ind`.
+///
+/// Passing `get_right_envelope(prev_sibling)` as `env_left` to the next
+/// sibling ensures the next sibling and its entire subtree clear the previous
+/// sibling's entire subtree at every generation.
 fn get_right_envelope(
     ind_id: &str,
     genrep: &Genrep,
@@ -129,6 +192,7 @@ fn get_right_envelope(
     result
 }
 
+/// Converts an `Individual<()>` into `Individual<BoxedCouplesGeo>` with the supplied geo.
 fn copy_individual(
     src: &Individual<()>,
     geo: Option<BoxedCouplesGeo>,
@@ -150,6 +214,7 @@ fn copy_individual(
     }
 }
 
+/// Builds the complete family map by calling [`build_family_geo`] for every family.
 fn copy_families(
     genrep: &Genrep,
     out: &HashMap<String, Individual<BoxedCouplesGeo>>,
@@ -172,6 +237,11 @@ fn copy_families(
     }).collect()
 }
 
+/// Derives connector geometry for one family from its placed parent's [`IndividualGeo`].
+///
+/// Returns `None` if neither spouse has been placed (e.g. an out-of-scope family).
+/// The `conn_out` x-values are offset left/right by half the wide-box difference
+/// when the parent has two in-scope spouses.
 fn build_family_geo(
     fam: &Family<()>,
     out: &HashMap<String, Individual<BoxedCouplesGeo>>,
@@ -210,6 +280,7 @@ fn build_family_geo(
     }))
 }
 
+/// Panics if `id` is not yet placed — only call after the individual's subtree is done.
 fn get_x_of(id: &str, out: &HashMap<String, Individual<BoxedCouplesGeo>>) -> f64 {
     match out.get(id).and_then(|i| i.geo.as_ref()) {
         Some(BoxedCouplesGeo::Individual(g)) => g.x,
@@ -217,6 +288,12 @@ fn get_x_of(id: &str, out: &HashMap<String, Individual<BoxedCouplesGeo>>) -> f64
     }
 }
 
+/// Shifts `ind_id` and every placed descendant rightward by `dx`, and updates `global_right`.
+///
+/// Called by [`place_descendants`] when the parent's natural centre falls left of
+/// `x_default`: rather than clamping the parent, we push the whole child subtree
+/// right so the centring invariant is preserved.  `global_right` must be updated
+/// here too, otherwise subsequent siblings see stale envelope values.
 fn shift_subtree(
     ind_id: &str,
     dx: f64,
@@ -247,6 +324,28 @@ fn shift_subtree(
     }
 }
 
+/// Recursively places `ind_id` and all its in-scope descendants into `out`.
+///
+/// ## Parameters
+/// - `env_left[j]` — minimum right-edge that must be cleared at depth
+///   `generation + j` (i.e. `env_left[0]` constrains `ind_id` itself).
+/// - `generation` — absolute depth from the root (root = 0).
+/// - `global_right[g]` — rightmost right-edge placed so far at absolute
+///   generation `g`; updated after each individual is inserted into `out`.
+///
+/// ## Algorithm (single-spouse case)
+/// 1. Compute `x_default = env_left[0] + gap_w + width/2` — the leftmost x
+///    that clears the previous sibling (or the origin for the first child).
+/// 2. Place all children recursively, using the right-envelope of each
+///    previous child (extended via `fill_env_from_global`) as `env_left` for
+///    the next child.
+/// 3. Derive the parent's x as the horizontal midpoint of the children.
+/// 4. If that midpoint is left of `x_default` (the column is squeezed),
+///    shift every child subtree rightward by the difference (`shift_subtree`)
+///    so the parent can sit at `x_default` while remaining centred.
+///
+/// The two-spouse case is identical but concatenates both spouses' children
+/// and adjusts the midpoint calculation for the wide-box connector offsets.
 fn place_descendants(
     genrep: &Genrep,
     ind_id: &str,
@@ -367,6 +466,9 @@ fn place_descendants(
     }
 }
 
+/// Stub for ancestor-direction layout; currently delegates to [`place_descendants`].
+///
+/// A true ancestors traversal would walk `famc` links and place parents above the child.
 fn place_ancestors(
     genrep: &Genrep,
     ind_id: &str,
