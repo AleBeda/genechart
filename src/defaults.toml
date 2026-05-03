@@ -17,6 +17,8 @@ birth = true
 death = true
 marriage = true
 notes = false
+last_gen_spouses = false # Show spouses of the last generation (only applies to descendants/forest)
+id = false # Show GEDCOM IDs of individuals and families (without the "@" chars, e.g. "I1", "F2") for debugging purposes
 
 [format]
 individual = "{firstname} {lastname} {sex}"
@@ -81,6 +83,11 @@ radius = 0.0
 width = 0.1
 border = 0x000
 
+[output.style.text]
+names = 0x000
+dates = 0x000
+id = 0xC00
+
 [output.style.fonts]
 names = "Georgia 14"
 dates = "Arial 10"
@@ -88,6 +95,7 @@ descendant = "bold"
 spouse = "regular"
 title = "Georgia 24"
 copyright = "Arial 8"
+id = "Courier New 8"
 
 [output.style.alignment]
 name = "center"
