@@ -50,10 +50,10 @@ fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> Stri
     )
 }
 
-fn svg_rect(x: f64, y: f64, w: f64, h: f64, fill: &str, stroke: &str, sw: f64) -> String {
+fn svg_rect(x: f64, y: f64, w: f64, h: f64, fill: &str, stroke: &str, sw: f64, radius: f64) -> String {
     format!(
         "  <rect x=\"{x:.1}\" y=\"{y:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" \
-         rx=\"0\" ry=\"0\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
+         rx=\"{radius:.1}\" ry=\"{radius:.1}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
     )
 }
 
@@ -620,6 +620,7 @@ fn render_boxed_couples(
     } else {
         1.0
     };
+    let box_radius = prefs.output.style.boxes.radius;
 
     // Step 3: SVG header
     let total_w = content_w;
@@ -656,7 +657,7 @@ fn render_boxed_couples(
         );
 
         out.push_str(&svg_rect(box_left_svg, box_visual_top, box_w, box_h,
-                               &box_fill, &box_stroke, box_sw));
+                               &box_fill, &box_stroke, box_sw, box_radius));
 
         let ind = &genrep.individuals[*ind_id];
         let spouses: Vec<(String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = ind.fams.iter()

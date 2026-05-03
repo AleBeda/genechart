@@ -244,6 +244,8 @@ pub struct BoxStylePrefs {
     pub border: i64,
     #[serde(default)]
     pub background: i64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub radius: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
