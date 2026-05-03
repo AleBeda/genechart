@@ -18,6 +18,8 @@
 //! 3. Derive the parent's x from the children's positions (centre rule).  If
 //!    the natural centre falls left of the `x_default` constraint, shift the
 //!    entire child subtree rightward rather than clamping the parent.
+//! 4. After all descendants are placed, [`compact_pass`] closes sibling gaps in
+//!    a top-down sweep so left-packed siblings move right without cascading overlaps.
 
 use anyhow::Result;
 use crate::parser::genrep::{Genrep, Individual, Family};
@@ -408,6 +410,34 @@ fn compact_siblings(
     }
 }
 
+/// Top-down recursive compact pass: closes sibling gaps at each level before recursing.
+///
+/// Called once after [`place_descendants`] has finished.  Processing parent levels before
+/// child levels ensures that ancestor-level compaction sees pre-shift child positions, so it
+/// cannot over-shift a subtree into one that a lower-level compact will later shift right.
+fn compact_pass(
+    ind_id: &str,
+    genrep: &Genrep,
+    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
+    gap_w: f64,
+    generation: u32,
+) {
+    let spouses = prune_spouses(ind_id, genrep);
+    let all_children: Vec<String> = spouses
+        .iter()
+        .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+        .filter(|cid| out.contains_key(cid.as_str()))
+        .collect();
+    if all_children.is_empty() {
+        return;
+    }
+    compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
+    for child_id in all_children {
+        compact_pass(&child_id, genrep, out, global_right, gap_w, generation + 1);
+    }
+}
+
 /// Recursively places `ind_id` and all its in-scope descendants into `out`.
 ///
 /// ## Parameters
@@ -421,13 +451,12 @@ fn compact_siblings(
 /// 1. Place the first child using `env_left[1..]`.
 /// 2. Place each subsequent child using the right-envelope of the previous child
 ///    (extended via `fill_env_from_global`).
-/// 3. Run a right-to-left compact pass (`compact_siblings`) to close excess gaps, limited
-///    by the envelope clearance at every depth so no subtree overlap is introduced.
-/// 4. Derive the parent's x as the horizontal midpoint of the children.
-/// 5. If that midpoint is left of `x_default` (the column is squeezed), shift every child
+/// 3. Derive the parent's x as the horizontal midpoint of the children.
+/// 4. If that midpoint is left of `x_default` (the column is squeezed), shift every child
 ///    subtree rightward by the difference (`shift_subtree`) so the parent can sit at
 ///    `x_default` while remaining centred.
 ///
+/// After all descendants are placed, [`compact_pass`] closes sibling gaps in a top-down sweep.
 /// The two-spouse case is identical but concatenates both spouses' children
 /// and adjusts the midpoint calculation for the wide-box connector offsets.
 fn place_descendants(
@@ -477,8 +506,6 @@ fn place_descendants(
                     place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
 
-                compact_siblings(&children, generation + 1, gap_w, genrep, out, global_right);
-
                 let n = children.len();
                 let x_mid = if n % 2 == 1 {
                     get_x_of(&children[n / 2], out)
@@ -515,8 +542,6 @@ fn place_descendants(
                     );
                     place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
                 }
-
-                compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
 
                 let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
                 let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
@@ -626,6 +651,7 @@ impl Layout for BoxedCouplesLayout {
             place_ancestors(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
         } else {
             place_descendants(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
+            compact_pass(root_id, genrep, &mut individuals, &mut global_right, gap_w, 0);
         }
 
         // Add in-scope spouses of placed individuals to the output
@@ -1401,6 +1427,89 @@ mod tests {
         assert!(
             right_edge_i7 <= left_edge_i9 - gap_w + 1e-6,
             "compact moved I7 into I9 at depth 1: I7.right={right_edge_i7}, I9.left={left_edge_i9}"
+        );
+    }
+
+    #[test]
+    fn test_compact_no_second_cousin_overlap() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        // Reproduces the bedarida.ged pattern where bottom-up compact cascades into
+        // second-cousin overlap.
+        //
+        // I1+I2 → [I3, I4]
+        // I3+I5 → [I6]              (David subtree — left child)
+        // I6+I7 → [I8..I13]         (6 grandchildren, forces I6 far right)
+        // I4+I9b → [I14]            (Jacob subtree — right child)
+        // I14+I15 → [I16..I21]      (6 grandchildren, forces I14 far right)
+        //
+        // Top-down compact: Abraham level runs first; right_env(I3)[2]=I13.right,
+        // left_env(I4)[2]=I16.left — clearance exactly gap_w — safe_shift=0, no shift.
+        // Bottom-up would shift I14's children right first, then over-shift I3's subtree.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Abraham /A/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Sarah /A/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME David /A/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Jacob /A/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME DavidW /A/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I6@ INDI\n1 NAME Abram /A/\n1 SEX M\n1 FAMC @F2@\n1 FAMS @F4@\n\
+0 @I7@ INDI\n1 NAME AbramW /A/\n1 SEX F\n1 FAMS @F4@\n\
+0 @I8@ INDI\n1 NAME GC1 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I9@ INDI\n1 NAME GC2 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I10@ INDI\n1 NAME GC3 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I11@ INDI\n1 NAME GC4 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I12@ INDI\n1 NAME GC5 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I13@ INDI\n1 NAME GC6 /A/\n1 SEX M\n1 FAMC @F4@\n\
+0 @I9b@ INDI\n1 NAME JacobW /A/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I14@ INDI\n1 NAME Samuel /A/\n1 SEX M\n1 FAMC @F3@\n1 FAMS @F5@\n\
+0 @I15@ INDI\n1 NAME SamuelW /A/\n1 SEX F\n1 FAMS @F5@\n\
+0 @I16@ INDI\n1 NAME GC7 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @I17@ INDI\n1 NAME GC8 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @I18@ INDI\n1 NAME GC9 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @I19@ INDI\n1 NAME GC10 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @I20@ INDI\n1 NAME GC11 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @I21@ INDI\n1 NAME GC12 /A/\n1 SEX M\n1 FAMC @F5@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 @F2@ FAM\n1 HUSB @I3@\n1 WIFE @I5@\n1 CHIL @I6@\n\
+0 @F3@ FAM\n1 HUSB @I4@\n1 WIFE @I9b@\n1 CHIL @I14@\n\
+0 @F4@ FAM\n1 HUSB @I6@\n1 WIFE @I7@\n1 CHIL @I8@\n1 CHIL @I9@\n1 CHIL @I10@\n1 CHIL @I11@\n1 CHIL @I12@\n1 CHIL @I13@\n\
+0 @F5@ FAM\n1 HUSB @I14@\n1 WIFE @I15@\n1 CHIL @I16@\n1 CHIL @I17@\n1 CHIL @I18@\n1 CHIL @I19@\n1 CHIL @I20@\n1 CHIL @I21@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 4;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(4));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let get_x = |id: &str| match &bc.individuals[id].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("{id} not placed as Individual"),
+        };
+
+        let box_w = prefs.layout.boxed_couples.box_width;
+        let gap_w = prefs.layout.boxed_couples.gap_width;
+
+        let x_i13 = get_x("I13");
+        let x_i16 = get_x("I16");
+
+        let right_edge_i13 = x_i13 + box_w / 2.0;
+        let left_edge_i16  = x_i16 - box_w / 2.0;
+        assert!(
+            right_edge_i13 <= left_edge_i16 - gap_w + 1e-6,
+            "second-cousin overlap: I13.right={right_edge_i13}, I16.left={left_edge_i16}"
         );
     }
 }
