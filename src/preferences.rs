@@ -81,6 +81,10 @@ pub struct ShowPrefs {
     pub marriage: bool,
     #[serde(default)]
     pub notes: bool,
+    #[serde(default)]
+    pub last_gen_spouses: bool,
+    #[serde(default)]
+    pub id: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -207,6 +211,16 @@ pub struct TextPrefs {
     pub copyright: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct TextStylePrefs {
+    #[serde(default)]
+    pub names: i64,
+    #[serde(default)]
+    pub dates: i64,
+    #[serde(default)]
+    pub id: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StylePrefs {
     #[serde(default = "default_true")]
@@ -221,6 +235,8 @@ pub struct StylePrefs {
     pub alignment: AlignmentPrefs,
     #[serde(default)]
     pub spacing: SpacingPrefs,
+    #[serde(default)]
+    pub text: TextStylePrefs,
 }
 
 impl Default for StylePrefs {
@@ -232,6 +248,7 @@ impl Default for StylePrefs {
             fonts: FontPrefs::default(),
             alignment: AlignmentPrefs::default(),
             spacing: SpacingPrefs::default(),
+            text: TextStylePrefs::default(),
         }
     }
 }
@@ -270,6 +287,8 @@ pub struct FontPrefs {
     pub title: String,
     #[serde(default)]
     pub copyright: String,
+    #[serde(default)]
+    pub id: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -573,6 +592,17 @@ mod tests {
         assert!(prefs.show.generation_num);
         assert_eq!(prefs.layout.boxed_couples.box_width, 220.0);
         assert_eq!(prefs.output.paper.size, "A4");
+    }
+
+    #[test]
+    fn new_preferences_load() {
+        let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
+        assert_eq!(prefs.show.last_gen_spouses, false);
+        assert_eq!(prefs.show.id, false);
+        assert_eq!(prefs.output.style.text.names, 0x000);
+        assert_eq!(prefs.output.style.text.dates, 0x000);
+        assert_eq!(prefs.output.style.text.id, 0xC00);
+        assert_eq!(prefs.output.style.fonts.id, "Courier New 8");
     }
 
     #[test]
