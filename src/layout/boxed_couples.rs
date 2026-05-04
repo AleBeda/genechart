@@ -159,14 +159,42 @@ fn fill_env_from_global(
     env
 }
 
+/// Merges two right-edge envelopes by taking the maximum x-coordinate at each depth level.
+///
+/// The resulting vector's length is the maximum of the two input lengths. If one vector
+/// is shorter than the other, its missing values are treated as `f64::NEG_INFINITY`,
+/// ensuring the merged contour accounts for the full depth and width of both subtrees.
+fn merge_max(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
+    let new_len = a.len().max(b.len());
+    let mut res = Vec::with_capacity(new_len);
+    for i in 0..new_len {
+        let val_a = a.get(i).copied().unwrap_or(f64::NEG_INFINITY);
+        let val_b = b.get(i).copied().unwrap_or(f64::NEG_INFINITY);
+        res.push(val_a.max(val_b));
+    }
+    res
+}
+
+/// Merges two left-edge envelopes by taking the minimum at each depth level.
+fn merge_min(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
+    let new_len = a.len().max(b.len());
+    let mut res = Vec::with_capacity(new_len);
+    for i in 0..new_len {
+        let val_a = a.get(i).copied().unwrap_or(f64::INFINITY);
+        let val_b = b.get(i).copied().unwrap_or(f64::INFINITY);
+        res.push(val_a.min(val_b));
+    }
+    res
+}
+
 /// Returns the right-side envelope of `ind`'s placed subtree.
 ///
 /// `result[0]` = right edge of `ind` itself (`x + width/2`).
-/// `result[k]` = right edge of the rightmost placed box k levels below `ind`.
+/// `result[k]` = maximum right edge among all boxes placed k levels below `ind`.
 ///
-/// Passing `get_right_envelope(prev_sibling)` as `env_left` to the next
-/// sibling ensures the next sibling and its entire subtree clear the previous
-/// sibling's entire subtree at every generation.
+/// Passing an accumulated right-envelope of all preceding siblings as `env_left`
+/// to the next sibling ensures it and its entire subtree clear all previous
+/// sibling subtrees at every generation.
 fn get_right_envelope(
     ind_id: &str,
     genrep: &Genrep,
@@ -183,21 +211,25 @@ fn get_right_envelope(
     let mut result = vec![geo.x + geo.width / 2.0];
 
     let spouses = prune_spouses(ind_id, genrep);
-    let rightmost_child = spouses.iter()
+    let child_ids: Vec<String> = spouses.iter()
         .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
         .filter(|cid| out.contains_key(cid.as_str()))
-        .last();
+        .collect();
 
-    if let Some(child_id) = rightmost_child {
-        result.extend(get_right_envelope(&child_id, genrep, out));
+    let mut merged_children_env = Vec::new();
+    for child_id in child_ids {
+        let child_env = get_right_envelope(&child_id, genrep, out);
+        merged_children_env = merge_max(merged_children_env, child_env);
     }
+
+    result.extend(merged_children_env);
     result
 }
 
 /// Returns the left-side envelope of `ind`'s placed subtree.
 ///
 /// `result[0]` = left edge of `ind` itself (`x - width/2`).
-/// `result[k]` = left edge of the leftmost placed box k levels below `ind`.
+/// `result[k]` = minimum left edge among all boxes placed k levels below `ind`.
 ///
 /// Used by [`compact_siblings`] to compute the safe shift at each depth.
 fn get_left_envelope(
@@ -216,15 +248,18 @@ fn get_left_envelope(
     let mut result = vec![geo.x - geo.width / 2.0];
 
     let spouses = prune_spouses(ind_id, genrep);
-    let leftmost_child = spouses
+    let child_ids: Vec<String> = spouses
         .iter()
         .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
         .filter(|cid| out.contains_key(cid.as_str()))
-        .next();
+        .collect();
 
-    if let Some(child_id) = leftmost_child {
-        result.extend(get_left_envelope(&child_id, genrep, out));
+    let mut merged_children_env = Vec::new();
+    for child_id in child_ids {
+        let child_env = get_left_envelope(&child_id, genrep, out);
+        merged_children_env = merge_min(merged_children_env, child_env);
     }
+    result.extend(merged_children_env);
     result
 }
 
@@ -379,15 +414,20 @@ fn compact_siblings(
         return;
     }
     for i in (0..children.len() - 1).rev() {
-        let right_env = get_right_envelope(&children[i], genrep, out);
+        // Compute merged right envelope for the entire block to the left of the gap.
+        let mut block_right_env = Vec::new();
+        for j in 0..=i {
+            let child_right_env = get_right_envelope(&children[j], genrep, out);
+            block_right_env = merge_max(block_right_env, child_right_env);
+        }
         let left_env  = get_left_envelope(&children[i + 1], genrep, out);
 
-        if right_env.is_empty() || left_env.is_empty() {
+        if block_right_env.is_empty() || left_env.is_empty() {
             continue;
         }
 
         // Top-level gap excess — how much we want to shift.
-        let desired_shift = left_env[0] - right_env[0] - gap_w;
+        let desired_shift = left_env[0] - block_right_env[0] - gap_w;
         if desired_shift <= 1e-6 {
             continue;
         }
@@ -395,7 +435,7 @@ fn compact_siblings(
         // Safe shift: the desired shift capped by the tightest clearance at any depth.
         // zip stops at the shorter envelope, so leaf siblings (envelope length 1) are
         // unconstrained by deeper generations.
-        let safe_shift = right_env
+        let safe_shift = block_right_env
             .iter()
             .zip(left_env.iter())
             .map(|(r, l)| l - r - gap_w)
