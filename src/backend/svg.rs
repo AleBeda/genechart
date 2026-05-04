@@ -884,8 +884,13 @@ fn render_boxed_couples(
         let svg_xs: Vec<f64> = child_geos.iter()
             .map(|g| to_svg_x(g.conn_in_x))
             .collect();
-        let bar_x0 = svg_xs.iter().cloned().fold(f64::INFINITY, f64::min);
-        let bar_x1 = svg_xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+        // The horizontal bar must span from the parent's exit point to cover all children.
+        let mut bar_x0 = svg_out_x;
+        let mut bar_x1 = svg_out_x;
+        bar_x0 = bar_x0.min(svg_xs.iter().cloned().fold(f64::INFINITY, f64::min));
+        bar_x1 = bar_x1.max(svg_xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
+
         out.push_str(&svg_line(bar_x0, bar_y, bar_x1, bar_y,
                               &conn_color, conn_width));
 
