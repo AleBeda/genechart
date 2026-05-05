@@ -702,13 +702,15 @@ fn render_boxed_couples(
 
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
-        // Compute section boundaries for text layout
+        // Compute section boundaries for text layout (anchored to center line only)
+        let center_svg_y = to_svg_y(geo.y);
+        let text_height = spacing.spouse_separation + font_size + date_font_size * 2.0;
         let (ind_section_top_svg, sp_section_top_svg) = if root_pos_bottom {
             // Individual in bottom half, spouse in top half
-            (to_svg_y(geo.y), box_visual_top)
+            (center_svg_y, center_svg_y - text_height)
         } else {
             // Individual in top half, spouse in bottom half
-            (box_visual_top, to_svg_y(geo.y))
+            (center_svg_y - text_height, center_svg_y)
         };
 
         if is_two_spouse {
@@ -719,6 +721,12 @@ fn render_boxed_couples(
             // Render individual in centre of wide box
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
             out.push_str(&svg_text_mid_w(ind_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
+
+            // Individual ID aligned with name
+            if prefs.show.id {
+                let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
+                out.push_str(&svg_text_colored(box_left_svg + 2.0, name_y, ind_id_text, &id_font_family, id_font_size, &id_color));
+            }
 
             let mut y_pos = name_y;
             if prefs.show.birth {
@@ -749,18 +757,28 @@ fn render_boxed_couples(
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size));
-                                    if prefs.show.id {
-                                        let fam_id_text = fam1_id.trim_start_matches('@').trim_end_matches('@');
-                                        let fam_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
-                                        out.push_str(&svg_text_colored(fam_id_x, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
-                                    }
                                 }
                             }
+                        }
+
+                        // Family ID independent of marriage
+                        if prefs.show.id {
+                            let fam_id_text = fam1_id.trim_start_matches('@').trim_end_matches('@');
+                            let fam_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
+                            let fam_id_y = to_svg_y(geo.y) - spacing.marriage_above;
+                            out.push_str(&svg_text_colored(fam_id_x, fam_id_y, fam_id_text, &id_font_family, id_font_size, &id_color));
                         }
 
                         // Spouse name
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
                         out.push_str(&svg_text_mid_w(left_cx_svg, sp_name_y, &format_bc_name(sp1, prefs), &font_family, font_size, &spouse_weight));
+
+                        // Spouse ID aligned with name
+                        if prefs.show.id {
+                            let sp_id_text = sp1.id.trim_start_matches('@').trim_end_matches('@');
+                            let sp_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
+                            out.push_str(&svg_text_colored(sp_id_x, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
+                        }
 
                         let mut sp_y = sp_name_y;
                         if prefs.show.birth {
@@ -791,13 +809,19 @@ fn render_boxed_couples(
                         if prefs.show.id {
                             let fam2_id_text = fam2_id.trim_start_matches('@').trim_end_matches('@');
                             let fam2_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
-                            let section_boundary_svg_y = to_svg_y(geo.y);
-                            let fam2_id_y = section_boundary_svg_y - spacing.marriage_above;
+                            let fam2_id_y = to_svg_y(geo.y) - spacing.marriage_above;
                             out.push_str(&svg_text_colored(fam2_id_x, fam2_id_y, fam2_id_text, &id_font_family, id_font_size, &id_color));
                         }
 
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
                         out.push_str(&svg_text_mid_w(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size, &spouse_weight));
+
+                        // Spouse ID aligned with name
+                        if prefs.show.id {
+                            let sp_id_text = sp2.id.trim_start_matches('@').trim_end_matches('@');
+                            let sp_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
+                            out.push_str(&svg_text_colored(sp_id_x, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
+                        }
 
                         let mut y_pos = sp_name_y;
                         if prefs.show.birth {
@@ -824,6 +848,12 @@ fn render_boxed_couples(
             let section_cx = to_svg_x(geo.x);
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
             out.push_str(&svg_text_mid_w(section_cx, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
+
+            // Individual ID aligned with name
+            if prefs.show.id {
+                let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
+                out.push_str(&svg_text_colored(box_left_svg + 2.0, name_y, ind_id_text, &id_font_family, id_font_size, &id_color));
+            }
 
             let mut y_pos = name_y;
             if prefs.show.birth {
@@ -852,16 +882,25 @@ fn render_boxed_couples(
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(section_cx, marr_y, &marr_str, &date_font_family, date_font_size));
-                                    if prefs.show.id {
-                                        let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
-                                        out.push_str(&svg_text_colored(box_left_svg + 2.0, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
-                                    }
                                 }
                             }
                         }
 
+                        // Family ID independent of marriage
+                        if prefs.show.id {
+                            let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
+                            let fam_id_y = to_svg_y(geo.y) - spacing.marriage_above;
+                            out.push_str(&svg_text_colored(box_left_svg + 2.0, fam_id_y, fam_id_text, &id_font_family, id_font_size, &id_color));
+                        }
+
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
                         out.push_str(&svg_text_mid_w(section_cx, sp_name_y, &format_bc_name(sp, prefs), &font_family, font_size, &spouse_weight));
+
+                        // Spouse ID aligned with name
+                        if prefs.show.id {
+                            let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
+                            out.push_str(&svg_text_colored(box_left_svg + 2.0, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
+                        }
 
                         let mut sp_y = sp_name_y;
                         if prefs.show.birth {
@@ -880,41 +919,6 @@ fn render_boxed_couples(
                                 }
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        // Render individual IDs when show.id is enabled
-        if prefs.show.id {
-            let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
-            let ind_id_y = if root_pos_bottom {
-                box_visual_top + box_h - id_font_size + 2.0
-            } else {
-                box_visual_top + id_font_size + 2.0
-            };
-            out.push_str(&svg_text_colored(box_left_svg + 2.0, ind_id_y, ind_id_text, &id_font_family, id_font_size, &id_color));
-
-            // Spouse IDs
-            for (sp_fam_index, sp_fam) in spouses.iter().enumerate() {
-                if let Some(sp_id_str) = spouse_id_from_family(ind_id, sp_fam.1) {
-                    if let Some(sp) = genrep.individuals.get(&sp_id_str) {
-                        let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
-                        let sp_id_y = if root_pos_bottom {
-                            box_visual_top + id_font_size + 2.0
-                        } else {
-                            box_visual_top + box_h - id_font_size + 2.0
-                        };
-                        let sp_id_x = if is_two_spouse {
-                            if sp_fam_index == 0 {
-                                to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0
-                            } else {
-                                to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0
-                            }
-                        } else {
-                            box_left_svg + 2.0
-                        };
-                        out.push_str(&svg_text_colored(sp_id_x, sp_id_y, sp_id_text, &id_font_family, id_font_size, &id_color));
                     }
                 }
             }
@@ -1505,8 +1509,8 @@ mod tests {
         // When show.id is false, no svg_text_colored calls are made for IDs
         // so there should be no fill attribute on text elements that contain IDs
         let id_text_lines = out.lines().filter(|l|
-             l.contains("<text ") && l.contains("fill=\"") &&
-               (l.contains("I1") || l.contains("I2") || l.contains("I3") || l.contains("F1"))
+            l.contains("<text ") && l.contains("fill=\"") &&
+            (l.contains("I1") || l.contains("I2") || l.contains("I3") || l.contains("F1"))
         ).count();
         // Group wrapper IDs (class="individual" id="...") are not counted because they don't have fill
         assert_eq!(id_text_lines, 0, "no ID text elements should appear when show.id is false: {out}");
@@ -1528,5 +1532,39 @@ mod tests {
         assert!(out.lines().any(|l|
             l.contains("font-weight=\"normal\"") && l.contains("Jane")),
             "spouse name must have font-weight=normal");
+    }
+
+    #[test]
+    fn test_box_height_does_not_shift_text_positions() {
+        fn extract_name_y(svg: &str, name: &str) -> Option<f64> {
+            svg.lines().find(|l| l.contains(name) && l.contains("<text "))
+                .and_then(|l| {
+                    let start = l.find("y=\"")?;
+                    let sub = &l[start + 3..];
+                    let end = sub.find('\"')?;
+                    sub[..end].parse::<f64>().ok()
+                })
+        }
+
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+
+        let mut prefs_a = bc_prefs();
+        prefs_a.layout.boxed_couples.box_height = 80.0;
+        let layout_a = run_layout(&genrep, &prefs_a).unwrap();
+        let svg_a = render_to_string(&layout_a, &prefs_a).unwrap();
+
+        let mut prefs_b = bc_prefs();
+        prefs_b.layout.boxed_couples.box_height = 200.0;
+        let layout_b = run_layout(&genrep, &prefs_b).unwrap();
+        let svg_b = render_to_string(&layout_b, &prefs_b).unwrap();
+
+        if let (Some(ya), Some(yb)) = (extract_name_y(&svg_a, "Jane"), extract_name_y(&svg_b, "Jane")) {
+            assert!((ya - yb).abs() < 0.01, "spouse name Y shifted with box_height: {ya} vs {yb}");
+        }
+
+        if let (Some(ya), Some(yb)) = (extract_name_y(&svg_a, "John"), extract_name_y(&svg_b, "John")) {
+            assert!((ya - yb).abs() < 0.01, "individual name Y shifted with box_height: {ya} vs {yb}");
+        }
     }
 }
