@@ -66,6 +66,23 @@ fn svg_text_mid(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
     )
 }
 
+fn svg_text_colored(x: f64, y: f64, text: &str, family: &str, size: f64, color: &str) -> String {
+    format!(
+        "   <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+        font-size=\"{size}\" fill=\"{color}\" xml:space=\"preserve\">{}</text>\n",
+        xml_escape(text)
+    )
+}
+
+fn svg_text_mid_colored(x: f64, y: f64, text: &str, family: &str, size: f64, color: &str) -> String {
+    format!(
+        "   <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+        font-size=\"{size}\" text-anchor=\"middle\" fill=\"{color}\" \
+        xml:space=\"preserve\">{}</text>\n",
+        xml_escape(text)
+    )
+}
+
 fn font_weight_from_pref(pref: &str) -> &str {
     match pref.trim().to_lowercase().as_str() {
         "bold" | "bolder" => "bold",
@@ -555,6 +572,16 @@ fn render_boxed_couples(
     };
     let date_font_size = if date_font_size <= 0.0 { font_size } else { date_font_size };
 
+    let (id_font_family_base, id_font_size) = parsed_font(&prefs.output.style.fonts.id);
+    let id_font_family = if id_font_family_base.trim().is_empty() {
+        font_family.clone()
+    } else {
+        format!(
+            "{id_font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
+        )
+    };
+    let id_color = hex_color(prefs.output.style.text.id);
+
     let bc = &prefs.layout.boxed_couples;
     let spacing = &prefs.output.style.spacing.boxed_couples;
 
@@ -704,7 +731,7 @@ fn render_boxed_couples(
             }
 
             // Render first spouse in left section
-            if let Some((_, fam1)) = spouses.first() {
+            if let Some((fam1_id, fam1)) = spouses.first() {
                 if let Some(sp1_id) = spouse_id_from_family(ind_id, fam1) {
                     if let Some(sp1) = genrep.individuals.get(&sp1_id) {
                         // Marriage date
@@ -714,6 +741,11 @@ fn render_boxed_couples(
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size));
+                                    if prefs.show.id {
+                                        let fam_id_text = fam1_id.trim_start_matches('@').trim_end_matches('@');
+                                        let fam_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
+                                        out.push_str(&svg_text_colored(fam_id_x, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
+                                    }
                                 }
                             }
                         }
@@ -744,9 +776,18 @@ fn render_boxed_couples(
             }
 
             // Render second spouse in right section
-            if let Some((_, fam2)) = spouses.get(1) {
+            if let Some((fam2_id, fam2)) = spouses.get(1) {
                 if let Some(sp2_id) = spouse_id_from_family(ind_id, fam2) {
                     if let Some(sp2) = genrep.individuals.get(&sp2_id) {
+                        // Family ID for 2-spouse right spouse
+                        if prefs.show.id {
+                            let fam2_id_text = fam2_id.trim_start_matches('@').trim_end_matches('@');
+                            let fam2_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
+                            let section_boundary_svg_y = to_svg_y(geo.y);
+                            let fam2_id_y = section_boundary_svg_y - spacing.marriage_above;
+                            out.push_str(&svg_text_colored(fam2_id_x, fam2_id_y, fam2_id_text, &id_font_family, id_font_size, &id_color));
+                        }
+
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
                         out.push_str(&svg_text_mid(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size));
 
@@ -794,7 +835,7 @@ fn render_boxed_couples(
                 }
             }
 
-            if let Some((_, fam)) = spouses.first() {
+            if let Some((fam_id, fam)) = spouses.first() {
                 if let Some(sp_id) = spouse_id_from_family(ind_id, fam) {
                     if let Some(sp) = genrep.individuals.get(&sp_id) {
                         if prefs.show.marriage {
@@ -803,6 +844,10 @@ fn render_boxed_couples(
                                     let section_boundary_svg_y = to_svg_y(geo.y);
                                     let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(section_cx, marr_y, &marr_str, &date_font_family, date_font_size));
+                                    if prefs.show.id {
+                                        let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
+                                        out.push_str(&svg_text_colored(box_left_svg + 2.0, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
+                                    }
                                 }
                             }
                         }
@@ -832,6 +877,40 @@ fn render_boxed_couples(
             }
         }
 
+        // Render individual IDs when show.id is enabled
+        if prefs.show.id {
+            let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
+            let ind_id_y = if root_pos_bottom {
+                box_visual_top + box_h + id_font_size + 2.0
+                } else {
+                box_visual_top - 2.0
+                };
+            out.push_str(&svg_text_colored(box_left_svg + 2.0, ind_id_y, ind_id_text, &id_font_family, id_font_size, &id_color));
+
+            // Spouse IDs
+            for (sp_fam_index, sp_fam) in spouses.iter().enumerate() {
+                if let Some(sp_id_str) = spouse_id_from_family(ind_id, sp_fam.1) {
+                    if let Some(sp) = genrep.individuals.get(&sp_id_str) {
+                        let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
+                        let sp_id_y = if root_pos_bottom {
+                            box_visual_top - 2.0
+                            } else {
+                            box_visual_top + box_h + id_font_size + 2.0
+                            };
+                        let sp_id_x = if is_two_spouse {
+                            if sp_fam_index == 0 {
+                                to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0
+                                } else {
+                                to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0
+                                }
+                            } else {
+                            box_left_svg + 2.0
+                            };
+                        out.push_str(&svg_text_colored(sp_id_x, sp_id_y, sp_id_text, &id_font_family, id_font_size, &id_color));
+                    }
+                }
+            }
+        }
         out.push_str("</g></g>\n");
     }
 
@@ -1395,4 +1474,34 @@ mod tests {
             "spouse name must have font-weight=normal");
     }
 
+
+    #[test]
+    fn test_bc_svg_show_ids_enabled() {
+        let mut prefs = bc_prefs();
+        prefs.show.id = true;
+        let out = render_to_string(&bc_layout(), &prefs).unwrap();
+        // Individual IDs should appear without @ delimiters
+        assert!(out.contains("I1"), "individual ID I1 should appear: {out}");
+        assert!(out.contains("I2"), "individual ID I2 should appear: {out}");
+        assert!(out.contains("I3"), "individual ID I3 should appear: {out}");
+        // Family ID should appear without @ delimiter
+        assert!(out.contains("F1"), "family ID F1 should appear: {out}");
+        // IDs should be rendered with fill color (from id_color)
+        assert!(out.contains("fill=\""), "ID text should have fill attribute: {out}");
+    }
+
+    #[test]
+    fn test_bc_svg_show_ids_disabled() {
+        let prefs = bc_prefs();
+        // Default show.id is false
+        let out = render_to_string(&bc_layout(), &prefs).unwrap();
+        // When show.id is false, no svg_text_colored calls are made for IDs
+        // so there should be no fill attribute on text elements that contain IDs
+        let id_text_lines = out.lines().filter(|l|
+             l.contains("<text ") && l.contains("fill=\"") &&
+               (l.contains("I1") || l.contains("I2") || l.contains("I3") || l.contains("F1"))
+        ).count();
+        // Group wrapper IDs (class="individual" id="...") are not counted because they don't have fill
+        assert_eq!(id_text_lines, 0, "no ID text elements should appear when show.id is false: {out}");
+    }
 }
