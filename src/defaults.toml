@@ -37,11 +37,11 @@ indent = 3
 vert_spacing = 0
 
 [layout.boxed_couples]
-box_width = 220.0
-box_height = 160.0
+box_width = 240.0
+box_height = 140.0
 gap_width = 40.0
 gap_height = 80.0
-box_width_2_spouses = 480.0 # must be >= 2 * box_width + gap_width
+box_width_2_spouses = 520.0 # must be >= 2 * box_width + gap_width
 
 [layout.fan]
 ring_height = 90   # radial thickness of each generation ring (canvas units)
@@ -86,7 +86,7 @@ border = 0x000
 [output.style.text]
 names = 0x000
 dates = 0x000
-id = 0xC00
+id = 0xE00
 
 [output.style.fonts]
 names = "Georgia 14"
@@ -95,7 +95,7 @@ descendant = "bold"
 spouse = "regular"
 title = "Georgia 24"
 copyright = "Arial 8"
-id = "Courier New 8"
+id = "Courier 8"
 
 [output.style.alignment]
 name = "center"

@@ -881,10 +881,10 @@ fn render_boxed_couples(
         if prefs.show.id {
             let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
             let ind_id_y = if root_pos_bottom {
-                box_visual_top + box_h + id_font_size + 2.0
-                } else {
-                box_visual_top - 2.0
-                };
+                box_visual_top + box_h - id_font_size + 2.0
+            } else {
+                box_visual_top + id_font_size + 2.0
+            };
             out.push_str(&svg_text_colored(box_left_svg + 2.0, ind_id_y, ind_id_text, &id_font_family, id_font_size, &id_color));
 
             // Spouse IDs
@@ -893,19 +893,19 @@ fn render_boxed_couples(
                     if let Some(sp) = genrep.individuals.get(&sp_id_str) {
                         let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
                         let sp_id_y = if root_pos_bottom {
-                            box_visual_top - 2.0
-                            } else {
-                            box_visual_top + box_h + id_font_size + 2.0
-                            };
+                            box_visual_top + id_font_size + 2.0
+                        } else {
+                            box_visual_top + box_h - id_font_size + 2.0
+                        };
                         let sp_id_x = if is_two_spouse {
                             if sp_fam_index == 0 {
                                 to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0
-                                } else {
-                                to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0
-                                }
                             } else {
+                                to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0
+                            }
+                        } else {
                             box_left_svg + 2.0
-                            };
+                        };
                         out.push_str(&svg_text_colored(sp_id_x, sp_id_y, sp_id_text, &id_font_family, id_font_size, &id_color));
                     }
                 }
