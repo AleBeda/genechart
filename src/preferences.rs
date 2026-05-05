@@ -590,7 +590,7 @@ mod tests {
         assert_eq!(prefs.layout.layout_type, "simple");
         assert_eq!(prefs.output.output_type, "text");
         assert!(prefs.show.generation_num);
-        assert_eq!(prefs.layout.boxed_couples.box_width, 220.0);
+        assert_eq!(prefs.layout.boxed_couples.box_width, 240.0);
         assert_eq!(prefs.output.paper.size, "A4");
     }
 
@@ -601,8 +601,8 @@ mod tests {
         assert_eq!(prefs.show.id, false);
         assert_eq!(prefs.output.style.text.names, 0x000);
         assert_eq!(prefs.output.style.text.dates, 0x000);
-        assert_eq!(prefs.output.style.text.id, 0xC00);
-        assert_eq!(prefs.output.style.fonts.id, "Courier New 8");
+        assert_eq!(prefs.output.style.text.id, 0xE00);
+        assert_eq!(prefs.output.style.fonts.id, "Courier 8");
     }
 
     #[test]

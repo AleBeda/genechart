@@ -65,24 +65,30 @@ fn svg_text_mid(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
         xml_escape(text)
     )
 }
+fn svg_text_mid_w(x: f64, y: f64, text: &str, family: &str, size: f64, weight: &str) -> String {
+    format!(
+        "     <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+        font-size=\"{size}\" font-weight=\"{weight}\" text-anchor=\"middle\" \
+        xml:space=\"preserve\">{}</text>\n",
+        xml_escape(text)
+    )
+}
 
 fn svg_text_colored(x: f64, y: f64, text: &str, family: &str, size: f64, color: &str) -> String {
     format!(
-        "   <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-        font-size=\"{size}\" fill=\"{color}\" xml:space=\"preserve\">{}</text>\n",
+        "     <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+        font-size=\"{size}\" fill=\"{color}\">{}</text>\n",
         xml_escape(text)
     )
 }
 
 fn svg_text_mid_colored(x: f64, y: f64, text: &str, family: &str, size: f64, color: &str) -> String {
     format!(
-        "   <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-        font-size=\"{size}\" text-anchor=\"middle\" fill=\"{color}\" \
-        xml:space=\"preserve\">{}</text>\n",
+        "     <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
+        font-size=\"{size}\" text-anchor=\"middle\" fill=\"{color}\">{}</text>\n",
         xml_escape(text)
     )
 }
-
 fn font_weight_from_pref(pref: &str) -> &str {
     match pref.trim().to_lowercase().as_str() {
         "bold" | "bolder" => "bold",
@@ -577,10 +583,12 @@ fn render_boxed_couples(
         font_family.clone()
     } else {
         format!(
-            "{id_font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
+            "{id_font_family_base}, Courier New, monospace"
         )
     };
     let id_color = hex_color(prefs.output.style.text.id);
+    let descendant_weight = font_weight_from_pref(&prefs.output.style.fonts.descendant);
+    let spouse_weight = font_weight_from_pref(&prefs.output.style.fonts.spouse);
 
     let bc = &prefs.layout.boxed_couples;
     let spacing = &prefs.output.style.spacing.boxed_couples;
@@ -710,7 +718,7 @@ fn render_boxed_couples(
 
             // Render individual in centre of wide box
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            out.push_str(&svg_text_mid(ind_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size));
+            out.push_str(&svg_text_mid_w(ind_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
 
             let mut y_pos = name_y;
             if prefs.show.birth {
@@ -752,7 +760,7 @@ fn render_boxed_couples(
 
                         // Spouse name
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
-                        out.push_str(&svg_text_mid(left_cx_svg, sp_name_y, &format_bc_name(sp1, prefs), &font_family, font_size));
+                        out.push_str(&svg_text_mid_w(left_cx_svg, sp_name_y, &format_bc_name(sp1, prefs), &font_family, font_size, &spouse_weight));
 
                         let mut sp_y = sp_name_y;
                         if prefs.show.birth {
@@ -789,7 +797,7 @@ fn render_boxed_couples(
                         }
 
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
-                        out.push_str(&svg_text_mid(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size));
+                        out.push_str(&svg_text_mid_w(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size, &spouse_weight));
 
                         let mut y_pos = sp_name_y;
                         if prefs.show.birth {
@@ -815,7 +823,7 @@ fn render_boxed_couples(
             // Single spouse or no spouse
             let section_cx = to_svg_x(geo.x);
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            out.push_str(&svg_text_mid(section_cx, name_y, &format_bc_name(ind, prefs), &font_family, font_size));
+            out.push_str(&svg_text_mid_w(section_cx, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
 
             let mut y_pos = name_y;
             if prefs.show.birth {
@@ -853,7 +861,7 @@ fn render_boxed_couples(
                         }
 
                         let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
-                        out.push_str(&svg_text_mid(section_cx, sp_name_y, &format_bc_name(sp, prefs), &font_family, font_size));
+                        out.push_str(&svg_text_mid_w(section_cx, sp_name_y, &format_bc_name(sp, prefs), &font_family, font_size, &spouse_weight));
 
                         let mut sp_y = sp_name_y;
                         if prefs.show.birth {
@@ -1474,7 +1482,6 @@ mod tests {
             "spouse name must have font-weight=normal");
     }
 
-
     #[test]
     fn test_bc_svg_show_ids_enabled() {
         let mut prefs = bc_prefs();
@@ -1503,5 +1510,23 @@ mod tests {
         ).count();
         // Group wrapper IDs (class="individual" id="...") are not counted because they don't have fill
         assert_eq!(id_text_lines, 0, "no ID text elements should appear when show.id is false: {out}");
+    }
+
+    #[test]
+    fn test_bc_svg_font_weight_applied() {
+        let mut prefs = bc_prefs();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.output.style.fonts.descendant = "bold".into();
+        prefs.output.style.fonts.spouse = "regular".into();
+        let out = render_to_string(&bc_layout(), &prefs).unwrap();
+        // Default fonts.descendant = "bold", fonts.spouse = "regular"
+        // Descendant names should have font-weight="bold"
+        assert!(out.lines().any(|l|
+            l.contains("font-weight=\"bold\"") && l.contains("John")),
+            "descendant name must have font-weight=bold");
+        // Spouse names should have font-weight="normal"
+        assert!(out.lines().any(|l|
+            l.contains("font-weight=\"normal\"") && l.contains("Jane")),
+            "spouse name must have font-weight=normal");
     }
 }
