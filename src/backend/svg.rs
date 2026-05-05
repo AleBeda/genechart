@@ -705,11 +705,8 @@ fn render_boxed_couples(
         // Three-region box: top (spouse or individual), middle (marriage), bottom (other)
         let center_svg_y = to_svg_y(geo.y);
         let region_height = (geo.height - bc.spouse_sep_height) / 2.0;
-        let (top_region_svg, bottom_region_svg) = if root_pos_bottom {
-            (center_svg_y - region_height, center_svg_y + bc.spouse_sep_height / 2.0)
-        } else {
-            (center_svg_y - bc.spouse_sep_height / 2.0, center_svg_y + region_height)
-        };
+        let top_region_svg = center_svg_y - bc.spouse_sep_height / 2.0 - region_height;
+        let bottom_region_svg = center_svg_y + bc.spouse_sep_height / 2.0;
         let sp_section_top_svg = if root_pos_bottom { top_region_svg } else { bottom_region_svg };
         let ind_section_top_svg = if root_pos_bottom { bottom_region_svg } else { top_region_svg };
         // Marriage (and family ID) centered vertically in the box
