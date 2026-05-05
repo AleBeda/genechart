@@ -136,6 +136,8 @@ pub struct BoxedCouplesPrefs {
     #[serde(default, deserialize_with = "de_f64")]
     pub box_height: f64,
     #[serde(default, deserialize_with = "de_f64")]
+    pub spouse_sep_height: f64,
+    #[serde(default, deserialize_with = "de_f64")]
     pub gap_width: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub gap_height: f64,
@@ -311,10 +313,6 @@ pub struct BoxedCouplesSpacingPrefs {
     pub name_above: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub date_above: f64,
-    #[serde(default, deserialize_with = "de_f64")]
-    pub marriage_above: f64,
-    #[serde(default, deserialize_with = "de_f64")]
-    pub spouse_separation: f64,
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────

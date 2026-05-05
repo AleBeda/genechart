@@ -39,6 +39,7 @@ vert_spacing = 0
 [layout.boxed_couples]
 box_width = 240.0
 box_height = 140.0
+spouse_sep_height = 36.0
 gap_width = 40.0
 gap_height = 80.0
 box_width_2_spouses = 520.0 # must be >= 2 * box_width + gap_width
@@ -106,8 +107,6 @@ date = "center"
 [output.style.spacing.boxed_couples]
 name_above = 2.0
 date_above = 2.0
-marriage_above = 6.0
-spouse_separation = 10.0
 
 [diagnostics]
 errors = true

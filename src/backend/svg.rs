@@ -702,16 +702,18 @@ fn render_boxed_couples(
 
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
-        // Compute section boundaries for text layout (anchored to center line only)
+        // Three-region box: top (spouse or individual), middle (marriage), bottom (other)
         let center_svg_y = to_svg_y(geo.y);
-        let text_height = spacing.spouse_separation + font_size + date_font_size * 2.0;
-        let (ind_section_top_svg, sp_section_top_svg) = if root_pos_bottom {
-            // Individual in bottom half, spouse in top half
-            (center_svg_y, center_svg_y - text_height)
+        let region_height = (geo.height - bc.spouse_sep_height) / 2.0;
+        let (top_region_svg, bottom_region_svg) = if root_pos_bottom {
+            (center_svg_y - region_height, center_svg_y + bc.spouse_sep_height / 2.0)
         } else {
-            // Individual in top half, spouse in bottom half
-            (center_svg_y - text_height, center_svg_y)
+            (center_svg_y - bc.spouse_sep_height / 2.0, center_svg_y + region_height)
         };
+        let sp_section_top_svg = if root_pos_bottom { top_region_svg } else { bottom_region_svg };
+        let ind_section_top_svg = if root_pos_bottom { bottom_region_svg } else { top_region_svg };
+        // Marriage (and family ID) centered vertically in the box
+        let marr_y = center_svg_y + date_font_size / 2.0;
 
         if is_two_spouse {
             let left_cx_svg = to_svg_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
@@ -754,8 +756,6 @@ fn render_boxed_couples(
                         if prefs.show.marriage {
                             if let Some(marr) = &fam1.marriage {
                                 if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
-                                    let section_boundary_svg_y = to_svg_y(geo.y);
-                                    let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size));
                                 }
                             }
@@ -765,12 +765,11 @@ fn render_boxed_couples(
                         if prefs.show.id {
                             let fam_id_text = fam1_id.trim_start_matches('@').trim_end_matches('@');
                             let fam_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
-                            let fam_id_y = to_svg_y(geo.y) - spacing.marriage_above;
-                            out.push_str(&svg_text_colored(fam_id_x, fam_id_y, fam_id_text, &id_font_family, id_font_size, &id_color));
+                            out.push_str(&svg_text_colored(fam_id_x, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
                         }
 
                         // Spouse name
-                        let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
+                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
                         out.push_str(&svg_text_mid_w(left_cx_svg, sp_name_y, &format_bc_name(sp1, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
@@ -809,11 +808,10 @@ fn render_boxed_couples(
                         if prefs.show.id {
                             let fam2_id_text = fam2_id.trim_start_matches('@').trim_end_matches('@');
                             let fam2_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
-                            let fam2_id_y = to_svg_y(geo.y) - spacing.marriage_above;
-                            out.push_str(&svg_text_colored(fam2_id_x, fam2_id_y, fam2_id_text, &id_font_family, id_font_size, &id_color));
+                            out.push_str(&svg_text_colored(fam2_id_x, marr_y, fam2_id_text, &id_font_family, id_font_size, &id_color));
                         }
 
-                        let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
+                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
                         out.push_str(&svg_text_mid_w(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
@@ -879,8 +877,6 @@ fn render_boxed_couples(
                         if prefs.show.marriage {
                             if let Some(marr) = &fam.marriage {
                                 if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
-                                    let section_boundary_svg_y = to_svg_y(geo.y);
-                                    let marr_y = section_boundary_svg_y - spacing.marriage_above;
                                     out.push_str(&svg_text_mid(section_cx, marr_y, &marr_str, &date_font_family, date_font_size));
                                 }
                             }
@@ -889,11 +885,10 @@ fn render_boxed_couples(
                         // Family ID independent of marriage
                         if prefs.show.id {
                             let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
-                            let fam_id_y = to_svg_y(geo.y) - spacing.marriage_above;
-                            out.push_str(&svg_text_colored(box_left_svg + 2.0, fam_id_y, fam_id_text, &id_font_family, id_font_size, &id_color));
+                            out.push_str(&svg_text_colored(box_left_svg + 2.0, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
                         }
 
-                        let sp_name_y = sp_section_top_svg + spacing.spouse_separation + font_size;
+                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
                         out.push_str(&svg_text_mid_w(section_cx, sp_name_y, &format_bc_name(sp, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
