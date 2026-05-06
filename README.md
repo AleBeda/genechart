@@ -126,6 +126,30 @@ genechart family.ged -r I1 --pdf -o chart.pdf
 
 Poster tiling: configure `[output.poster]` — `rows`, `columns`, `overlap_mm`, `alignment_lines`.
 
+Generate a 2x2 poster from a sample GEDCOM file:
+
+```sh
+# Tiled 2x2 poster via command-line overrides
+genechart family.ged -r I1 --type boxed_couples --pdf -o chart.pdf \
+  --pref 'output.poster.rows = 2' \
+  --pref 'output.poster.columns = 2' \
+  --pref 'output.poster.overlap_mm = 5.0'
+
+# Or via a preferences file
+genechart family.ged -r I1 --type boxed_couples --pdf -o chart.pdf \
+  --preff poster_style.toml
+```
+
+where `poster_style.toml` contains:
+
+```toml
+[output.poster]
+rows = 2
+columns = 2
+overlap_mm = 5.0
+alignment_lines = true
+```
+
 ## Preferences File
 
 Preferences are read from (lowest to highest priority):
