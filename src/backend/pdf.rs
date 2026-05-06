@@ -79,8 +79,36 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let step_x = (page_user_w - overlap_user).max(1.0);
     let step_y = (page_user_h - overlap_user).max(1.0);
 
-    let (vbx0, vby0, _vbw, _vbh) = parse_viewbox(&svg_string)
+    let (vbx0, vby0, canvas_w, canvas_h) = parse_viewbox(&svg_string)
         .unwrap_or((0.0, 0.0, page_user_w, page_user_h));
+
+    // Total poster area in user units
+    let poster_user_w = (columns as f64) * step_x;
+    let poster_user_h = (rows as f64) * step_y;
+
+    // Scale: fit entire canvas across the poster grid
+    let scale = (canvas_w / poster_user_w).max(canvas_h / poster_user_h);
+
+    // Each tile's viewBox dimensions — scaled so the full chart fits
+    let tile_vb_w = page_user_w * scale;
+    let tile_vb_h = page_user_h * scale;
+
+    // Overlap distance in canvas (viewBox) coordinates
+    let overlap_vb = overlap_user * scale;
+
+    // Extract SVG body once (everything after line 2), stripping the trailing </svg>.
+    let svg_body_end = if svg_string.ends_with("</svg>\n") {
+        svg_string.len() - 7 // "</svg>\n" = 7 chars
+    } else if svg_string.ends_with("</svg>") {
+        svg_string.len() - 6 // "</svg>" = 6 chars
+    } else {
+        svg_string.len()
+    };
+    let after_line1 = svg_string.find('\n').map(|i| i + 1).unwrap_or(0);
+    let after_line2 = svg_string[after_line1..].find('\n')
+        .map(|i| after_line1 + i + 1)
+        .unwrap_or(svg_string.len());
+    let svg_body = &svg_string[after_line2..svg_body_end];
 
     let w_str = format!("{page_w_mm}mm");
     let h_str = format!("{page_h_mm}mm");
@@ -90,39 +118,41 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
 
     for r in 0..rows {
         for c in 0..columns {
-            let tile_x = vbx0 + c as f64 * step_x;
-            let tile_y = vby0 + r as f64 * step_y;
-            let mut tile_svg = patch_svg_header(
-                &svg_string,
-                tile_x, tile_y, page_user_w, page_user_h,
-                &w_str, &h_str,
+            let tile_x = vbx0 + (c as f64) * tile_vb_w;
+            let tile_y = vby0 + (r as f64) * tile_vb_h;
+
+            let tile_header = format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+                 <svg xmlns=\"http://www.w3.org/2000/svg\" \
+                width=\"{w_str}\" height=\"{h_str}\" \
+                viewBox=\"{tile_x:.3} {tile_y:.3} {tile_vb_w:.3} {tile_vb_h:.3}\">\n"
             );
 
-            // Alignment lines mark the start of unique (non-overlapping) content.
-            // Skip tile (0, 0) — no overlap region to mark there.
-            if prefs.output.poster.alignment_lines && (r > 0 || c > 0) {
+            let tile_svg = if prefs.output.poster.alignment_lines && (r > 0 || c > 0) {
                 let color = crate::backend::svg::hex_color(
                     prefs.output.poster.alignment_lines_color
                 );
-                let mut al_svg = String::new();
+                let mut al_lines = String::new();
                 if c > 0 {
-                    let ax = tile_x + overlap_user;
-                    al_svg.push_str(&format!(
-                        "  <line x1=\"{ax:.3}\" y1=\"{:.3}\" x2=\"{ax:.3}\" y2=\"{:.3}\" \
+                    let ax = tile_x + overlap_vb;
+                    al_lines.push_str(&format!(
+                        "    <line x1=\"{ax:.3}\" y1=\"{tile_y:.3}\" x2=\"{ax:.3}\" y2=\"{:.3}\" \
                          stroke=\"{color}\" stroke-width=\"0.5\" opacity=\"0.5\"/>\n",
-                        tile_y, tile_y + page_user_h
+                        tile_y + tile_vb_h
                     ));
                 }
                 if r > 0 {
-                    let ay = tile_y + overlap_user;
-                    al_svg.push_str(&format!(
-                        "  <line x1=\"{:.3}\" y1=\"{ay:.3}\" x2=\"{:.3}\" y2=\"{ay:.3}\" \
+                    let ay = tile_y + overlap_vb;
+                    al_lines.push_str(&format!(
+                        "    <line x1=\"{tile_x:.3}\" y1=\"{ay:.3}\" x2=\"{:.3}\" y2=\"{ay:.3}\" \
                          stroke=\"{color}\" stroke-width=\"0.5\" opacity=\"0.5\"/>\n",
-                        tile_x, tile_x + page_user_w
+                        tile_x + tile_vb_w
                     ));
                 }
-                tile_svg = tile_svg.replace("</svg>", &format!("{al_svg}</svg>"));
-            }
+                format!("{tile_header}{svg_body}{al_lines}</svg>\n")
+            } else {
+                format!("{tile_header}{svg_body}</svg>\n")
+            };
 
             tiles.push((tile_svg, page_pt_w, page_pt_h));
         }
@@ -380,5 +410,21 @@ mod tests {
         let bytes = render_to_bytes(&layout_out, &prefs).unwrap();
         assert!(bytes.starts_with(b"%PDF-"), "missing PDF magic bytes");
         assert!(bytes.len() > 200, "PDF suspiciously small");
+    }
+
+    #[test]
+    fn test_pdf_multipage_boxed_couples() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.output.paper.size = "A4".into();
+        prefs.output.paper.orientation = "portrait".into();
+        prefs.output.poster.rows      = 2;
+        prefs.output.poster.columns = 2;
+        prefs.output.poster.overlap_mm = 10.0;
+        let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();
+        assert!(bytes.starts_with(b"%PDF-"), "missing PDF header");
+        let pdf_str = String::from_utf8_lossy(&bytes);
+        assert!(pdf_str.contains("/Count 4"), "expected 4 pages in PDF");
     }
 }
