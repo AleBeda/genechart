@@ -7,7 +7,7 @@ use crate::parser::genrep::{GedDate, Genrep, Individual};
 use crate::layout::simple::SimpleGeo;
 use crate::preferences::Prefs;
 
-pub(crate) fn format_name(indi: &Individual<SimpleGeo>, prefs: &Prefs) -> String {
+pub(crate) fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
     vars.insert("lastname".into(),  indi.surname.clone().unwrap_or_default());

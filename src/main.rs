@@ -4,6 +4,7 @@ mod parser;
 mod layout;
 mod backend;
 mod trace;
+mod util;
 
 use backend::Renderer as _;
 

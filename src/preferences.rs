@@ -2,7 +2,6 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 use toml::Value;
 
@@ -370,12 +369,6 @@ pub fn load(
 
     let prefs: Prefs = base.try_into().context("failed to deserialize preferences")?;
     Ok(prefs)
-}
-
-/// Expand `{key}` placeholders in `template` using the `strfmt` crate.
-pub fn expand(template: &str, vars: &HashMap<&str, &str>) -> String {
-    let owned: HashMap<String, &str> = vars.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-    strfmt::strfmt(template, &owned).unwrap_or_else(|_| template.to_string())
 }
 
 // ── Private helpers ──────────────────────────────────────────────────────────

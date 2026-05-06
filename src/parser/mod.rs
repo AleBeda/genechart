@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 use genrep::{Event, Family, GedDate, Genrep, Individual};
 use crate::preferences::DiagnosticsPrefs;
+use crate::util::matches_direction;
 
 static DIAG: OnceLock<DiagnosticsPrefs> = OnceLock::new();
 
@@ -53,9 +54,6 @@ enum TextSlot {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-fn matches_direction(input: &str, canonical: &str) -> bool {
-    !input.is_empty() && canonical.starts_with(input)
-}
 
 fn strip_at(s: &str) -> String {
     s.trim_matches('@').to_string()

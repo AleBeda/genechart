@@ -2,9 +2,7 @@
 
 use anyhow::{bail, Result};
 
-fn matches_direction(input: &str, canonical: &str) -> bool {
-    !input.is_empty() && canonical.starts_with(input)
-}
+use crate::util::matches_direction;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 

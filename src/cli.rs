@@ -63,16 +63,10 @@ pub struct Args {
     )]
     pub trace: Vec<String>,
 
-    #[arg(long, hide = true)]
-    pub strict: bool,
 }
 
 pub fn parse() -> Args {
-    let args = Args::parse();
-    if args.strict {
-        todo!("--strict is not yet implemented");
-    }
-    args
+    Args::parse()
 }
 
 pub fn resolve_gedcom_path(args: &Args) -> anyhow::Result<PathBuf> {

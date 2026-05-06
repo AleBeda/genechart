@@ -4,7 +4,6 @@ use anyhow::Result;
 use crate::backend::Renderer;
 use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
-use std::collections::HashMap;
 use crate::layout::simple::SimpleGeo;
 use crate::layout::fan::FanGeo;
 use crate::parser::genrep::{Genrep, Individual};
@@ -483,41 +482,6 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
 // ── Fan layout rendering ──────────────────────────────────────────────────────
 
-fn format_fan_name(indi: &Individual<FanGeo>, prefs: &Prefs) -> String {
-    let mut vars: HashMap<String, String> = HashMap::new();
-    vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
-    vars.insert("lastname".into(),  indi.surname.clone().unwrap_or_default());
-    vars.insert("sex".into(), match indi.sex {
-        Some('M') => "♂".into(),
-        Some('F') => "♀".into(),
-        _         => String::new(),
-    });
-    strfmt::strfmt(&prefs.format.individual, &vars)
-        .unwrap_or_else(|_| format!("{} {}",
-            indi.given.as_deref().unwrap_or(""),
-            indi.surname.as_deref().unwrap_or("")))
-        .trim()
-        .to_string()
-}
-
-// ── Boxed couples layout rendering ─────────────────────────────────────────────
-
-fn format_bc_name<G>(indi: &crate::parser::genrep::Individual<G>, prefs: &Prefs) -> String {
-    let mut vars: HashMap<String, String> = HashMap::new();
-    vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
-    vars.insert("lastname".into(),  indi.surname.clone().unwrap_or_default());
-    vars.insert("sex".into(), match indi.sex {
-        Some('M') => "♂".into(),
-        Some('F') => "♀".into(),
-        _         => String::new(),
-    });
-    strfmt::strfmt(&prefs.format.individual, &vars)
-        .unwrap_or_else(|_| format!("{} {}",
-            indi.given.as_deref().unwrap_or(""),
-            indi.surname.as_deref().unwrap_or("")))
-        .trim()
-        .to_string()
-}
 
 fn placed_geo<'a>(
     ind_id: &str,
@@ -719,7 +683,7 @@ fn render_boxed_couples(
 
             // Render individual in centre of wide box
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            out.push_str(&svg_text_mid_w(ind_cx_svg, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
+            out.push_str(&svg_text_mid_w(ind_cx_svg, name_y, &format_name(ind, prefs), &font_family, font_size, &descendant_weight));
 
             // Individual ID aligned with name
             if prefs.show.id {
@@ -767,7 +731,7 @@ fn render_boxed_couples(
 
                         // Spouse name
                         let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        out.push_str(&svg_text_mid_w(left_cx_svg, sp_name_y, &format_bc_name(sp1, prefs), &font_family, font_size, &spouse_weight));
+                        out.push_str(&svg_text_mid_w(left_cx_svg, sp_name_y, &format_name(sp1, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
                         if prefs.show.id {
@@ -809,7 +773,7 @@ fn render_boxed_couples(
                         }
 
                         let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        out.push_str(&svg_text_mid_w(right_cx_svg, sp_name_y, &format_bc_name(sp2, prefs), &font_family, font_size, &spouse_weight));
+                        out.push_str(&svg_text_mid_w(right_cx_svg, sp_name_y, &format_name(sp2, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
                         if prefs.show.id {
@@ -842,7 +806,7 @@ fn render_boxed_couples(
             // Single spouse or no spouse
             let section_cx = to_svg_x(geo.x);
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            out.push_str(&svg_text_mid_w(section_cx, name_y, &format_bc_name(ind, prefs), &font_family, font_size, &descendant_weight));
+            out.push_str(&svg_text_mid_w(section_cx, name_y, &format_name(ind, prefs), &font_family, font_size, &descendant_weight));
 
             // Individual ID aligned with name
             if prefs.show.id {
@@ -886,7 +850,7 @@ fn render_boxed_couples(
                         }
 
                         let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        out.push_str(&svg_text_mid_w(section_cx, sp_name_y, &format_bc_name(sp, prefs), &font_family, font_size, &spouse_weight));
+                        out.push_str(&svg_text_mid_w(section_cx, sp_name_y, &format_name(sp, prefs), &font_family, font_size, &spouse_weight));
 
                         // Spouse ID aligned with name
                         if prefs.show.id {
@@ -1078,7 +1042,7 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
             "  <path d=\"{path}\" fill=\"white\" stroke=\"black\" stroke-width=\"0.5\"/>\n"
         ));
 
-        let label  = format_fan_name(indi, prefs);
+        let label  = format_name(indi, prefs);
         let tx     = cx + geo.x;
         let ty     = cy - geo.y;
         let rotate = 90.0 - geo.angle_center;

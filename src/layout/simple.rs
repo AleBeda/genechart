@@ -16,9 +16,7 @@ pub struct SimpleGeo {
     pub connectors_below: Vec<usize>,
 }
 
-fn matches_direction(input: &str, canonical: &str) -> bool {
-    !input.is_empty() && canonical.starts_with(input)
-}
+use crate::util::matches_direction;
 
 /// Parse a GEDCOM raw date string into a sortable `(year, month, day)` key.
 ///

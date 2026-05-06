@@ -72,9 +72,7 @@ pub enum BoxedCouplesGeo {
     Family(FamilyGeo),
 }
 
-fn matches_direction(input: &str, canonical: &str) -> bool {
-    !input.is_empty() && canonical.starts_with(input)
-}
+use crate::util::matches_direction;
 
 /// Returns the IDs of all in-scope spouses of `ind_id`, in FAMS order.
 fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {

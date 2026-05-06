@@ -11,6 +11,14 @@ pub struct Event {
     pub place: Option<String>,
 }
 
+// NOTE: #[derive(Clone)] above Individual<G> and Family<G> does not eliminate
+// the manual field-copying in layout/simple.rs and layout/fan.rs. Rust cannot
+// convert Individual<()> to Individual<FanGeo> via clone() + geo assignment
+// because the generic parameter G is part of the type. A map_geo() method
+// would require the same number of field assignments, offering no savings.
+// Clone is retained for future use (e.g. layout algorithms that copy within
+// the same G type).
+#[derive(Clone)]
 pub struct Individual<G = ()> {
     pub id: String,
     pub given: Option<String>,
@@ -22,11 +30,12 @@ pub struct Individual<G = ()> {
     pub famc: Vec<String>,
     pub alt_name: Option<String>,   // NAM2: alternate name
     pub name_heb: Option<String>,   // NAMH: Hebrew/transliterated name
-    pub living: Option<bool>,       // _LIVING: Y/N living flag
+    pub living: Option<bool>,       // _LIVING: living flag
     pub in_scope: bool,
     pub geo: Option<G>,
 }
 
+#[derive(Clone)]
 pub struct Family<G = ()> {
     pub id: String,
     pub husband_id: Option<String>,
@@ -54,7 +63,4 @@ impl<G> Genrep<G> {
         self.families.get(id)
     }
 
-    pub fn individuals_in_scope(&self) -> impl Iterator<Item = &Individual<G>> {
-        self.individuals.values().filter(|i| i.in_scope)
-    }
 }
