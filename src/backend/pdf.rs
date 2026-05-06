@@ -82,16 +82,18 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let (vbx0, vby0, canvas_w, canvas_h) = parse_viewbox(&svg_string)
         .unwrap_or((0.0, 0.0, page_user_w, page_user_h));
 
-    // Total poster area in user units
-    let poster_user_w = (columns as f64) * step_x;
-    let poster_user_h = (rows as f64) * step_y;
+    // Total poster area in user units - the first page is not reduced by the overlap
+    let poster_user_w = page_user_w + (columns as f64 - 1.0) * step_x;
+    let poster_user_h = page_user_h + (rows as f64 - 1.0) * step_y;
 
     // Scale: fit entire canvas across the poster grid
     let scale = (canvas_w / poster_user_w).max(canvas_h / poster_user_h);
 
-    // Each tile's viewBox dimensions — scaled so the full chart fits
+    // Each tile's viewBox dimensions and steps — scaled so the full chart fits
     let tile_vb_w = page_user_w * scale;
     let tile_vb_h = page_user_h * scale;
+    let tile_vb_step_x = step_x * scale;
+    let tile_vb_step_y = step_y * scale;
 
     // Overlap distance in canvas (viewBox) coordinates
     let overlap_vb = overlap_user * scale;
@@ -118,8 +120,8 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
 
     for r in 0..rows {
         for c in 0..columns {
-            let tile_x = vbx0 + (c as f64) * tile_vb_w;
-            let tile_y = vby0 + (r as f64) * tile_vb_h;
+            let tile_x = vbx0 + (c as f64) * tile_vb_step_x;
+            let tile_y = vby0 + (r as f64) * tile_vb_step_y;
 
             let tile_header = format!(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
