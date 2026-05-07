@@ -1,10 +1,13 @@
 //! Text-like layout: descendants, ancestors, forest (stub).
 
 use anyhow::Result;
-use crate::parser::genrep::{Family, Genrep, Individual};
+use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
 use super::Layout;
+use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
 use std::collections::{HashMap, HashSet};
+
+use crate::util::matches_direction;
 
 #[derive(Debug, Clone, Default)]
 pub struct SimpleGeo {
@@ -14,69 +17,6 @@ pub struct SimpleGeo {
     pub is_spouse: bool,
     pub connectors_above: Vec<usize>,
     pub connectors_below: Vec<usize>,
-}
-
-use crate::util::matches_direction;
-
-/// Parse a GEDCOM raw date string into a sortable `(year, month, day)` key.
-///
-/// Supported formats: `"1 JAN 1812"`, `"JAN 1812"`, `"1812"`, `"BEF 1900"`,
-/// `"ABT 1850"`, `"FROM 1800 TO 1850"`, etc.
-/// Prefix qualifiers (BEF, AFT, ABT, CAL, EST, FROM, TO, AND, INT, …) are ignored.
-/// Dates with no year return `(u32::MAX, 0, 0)` so they sort last.
-fn date_sort_key(raw: &str) -> (u32, u32, u32) {
-    const MONTHS: &[&str] = &[
-        "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-    ];
-    const QUALIFIERS: &[&str] = &[
-        "BEF", "AFT", "ABT", "CAL", "EST", "FROM", "TO", "AND", "INT", "ABOUT",
-        "BEFORE", "AFTER", "BETWEEN", "CALCULATED", "ESTIMATED",
-    ];
-
-    let mut year: Option<u32>  = None;
-    let mut month: u32         = 0;
-    let mut day: u32           = 0;
-
-    for token in raw.split_whitespace() {
-        let up = token.to_uppercase();
-        if QUALIFIERS.contains(&up.as_str()) {
-            continue;
-        }
-        if let Some(pos) = MONTHS.iter().position(|&m| m == up.as_str()) {
-            month = (pos + 1) as u32;
-        } else if let Ok(n) = token.parse::<u32>() {
-            if n > 31 {
-                // Likely a year (GEDCOM years are 4-digit).
-                // Only record the first year seen (FROM 1800 TO 1850 → 1800).
-                if year.is_none() {
-                    year = Some(n);
-                }
-            } else if year.is_none() {
-                // Small number before a year token → day
-                day = n;
-            }
-        }
-    }
-
-    match year {
-        Some(y) => (y, month, day),
-        None    => (u32::MAX, 0, 0),
-    }
-}
-
-fn root_id(genrep: &Genrep, prefs: &Prefs) -> Option<String> {
-    let r = prefs.scope.root.trim();
-    if !r.is_empty() {
-        if genrep.individuals.contains_key(r) {
-            Some(r.to_string())
-        } else {
-            eprintln!("warning: root '{r}' not found, falling back to first individual");
-            genrep.first_individual_id.clone()
-        }
-    } else {
-        genrep.first_individual_id.clone()
-    }
 }
 
 fn visit(
@@ -114,24 +54,7 @@ fn visit(
     );
     *line += 1 + spacing;
 
-    // Sort families by marriage date, but only if all have dates.
-    // Otherwise, preserve FAMS tag order.
-    let mut fams = indi.fams.clone();
-    let all_have_dates = fams.iter().all(|fam_id| {
-        genrep.families.get(fam_id)
-            .and_then(|f| f.marriage.as_ref())
-            .and_then(|e| e.date.as_ref())
-            .is_some()
-    });
-    if all_have_dates {
-        fams.sort_by_key(|fam_id| {
-            genrep.families.get(fam_id)
-                .and_then(|f| f.marriage.as_ref())
-                .and_then(|e| e.date.as_ref())
-                .map(|d| date_sort_key(&d.raw))
-                .unwrap_or((u32::MAX, 0, 0))
-        });
-    }
+    let fams = sort_families_by_date(indi, genrep);
 
     for fam_id in &fams {
         let fam = match genrep.families.get(fam_id) {
@@ -283,12 +206,12 @@ impl Layout for SimpleLayout {
         let spacing = prefs.layout.simple.vert_spacing as usize;
         match dir {
             d if matches_direction(d, "descendants") => {
-                if let Some(root) = root_id(genrep, prefs) {
+                if let Some(root) = resolve_root_id(genrep, prefs) {
                     layout_descendants(genrep, &root, spacing, &mut geo_map);
                 }
             }
             d if matches_direction(d, "ancestors") || matches_direction(d, "pedigree") => {
-                if let Some(root) = root_id(genrep, prefs) {
+                if let Some(root) = resolve_root_id(genrep, prefs) {
                     layout_ancestors(genrep, &root, spacing, &mut geo_map);
                 }
             }
@@ -299,7 +222,7 @@ impl Layout for SimpleLayout {
             }
             other => {
                 eprintln!("warning: unknown direction {other:?}, falling back to descendants");
-                if let Some(root) = root_id(genrep, prefs) {
+                if let Some(root) = resolve_root_id(genrep, prefs) {
                     layout_descendants(genrep, &root, spacing, &mut geo_map);
                 }
             }
@@ -307,42 +230,11 @@ impl Layout for SimpleLayout {
 
         let mut out_individuals = HashMap::new();
         for (id, indi) in &genrep.individuals {
-            out_individuals.insert(
-                id.clone(),
-                Individual {
-                    id: indi.id.clone(),
-                    given: indi.given.clone(),
-                    surname: indi.surname.clone(),
-                    sex: indi.sex,
-                    birth: indi.birth.clone(),
-                    death: indi.death.clone(),
-                    fams: indi.fams.clone(),
-                    famc: indi.famc.clone(),
-                    alt_name: indi.alt_name.clone(),
-                    name_heb: indi.name_heb.clone(),
-                    living: indi.living,
-                    in_scope: indi.in_scope,
-                    geo: geo_map.get(id).cloned(),
-                },
-            );
+            let geo = geo_map.get(id).cloned();
+            out_individuals.insert(id.clone(), copy_individual(indi, geo));
         }
 
-        let mut out_families = HashMap::new();
-        for (id, fam) in &genrep.families {
-            out_families.insert(
-                id.clone(),
-                Family {
-                    id: fam.id.clone(),
-                    husband_id: fam.husband_id.clone(),
-                    wife_id: fam.wife_id.clone(),
-                    children_ids: fam.children_ids.clone(),
-                    marriage: fam.marriage.clone(),
-                    jmar: fam.jmar.clone(),
-                    in_scope: fam.in_scope,
-                    geo: None,
-                },
-            );
-        }
+        let out_families = copy_families(genrep, |_| None);
 
         Ok(Genrep {
             individuals: out_individuals,
@@ -467,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_ancestors_two_generations() {
-        let mut genrep = parse_str(GEDCOM).unwrap();
+        let mut genrep = parse_str(GEDCOM_3GEN).unwrap();
         compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
 
         let mut prefs = Prefs::default();
@@ -548,36 +440,6 @@ mod tests {
         assert_eq!(output.individuals["I5"].geo.as_ref().unwrap().line, 2);
         assert_eq!(output.individuals["I3"].geo.as_ref().unwrap().line, 3);
         assert_eq!(output.individuals["I2"].geo.as_ref().unwrap().line, 4);
-    }
-
-    // ── date_sort_key ──
-
-    #[test]
-    fn test_date_sort_key_full_date() {
-        assert_eq!(date_sort_key("1 JAN 1812"), (1812, 1, 1));
-        assert_eq!(date_sort_key("4 APR 1843"), (1843, 4, 4));
-    }
-
-    #[test]
-    fn test_date_sort_key_partial_dates() {
-        assert_eq!(date_sort_key("JAN 1812"), (1812, 1, 0));
-        assert_eq!(date_sort_key("1812"),     (1812, 0, 0));
-    }
-
-    #[test]
-    fn test_date_sort_key_qualifiers_ignored() {
-        assert_eq!(date_sort_key("BEF 1900"),        (1900, 0, 0));
-        assert_eq!(date_sort_key("ABT 1850"),         (1850, 0, 0));
-        assert_eq!(date_sort_key("CAL 1760"),         (1760, 0, 0));
-        assert_eq!(date_sort_key("EST 1800"),         (1800, 0, 0));
-        assert_eq!(date_sort_key("FROM 1800 TO 1850"),(1800, 0, 0));
-    }
-
-    #[test]
-    fn test_date_sort_key_no_year() {
-        assert_eq!(date_sort_key(""),           (u32::MAX, 0, 0));
-        assert_eq!(date_sort_key("JAN"),        (u32::MAX, 0, 0));
-        assert_eq!(date_sort_key("unknown"),    (u32::MAX, 0, 0));
     }
 
     // ── Spouse sort order ──

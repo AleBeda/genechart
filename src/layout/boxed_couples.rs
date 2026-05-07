@@ -16,16 +16,18 @@
 //!    extended with a global right-boundary array so leaf siblings do not over-
 //!    constrain deeper generations.
 //! 3. Derive the parent's x from the children's positions (centre rule).  If
-//!    the natural centre falls left of the `x_default` constraint, shift the
+//!    the natural centre falls left of `x_default` constraint, shift the
 //!    entire child subtree rightward rather than clamping the parent.
 //! 4. After all descendants are placed, [`compact_pass`] closes sibling gaps in
 //!    a top-down sweep so left-packed siblings move right without cascading overlaps.
 
 use anyhow::Result;
-use crate::parser::genrep::{Genrep, Individual, Family};
+use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use super::Layout;
+use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
 use std::collections::HashMap;
+use crate::util::matches_direction;
 
 /// Layout geometry for a placed descendant box.
 #[derive(Debug, Clone)]
@@ -72,15 +74,14 @@ pub enum BoxedCouplesGeo {
     Family(FamilyGeo),
 }
 
-use crate::util::matches_direction;
-
-/// Returns the IDs of all in-scope spouses of `ind_id`, in FAMS order.
+/// Returns the IDs of all in-scope spouses of `ind_id`, sorted by marriage date.
 fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     let ind = match genrep.get_individual(ind_id) {
         Some(i) => i,
         None => return vec![],
     };
-    ind.fams.iter()
+    let sorted_fams = sort_families_by_date(ind, genrep);
+    sorted_fams.iter()
         .filter_map(|fam_id| genrep.get_family(fam_id))
         .filter(|fam| fam.in_scope)
         .filter_map(|fam| {
@@ -261,58 +262,13 @@ fn get_left_envelope(
     result
 }
 
-/// Converts an `Individual<()>` into `Individual<BoxedCouplesGeo>` with the supplied geo.
-fn copy_individual(
-    src: &Individual<()>,
-    geo: Option<BoxedCouplesGeo>,
-) -> Individual<BoxedCouplesGeo> {
-    Individual {
-        id: src.id.clone(),
-        given: src.given.clone(),
-        surname: src.surname.clone(),
-        sex: src.sex,
-        birth: src.birth.clone(),
-        death: src.death.clone(),
-        fams: src.fams.clone(),
-        famc: src.famc.clone(),
-        alt_name: src.alt_name.clone(),
-        name_heb: src.name_heb.clone(),
-        living: src.living,
-        in_scope: src.in_scope,
-        geo,
-    }
-}
-
-/// Builds the complete family map by calling [`build_family_geo`] for every family.
-fn copy_families(
-    genrep: &Genrep,
-    out: &HashMap<String, Individual<BoxedCouplesGeo>>,
-    box_h: f64,
-    box_w: f64,
-    box_w2: f64,
-) -> HashMap<String, Family<BoxedCouplesGeo>> {
-    genrep.families.iter().map(|(id, fam)| {
-        let geo = build_family_geo(fam, out, box_h, box_w, box_w2);
-        (id.clone(), Family {
-            id: fam.id.clone(),
-            husband_id: fam.husband_id.clone(),
-            wife_id: fam.wife_id.clone(),
-            children_ids: fam.children_ids.clone(),
-            marriage: fam.marriage.clone(),
-            jmar: fam.jmar.clone(),
-            in_scope: fam.in_scope,
-            geo,
-        })
-    }).collect()
-}
-
 /// Derives connector geometry for one family from its placed parent's [`IndividualGeo`].
 ///
 /// Returns `None` if neither spouse has been placed (e.g. an out-of-scope family).
 /// The `conn_out` x-values are offset left/right by half the wide-box difference
 /// when the parent has two in-scope spouses.
 fn build_family_geo(
-    fam: &Family<()>,
+    fam: &crate::parser::genrep::Family<()>, // full path to disambiguate from the Family enum variant defined above
     out: &HashMap<String, Individual<BoxedCouplesGeo>>,
     box_h: f64,
     box_w: f64,
@@ -361,7 +317,7 @@ fn get_x_of(id: &str, out: &HashMap<String, Individual<BoxedCouplesGeo>>) -> f64
 ///
 /// Called by [`place_descendants`] when the parent's natural centre falls left of
 /// `x_default`: rather than clamping the parent, we push the whole child subtree
-/// right so the centring invariant is preserved.  `global_right` must be updated
+/// right so the centring invariant is preserved.   `global_right` must be updated
 /// here too, otherwise subsequent siblings see stale envelope values.
 fn shift_subtree(
     ind_id: &str,
@@ -418,7 +374,7 @@ fn compact_siblings(
             let child_right_env = get_right_envelope(&children[j], genrep, out);
             block_right_env = merge_max(block_right_env, child_right_env);
         }
-        let left_env  = get_left_envelope(&children[i + 1], genrep, out);
+        let left_env = get_left_envelope(&children[i + 1], genrep, out);
 
         if block_right_env.is_empty() || left_env.is_empty() {
             continue;
@@ -530,7 +486,7 @@ fn place_descendants(
 
         1 => {
             let children = children_with_spouse(ind_id, &spouses[0], genrep);
-            if children.is_empty() || env_left.len() <= 1 {
+            if children.is_empty() {
                 x_default
             } else {
                 place_descendants(genrep, &children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
@@ -567,7 +523,7 @@ fn place_descendants(
             let children2 = children_with_spouse(ind_id, &spouses[1], genrep);
             let all_children: Vec<String> = children1.iter().chain(children2.iter()).cloned().collect();
 
-            if all_children.is_empty() || env_left.len() <= 1 {
+            if all_children.is_empty() {
                 x_default
             } else {
                 place_descendants(genrep, &all_children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
@@ -633,7 +589,7 @@ fn place_ancestors(
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
     global_right: &mut Vec<f64>,
 ) {
-    // TODO: implement true ancestors traversal (walk famc, place parents above child)
+    // TODO: implement true ancestors traversal (walk famc, place parents above the child)
     place_descendants(genrep, ind_id, env_left, generation, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
 }
 
@@ -658,11 +614,8 @@ impl Layout for BoxedCouplesLayout {
             });
         }
 
-        let root_id = if prefs.scope.root.is_empty() {
-            genrep.first_individual_id.as_deref().unwrap_or("")
-        } else {
-            prefs.scope.root.as_str()
-        };
+        let root_opt = resolve_root_id(genrep, prefs);
+        let root_id = root_opt.as_deref().unwrap_or("");
 
         if root_id.is_empty() {
             return Ok(Genrep {
@@ -705,7 +658,7 @@ impl Layout for BoxedCouplesLayout {
             }
         }
 
-        let families = copy_families(genrep, &individuals, box_h, box_w, box_w2);
+        let families = copy_families(genrep, |fam| build_family_geo(fam, &individuals, box_h, box_w, box_w2));
 
         Ok(Genrep {
             individuals,
@@ -819,7 +772,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F1".to_string(), Family {
+        families.insert("F1".to_string(), crate::parser::genrep::Family {
             id: "F1".to_string(),
             husband_id: Some("I1".to_string()),
             wife_id: Some("I2".to_string()),
@@ -830,7 +783,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F2".to_string(), Family {
+        families.insert("F2".to_string(), crate::parser::genrep::Family {
             id: "F2".to_string(),
             husband_id: Some("I3".to_string()),
             wife_id: None,
@@ -956,7 +909,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F10".to_string(), Family {
+        families.insert("F10".to_string(), crate::parser::genrep::Family {
             id: "F10".to_string(),
             husband_id: Some("I10".to_string()),
             wife_id: Some("I11".to_string()),
@@ -967,7 +920,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F11".to_string(), Family {
+        families.insert("F11".to_string(), crate::parser::genrep::Family {
             id: "F11".to_string(),
             husband_id: Some("I10".to_string()),
             wife_id: Some("I12".to_string()),
@@ -978,7 +931,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F12".to_string(), Family {
+        families.insert("F12".to_string(), crate::parser::genrep::Family {
             id: "F12".to_string(),
             husband_id: Some("I10".to_string()),
             wife_id: Some("I13".to_string()),
@@ -1064,7 +1017,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F20".to_string(), Family {
+        families.insert("F20".to_string(), crate::parser::genrep::Family {
             id: "F20".to_string(),
             husband_id: Some("I20".to_string()),
             wife_id: Some("I21".to_string()),
@@ -1075,7 +1028,7 @@ mod tests {
             geo: None,
         });
 
-        families.insert("F21".to_string(), Family {
+        families.insert("F21".to_string(), crate::parser::genrep::Family {
             id: "F21".to_string(),
             husband_id: Some("I20".to_string()),
             wife_id: Some("I22".to_string()),
@@ -1203,7 +1156,7 @@ mod tests {
             in_scope: true,
             geo: None, // spouse — not placed
         });
-        let fam = Family {
+        let fam = crate::parser::genrep::Family {
             id: "F1".to_string(),
             husband_id: Some("I_husb".to_string()),
             wife_id: Some("I_wife".to_string()),
@@ -1549,5 +1502,66 @@ mod tests {
             right_edge_i13 <= left_edge_i16 - gap_w + 1e-6,
             "second-cousin overlap: I13.right={right_edge_i13}, I16.left={left_edge_i16}"
         );
+    }
+
+    // ── Spouse sorting regression test ──
+
+    /// GEDCOM with two spouses out of chronological order.
+    /// F10: marriage 1900 (I11), F11: marriage 1850 (I12).
+    /// Children of F11 (1850) should appear before children of F10 (1900).
+    #[test]
+    fn test_spouses_sorted_by_marriage_date() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n\
+0 @I2@ INDI\n1 NAME LaterSpouse /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME EarlierSpouse /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Child1 /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I5@ INDI\n1 NAME Child2 /C/\n1 SEX M\n1 FAMC @F2@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I4@\n1 MARR\n2 DATE 1 JUN 1900\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n1 CHIL @I5@\n1 MARR\n2 DATE 10 MAR 1850\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.layout.boxed_couples.box_width = 240.0;
+        prefs.layout.boxed_couples.box_height = 140.0;
+        prefs.layout.boxed_couples.gap_width = 40.0;
+        prefs.layout.boxed_couples.gap_height = 80.0;
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        // I5 (child of earlier marriage 1850) should appear before I4 (child of later marriage 1900).
+        // In the boxed_couples layout, children are placed left-to-right by order.
+        // The earlier spouse's children should be placed to the left.
+        // Both children are at generation 2, so same y.
+        // The x-coordinate reflects placement order.
+        let x_i4 = match &bc.individuals["I4"].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("I4 not placed"),
+        };
+        let x_i5 = match &bc.individuals["I5"].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("I5 not placed"),
+        };
+
+        // I5 (earlier marriage 1850) should be placed to the left of I4 (later marriage 1900)
+        assert!(x_i5 < x_i4,
+            "Child of earlier marriage (I5, 1850) should be left of later marriage child (I4, 1900): \
+            I4.x={x_i4}, I5.x={x_i5}");
     }
 }

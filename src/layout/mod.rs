@@ -2,6 +2,7 @@ use anyhow::Result;
 use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
 
+pub mod common;
 pub mod simple;
 pub mod boxed_couples;
 pub mod fan;

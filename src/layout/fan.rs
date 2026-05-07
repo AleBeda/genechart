@@ -3,10 +3,11 @@
 use anyhow::{bail, Result};
 
 use crate::util::matches_direction;
+use crate::layout::common::{copy_families, copy_individual, resolve_root_id};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-use crate::parser::genrep::{Family, Genrep, Individual};
+use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use super::Layout;
 
@@ -32,16 +33,13 @@ impl Layout for FanLayout {
             bail!("fan layout requires direction=ancestors");
         }
 
-        let root_id = if prefs.scope.root.is_empty() {
-            genrep.first_individual_id.as_deref().unwrap_or("")
-        } else {
-            prefs.scope.root.as_str()
-        };
+        let root_opt = resolve_root_id(genrep, prefs);
+        let root_id = root_opt.as_deref().unwrap_or("");
 
         if root_id.is_empty() {
             return Ok(Genrep {
                 individuals: HashMap::new(),
-                families: copy_families(genrep),
+                families: copy_families(genrep, |_| None),
                 first_individual_id: genrep.first_individual_id.clone(),
             });
         }
@@ -71,7 +69,7 @@ impl Layout for FanLayout {
 
         Ok(Genrep {
             individuals,
-            families: copy_families(genrep),
+            families: copy_families(genrep, |_| None),
             first_individual_id: genrep.first_individual_id.clone(),
         })
     }
@@ -163,39 +161,6 @@ fn place_ancestors(
 fn to_xy(radius: f64, angle_deg: f64) -> (f64, f64) {
     let rad = angle_deg * PI / 180.0;
     (radius * rad.cos(), radius * rad.sin())
-}
-
-fn copy_individual(src: &Individual<()>, geo: Option<FanGeo>) -> Individual<FanGeo> {
-    Individual {
-        id: src.id.clone(),
-        given: src.given.clone(),
-        surname: src.surname.clone(),
-        sex: src.sex,
-        birth: src.birth.clone(),
-        death: src.death.clone(),
-        fams: src.fams.clone(),
-        famc: src.famc.clone(),
-        alt_name: src.alt_name.clone(),
-        name_heb: src.name_heb.clone(),
-        living: src.living,
-        in_scope: src.in_scope,
-        geo,
-    }
-}
-
-fn copy_families(genrep: &Genrep) -> HashMap<String, Family<FanGeo>> {
-    genrep.families.iter().map(|(id, fam)| {
-        (id.clone(), Family {
-            id: fam.id.clone(),
-            husband_id: fam.husband_id.clone(),
-            wife_id: fam.wife_id.clone(),
-            children_ids: fam.children_ids.clone(),
-            marriage: fam.marriage.clone(),
-            jmar: fam.jmar.clone(),
-            in_scope: fam.in_scope,
-            geo: None,
-        })
-    }).collect()
 }
 
 #[cfg(test)]
