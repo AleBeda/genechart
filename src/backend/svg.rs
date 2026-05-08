@@ -6,8 +6,9 @@ use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use crate::layout::simple::SimpleGeo;
 use crate::layout::fan::FanGeo;
+use crate::layout::boxed_couples::BoxedCouplesGeo;
 use crate::layout::common::sort_families_by_date;
-use crate::parser::genrep::{Genrep, Individual};
+use crate::parser::genrep::{Genrep, Individual, Family};
 use crate::preferences::Prefs;
 use crate::backend::text::{find_marriage, format_event, format_name};
 
@@ -527,7 +528,6 @@ fn placed_geo<'a>(
     ind_id: &str,
     genrep: &'a crate::parser::genrep::Genrep<crate::layout::boxed_couples::BoxedCouplesGeo>,
 ) -> Option<&'a crate::layout::boxed_couples::IndividualGeo> {
-    use crate::layout::boxed_couples::BoxedCouplesGeo;
     genrep.individuals.get(ind_id)?.geo.as_ref().and_then(|g| {
         if let BoxedCouplesGeo::Individual(geo) = g { Some(geo) } else { None }
     })
@@ -544,12 +544,92 @@ fn spouse_id_from_family<G>(
     }
 }
 
+/// Render one spouse region of a boxed-couples box: marriage date, family ID,
+/// spouse name, spouse ID, birth date, death date.
+///
+/// `cx` is the horizontal centre of this section; `id_x` is the x position for
+/// left-aligned ID labels; `sp_name_top_y` is the top of the spouse name region
+/// (= `sp_section_top_svg` in the caller).
+#[allow(clippy::too_many_arguments)]
+fn render_bc_spouse_section(
+    out: &mut String,
+    cx: f64,
+    id_x: f64,
+    marr_y: f64,
+    sp_name_top_y: f64,
+    sp: &Individual<BoxedCouplesGeo>,
+    fam: &Family<BoxedCouplesGeo>,
+    fam_id: &str,
+    prefs: &Prefs,
+    font_family: &str,
+    font_size: f64,
+    date_font_family: &str,
+    date_font_size: f64,
+    id_font_family: &str,
+    id_font_size: f64,
+    id_color: &str,
+    spouse_weight: &str,
+    cw: f64,
+    date_cw: f64,
+) {
+    let spacing = &prefs.output.style.spacing.boxed_couples;
+
+    if prefs.show.marriage {
+        if let Some(marr) = &fam.marriage {
+            if let Some(marr_str) = format_event(
+                &prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref(),
+            ) {
+                render_mixed_text_mid_w(out, cx, marr_y, &marr_str,
+                    date_font_family, date_font_size, "normal", date_cw);
+            }
+        }
+    }
+
+    if prefs.show.id {
+        let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
+        out.push_str(&svg_text_colored(id_x, marr_y, fam_id_text,
+            id_font_family, id_font_size, id_color));
+    }
+
+    let sp_name_y = sp_name_top_y + spacing.name_above + font_size;
+    render_mixed_text_mid_w(out, cx, sp_name_y, &format_name(sp, prefs),
+        font_family, font_size, spouse_weight, cw);
+
+    if prefs.show.id {
+        let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
+        out.push_str(&svg_text_colored(id_x, sp_name_y, sp_id_text,
+            id_font_family, id_font_size, id_color));
+    }
+
+    let mut y = sp_name_y;
+    if prefs.show.birth {
+        if let Some(ref birth) = sp.birth {
+            if let Some(s) = format_event(&prefs.format.birth,
+                birth.date.as_ref(), birth.place.as_deref())
+            {
+                y += spacing.date_above + date_font_size;
+                render_mixed_text_mid_w(out, cx, y, &s,
+                    date_font_family, date_font_size, "normal", date_cw);
+            }
+        }
+    }
+    if prefs.show.death {
+        if let Some(ref death) = sp.death {
+            if let Some(s) = format_event(&prefs.format.death,
+                death.date.as_ref(), death.place.as_deref())
+            {
+                y += spacing.date_above + date_font_size;
+                render_mixed_text_mid_w(out, cx, y, &s,
+                    date_font_family, date_font_size, "normal", date_cw);
+            }
+        }
+    }
+}
+
 fn render_boxed_couples(
     genrep: &crate::parser::genrep::Genrep<crate::layout::boxed_couples::BoxedCouplesGeo>,
     prefs: &Prefs,
 ) -> String {
-    use crate::layout::boxed_couples::BoxedCouplesGeo;
-
     // Step 1: Collect placed individuals
     let placed: Vec<(&str, &crate::layout::boxed_couples::IndividualGeo)> = genrep.individuals.iter()
         .filter(|(_, ind)| ind.in_scope)
@@ -755,50 +835,15 @@ fn render_boxed_couples(
             if let Some((fam1_id, fam1)) = spouses.first() {
                 if let Some(sp1_id) = spouse_id_from_family(ind_id, fam1) {
                     if let Some(sp1) = genrep.individuals.get(&sp1_id) {
-                        // Marriage date
-                        if prefs.show.marriage {
-                            if let Some(marr) = &fam1.marriage {
-                                if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
-                                    render_mixed_text_mid_w(&mut out, left_cx_svg, marr_y, &marr_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
-
-                        // Family ID independent of marriage
-                        if prefs.show.id {
-                            let fam_id_text = fam1_id.trim_start_matches('@').trim_end_matches('@');
-                            let fam_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
-                            out.push_str(&svg_text_colored(fam_id_x, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        // Spouse name
-                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        render_mixed_text_mid_w(&mut out, left_cx_svg, sp_name_y, &format_name(sp1, prefs), &font_family, font_size, &spouse_weight, cw);
-
-                        // Spouse ID aligned with name
-                        if prefs.show.id {
-                            let sp_id_text = sp1.id.trim_start_matches('@').trim_end_matches('@');
-                            let sp_id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
-                            out.push_str(&svg_text_colored(sp_id_x, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        let mut sp_y = sp_name_y;
-                        if prefs.show.birth {
-                            if let Some(ref birth) = sp1.birth {
-                                if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
-                                    sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, left_cx_svg, sp_y, &birth_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
-                        if prefs.show.death {
-                            if let Some(ref death) = sp1.death {
-                                if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
-                                    sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, left_cx_svg, sp_y, &death_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
+                        let id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
+                        render_bc_spouse_section(
+                            &mut out, left_cx_svg, id_x, marr_y, sp_section_top_svg,
+                            sp1, fam1, fam1_id,
+                            prefs, &font_family, font_size,
+                            &date_font_family, date_font_size,
+                            &id_font_family, id_font_size, &id_color, &spouse_weight,
+                            cw, date_cw,
+                        );
                     }
                 }
             }
@@ -807,40 +852,15 @@ fn render_boxed_couples(
             if let Some((fam2_id, fam2)) = spouses.get(1) {
                 if let Some(sp2_id) = spouse_id_from_family(ind_id, fam2) {
                     if let Some(sp2) = genrep.individuals.get(&sp2_id) {
-                        // Family ID for 2-spouse right spouse
-                        if prefs.show.id {
-                            let fam2_id_text = fam2_id.trim_start_matches('@').trim_end_matches('@');
-                            let fam2_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
-                            out.push_str(&svg_text_colored(fam2_id_x, marr_y, fam2_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        render_mixed_text_mid_w(&mut out, right_cx_svg, sp_name_y, &format_name(sp2, prefs), &font_family, font_size, &spouse_weight, cw);
-
-                        // Spouse ID aligned with name
-                        if prefs.show.id {
-                            let sp_id_text = sp2.id.trim_start_matches('@').trim_end_matches('@');
-                            let sp_id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
-                            out.push_str(&svg_text_colored(sp_id_x, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        let mut y_pos = sp_name_y;
-                        if prefs.show.birth {
-                            if let Some(ref birth) = sp2.birth {
-                                if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
-                                    y_pos += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, right_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
-                        if prefs.show.death {
-                            if let Some(ref death) = sp2.death {
-                                if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
-                                    y_pos += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, right_cx_svg, y_pos, &death_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
+                        let id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
+                        render_bc_spouse_section(
+                            &mut out, right_cx_svg, id_x, marr_y, sp_section_top_svg,
+                            sp2, fam2, fam2_id,
+                            prefs, &font_family, font_size,
+                            &date_font_family, date_font_size,
+                            &id_font_family, id_font_size, &id_color, &spouse_weight,
+                            cw, date_cw,
+                        );
                     }
                 }
             }
@@ -877,46 +897,14 @@ fn render_boxed_couples(
             if let Some((fam_id, fam)) = spouses.first() {
                 if let Some(sp_id) = spouse_id_from_family(ind_id, fam) {
                     if let Some(sp) = genrep.individuals.get(&sp_id) {
-                        if prefs.show.marriage {
-                            if let Some(marr) = &fam.marriage {
-                                if let Some(marr_str) = format_event(&prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref()) {
-                                    render_mixed_text_mid_w(&mut out, section_cx, marr_y, &marr_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
-
-                        // Family ID independent of marriage
-                        if prefs.show.id {
-                            let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
-                            out.push_str(&svg_text_colored(box_left_svg + 2.0, marr_y, fam_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        let sp_name_y = sp_section_top_svg + spacing.name_above + font_size;
-                        render_mixed_text_mid_w(&mut out, section_cx, sp_name_y, &format_name(sp, prefs), &font_family, font_size, &spouse_weight, cw);
-
-                        // Spouse ID aligned with name
-                        if prefs.show.id {
-                            let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
-                            out.push_str(&svg_text_colored(box_left_svg + 2.0, sp_name_y, sp_id_text, &id_font_family, id_font_size, &id_color));
-                        }
-
-                        let mut sp_y = sp_name_y;
-                        if prefs.show.birth {
-                            if let Some(ref birth) = sp.birth {
-                                if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
-                                    sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, section_cx, sp_y, &birth_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
-                        if prefs.show.death {
-                            if let Some(ref death) = sp.death {
-                                if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
-                                    sp_y += spacing.date_above + date_font_size;
-                                    render_mixed_text_mid_w(&mut out, section_cx, sp_y, &death_str, &date_font_family, date_font_size, "normal", date_cw);
-                                }
-                            }
-                        }
+                        render_bc_spouse_section(
+                            &mut out, section_cx, box_left_svg + 2.0, marr_y, sp_section_top_svg,
+                            sp, fam, fam_id,
+                            prefs, &font_family, font_size,
+                            &date_font_family, date_font_size,
+                            &id_font_family, id_font_size, &id_color, &spouse_weight,
+                            cw, date_cw,
+                        );
                     }
                 }
             }
