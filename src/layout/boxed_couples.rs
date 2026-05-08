@@ -418,17 +418,37 @@ fn compact_pass(
     generation: u32,
 ) {
     let spouses = prune_spouses(ind_id, genrep);
-    let all_children: Vec<String> = spouses
-        .iter()
-        .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
-        .filter(|cid| out.contains_key(cid.as_str()))
-        .collect();
-    if all_children.is_empty() {
-        return;
-    }
-    compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
-    for child_id in all_children {
-        compact_pass(&child_id, genrep, out, global_right, gap_w, generation + 1);
+
+    if spouses.len() >= 2 {
+        // For 2-spouse parents, compact each spouse's children independently.
+        // Compacting across the children1/children2 boundary would shift children1
+        // past conn_out1_x, breaking the invariant set by place_descendants.
+        let children1: Vec<String> = children_with_spouse(ind_id, &spouses[0], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children2: Vec<String> = children_with_spouse(ind_id, &spouses[1], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        compact_siblings(&children1, generation + 1, gap_w, genrep, out, global_right);
+        compact_siblings(&children2, generation + 1, gap_w, genrep, out, global_right);
+        for child_id in children1.iter().chain(children2.iter()) {
+            compact_pass(child_id, genrep, out, global_right, gap_w, generation + 1);
+        }
+    } else {
+        let all_children: Vec<String> = spouses
+            .iter()
+            .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        if all_children.is_empty() {
+            return;
+        }
+        compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
+        for child_id in all_children {
+            compact_pass(&child_id, genrep, out, global_right, gap_w, generation + 1);
+        }
     }
 }
 
@@ -1563,5 +1583,94 @@ mod tests {
         assert!(x_i5 < x_i4,
             "Child of earlier marriage (I5, 1850) should be left of later marriage child (I4, 1900): \
             I4.x={x_i4}, I5.x={x_i5}");
+    }
+
+    // ── 2-spouse compact isolation test ──
+
+    /// Verifies that compact_pass does NOT shift children1 past conn_out1_x when
+    /// children2 has a large subtree that would otherwise create a compactable gap.
+    ///
+    /// I1 (root): 2 spouses — I2 (F1, 1867, earlier) and I3 (F2, 1901, later).
+    /// F1 child: I4 (leaf)  → children1, small subtree, placed LEFT.
+    /// F2 child: I5 + 6 grandchildren → children2, large subtree, placed RIGHT.
+    ///
+    /// place_descendants pins I4 at conn_out1_x (= I1.x − 140).
+    /// Without the fix, compact_siblings([I4, I5]) shifts I4 rightward by ~420 units
+    /// to close the gap before I5, breaking the connector invariant.
+    #[test]
+    fn test_two_spouse_compact_isolates_groups() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+        use crate::layout::{run_layout, LayoutOutput};
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n\
+0 @I2@ INDI\n1 NAME EarlierSpouse /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME LaterSpouse /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Child1 /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I5@ INDI\n1 NAME Child2 /C/\n1 SEX M\n1 FAMC @F2@\n1 FAMS @F3@\n\
+0 @I6@ INDI\n1 NAME Spouse2 /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I7@  INDI\n1 NAME GC1 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I8@  INDI\n1 NAME GC2 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I9@  INDI\n1 NAME GC3 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME GC4 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I11@ INDI\n1 NAME GC5 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I12@ INDI\n1 NAME GC6 /G/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I4@\n1 MARR\n2 DATE 7 Jul 1867\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n1 CHIL @I5@\n1 MARR\n2 DATE 30 Nov 1901\n\
+0 @F3@ FAM\n1 HUSB @I5@\n1 WIFE @I6@\
+\n1 CHIL @I7@\n1 CHIL @I8@\n1 CHIL @I9@\n1 CHIL @I10@\n1 CHIL @I11@\n1 CHIL @I12@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.layout.boxed_couples.box_width = 240.0;
+        prefs.layout.boxed_couples.box_height = 140.0;
+        prefs.layout.boxed_couples.gap_width = 40.0;
+        prefs.layout.boxed_couples.gap_height = 80.0;
+        prefs.layout.boxed_couples.box_width_2_spouses = 520.0;
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let layout = run_layout(&genrep, &prefs).unwrap();
+
+        let bc = match layout {
+            LayoutOutput::BoxedCouples(ref g) => g,
+            _ => panic!("expected BoxedCouples layout"),
+        };
+
+        let get_x = |id: &str| match &bc.individuals[id].geo {
+            Some(BoxedCouplesGeo::Individual(g)) => g.x,
+            _ => panic!("{id} not placed as Individual"),
+        };
+
+        let x_i1 = get_x("I1");
+        let x_i4 = get_x("I4");
+        let x_i5 = get_x("I5");
+
+        let box_w  = prefs.layout.boxed_couples.box_width;
+        let box_w2 = prefs.layout.boxed_couples.box_width_2_spouses;
+        let conn_offset = box_w2 / 2.0 - box_w / 2.0; // 140.0
+
+        // I4 (children1.last()) must remain pinned at conn_out1_x = I1.x − 140.
+        // Without the fix compact_siblings shifts I4 rightward by ~420 units.
+        assert!(
+            (x_i4 - (x_i1 - conn_offset)).abs() < 1e-6,
+            "I4 should be pinned at conn_out1_x (I1.x - {conn_offset}): \
+            I1.x={x_i1}, expected I4.x={}, got I4.x={x_i4}",
+            x_i1 - conn_offset
+        );
+
+        // I5 (children2.first()) must be at or right of conn_out2_x = I1.x + 140.
+        assert!(
+            x_i5 >= x_i1 + conn_offset - 1e-6,
+            "I5 should be at or right of conn_out2_x (I1.x + {conn_offset}): \
+            I1.x={x_i1}, conn_out2_x={}, I5.x={x_i5}",
+            x_i1 + conn_offset
+        );
     }
 }
