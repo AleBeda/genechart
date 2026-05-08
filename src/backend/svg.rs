@@ -6,7 +6,7 @@ use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use crate::layout::simple::SimpleGeo;
 use crate::layout::fan::FanGeo;
-use crate::layout::common::date_sort_key;
+use crate::layout::common::{date_sort_key, sort_families_by_date};
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use crate::backend::text::{find_marriage, format_event, format_name};
@@ -903,7 +903,8 @@ fn render_boxed_couples(
         let parent_id = match parent_id { Some(p) => p, None => continue };
 
         let parent_ind = &genrep.individuals[parent_id];
-        let fam_index = parent_ind.fams.iter().position(|f| f == fam_id).unwrap_or(0);
+        let sorted_fams = sort_families_by_date(parent_ind, genrep);
+        let fam_index = sorted_fams.iter().position(|f| f == fam_id).unwrap_or(0);
 
         let conn_out_x = if fam_index == 0 || !fam_geo.has_spouse2 {
             fam_geo.conn_out1_x

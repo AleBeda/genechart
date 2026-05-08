@@ -56,7 +56,7 @@ pub(crate) fn date_sort_key(raw: &str) -> (u32, u32, u32) {
 /// If ALL families have a marriage date, returns them sorted chronologically.
 /// Otherwise preserves the original FAMS tag order (which may reflect
 /// the GEDCOM author's intended sequencing).
-pub(crate) fn sort_families_by_date(ind: &Individual<()>, genrep: &Genrep) -> Vec<String> {
+pub(crate) fn sort_families_by_date<G>(ind: &Individual<G>, genrep: &Genrep<G>) -> Vec<String> {
     let fams = &ind.fams;
     let all_have_dates = fams.iter().all(|fam_id| {
         genrep.get_family(fam_id)
@@ -180,8 +180,8 @@ mod tests {
 
     #[test]
     fn test_sort_families_all_dates_sorted() {
-        let mut individuals = HashMap::new();
-        let mut families = HashMap::new();
+        let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
+        let mut families: HashMap<String, Family<()>> = HashMap::new();
 
         individuals.insert("I1".to_string(), Individual {
             id: "I1".to_string(), given: None, surname: None, sex: None,
@@ -223,8 +223,8 @@ mod tests {
 
     #[test]
     fn test_sort_families_missing_date_preserves_order() {
-        let mut individuals = HashMap::new();
-        let mut families = HashMap::new();
+        let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
+        let mut families: HashMap<String, Family<()>> = HashMap::new();
 
         individuals.insert("I1".to_string(), Individual {
             id: "I1".to_string(), given: None, surname: None, sex: None,
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_sort_families_no_families_returns_empty() {
-        let mut individuals = HashMap::new();
+        let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
         individuals.insert("I1".to_string(), Individual {
             id: "I1".to_string(), given: None, surname: None, sex: None,
             birth: None, death: None,
