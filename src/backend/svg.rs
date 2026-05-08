@@ -6,7 +6,7 @@ use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use crate::layout::simple::SimpleGeo;
 use crate::layout::fan::FanGeo;
-use crate::layout::common::{date_sort_key, sort_families_by_date};
+use crate::layout::common::sort_families_by_date;
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use crate::backend::text::{find_marriage, format_event, format_name};
@@ -660,16 +660,11 @@ fn render_boxed_couples(
                                &box_fill, &box_stroke, box_sw, box_radius));
 
         let ind = &genrep.individuals[*ind_id];
-        let mut spouses: Vec<(String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = ind.fams.iter()
-             .filter_map(|fid| genrep.families.get(fid).map(|f| (fid.clone(), f)))
-             .filter(|(_, f)| f.in_scope)
-             .collect();
-         // Sort by marriage date to match the placement algorithm in boxed_couples
-        spouses.sort_by_key(|(_, f)| f.marriage.as_ref()
-             .and_then(|e| e.date.as_ref())
-             .map(|d| date_sort_key(&d.raw))
-             .unwrap_or((u32::MAX, 0, 0)));
-
+        let sorted_fam_ids = sort_families_by_date(ind, genrep);
+        let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = sorted_fam_ids.iter()
+            .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
+            .filter(|(_, f)| f.in_scope)
+            .collect();
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
         // Three-region box: top (spouse or individual), middle (marriage), bottom (other)
