@@ -6,6 +6,7 @@ use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use crate::layout::simple::SimpleGeo;
 use crate::layout::fan::FanGeo;
+use crate::layout::common::sort_families_by_date;
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use crate::backend::text::{find_marriage, format_event, format_name};
@@ -659,11 +660,11 @@ fn render_boxed_couples(
                                &box_fill, &box_stroke, box_sw, box_radius));
 
         let ind = &genrep.individuals[*ind_id];
-        let spouses: Vec<(String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = ind.fams.iter()
-            .filter_map(|fid| genrep.families.get(fid).map(|f| (fid.clone(), f)))
+        let sorted_fam_ids = sort_families_by_date(ind, genrep);
+        let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = sorted_fam_ids.iter()
+            .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
             .filter(|(_, f)| f.in_scope)
             .collect();
-
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
         // Three-region box: top (spouse or individual), middle (marriage), bottom (other)
@@ -897,7 +898,8 @@ fn render_boxed_couples(
         let parent_id = match parent_id { Some(p) => p, None => continue };
 
         let parent_ind = &genrep.individuals[parent_id];
-        let fam_index = parent_ind.fams.iter().position(|f| f == fam_id).unwrap_or(0);
+        let sorted_fams = sort_families_by_date(parent_ind, genrep);
+        let fam_index = sorted_fams.iter().position(|f| f == fam_id).unwrap_or(0);
 
         let conn_out_x = if fam_index == 0 || !fam_geo.has_spouse2 {
             fam_geo.conn_out1_x
