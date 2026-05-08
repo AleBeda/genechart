@@ -3,7 +3,7 @@
 //! Falls back silently to `None` when the named font is absent from the system,
 //! so callers can use the estimate-based fallback (CHAR_WIDTH_RATIO × font_size).
 
-use fontdb::{Database, Family, Query};
+use fontdb::{Database, Family, Query, Weight};
 use std::sync::OnceLock;
 
 static FONT_DB: OnceLock<Database> = OnceLock::new();
@@ -16,17 +16,24 @@ fn font_db() -> &'static Database {
     })
 }
 
-/// Measure the advance width in pixels of `text` rendered in `font_family` at `font_size` px.
+/// Measure the advance width in pixels of `text` rendered in `font_family` at `font_size` px
+/// with normal (400) weight.
 ///
 /// Returns `None` when the font is not found on the system or metrics are unavailable.
 /// Characters absent from the font's cmap use the `.notdef` (glyph 0) advance.
 pub fn measure_text(text: &str, font_family: &str, font_size: f64) -> Option<f64> {
+    measure_text_w(text, font_family, font_size, false)
+}
+
+/// Like [`measure_text`] but queries the bold (700) variant of the font when `bold` is true.
+pub fn measure_text_w(text: &str, font_family: &str, font_size: f64, bold: bool) -> Option<f64> {
     if text.is_empty() {
         return Some(0.0);
     }
     let db = font_db();
     let query = Query {
         families: &[Family::Name(font_family)],
+        weight: if bold { Weight::BOLD } else { Weight::NORMAL },
         ..Default::default()
     };
     let id = db.query(&query)?;
@@ -86,6 +93,16 @@ mod tests {
         let long  = measure_text("ABCD", "monospace", 14.0);
         if let (Some(s), Some(l)) = (short, long) {
             assert!(l > s, "ABCD should be wider than AB: {s} vs {l}");
+        }
+    }
+
+    #[test]
+    fn test_bold_wider_than_normal() {
+        // Bold glyphs should be at least as wide as normal glyphs.
+        let normal = measure_text_w("Hello World", "Georgia", 14.0, false);
+        let bold   = measure_text_w("Hello World", "Georgia", 14.0, true);
+        if let (Some(n), Some(b)) = (normal, bold) {
+            assert!(b >= n, "bold should be >= normal width: {n} vs {b}");
         }
     }
 }

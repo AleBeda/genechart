@@ -227,11 +227,12 @@ fn render_mixed_text_mid_w(
         .trim_matches('"');
 
     // Measure each segment: exact metrics for Latin, char-count estimate for symbols.
+    let is_bold = weight == "bold";
     let seg_widths: Vec<f64> = segments.iter().map(|(seg, is_sym)| {
         if *is_sym {
             seg.chars().count() as f64 * cw
         } else {
-            font_metrics::measure_text(seg, base_font, font_size)
+            font_metrics::measure_text_w(seg, base_font, font_size, is_bold)
                 .unwrap_or_else(|| seg.chars().count() as f64 * cw)
         }
     }).collect();
