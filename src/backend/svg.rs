@@ -187,8 +187,9 @@ fn render_mixed_text(
 
 /// Render centered mixed-font text at (cx, y), splitting Unicode symbol runs
 /// (codepoint ≥ U+2000) into separate left-aligned `<text>` elements, collectively
-/// centered by estimating total width with `cw`. Symbol segments use SYMBOL_FONT_FAMILY
-/// and weight "normal"; non-symbol segments use `primary_family` and `weight`.
+/// centered using accurate font metrics for the Latin segments. Symbol segments use
+/// SYMBOL_FONT_FAMILY and weight "normal"; non-symbol segments use `primary_family`
+/// and `weight`.
 fn render_mixed_text_mid_w(
     out: &mut String,
     cx: f64, y: f64,
@@ -201,28 +202,48 @@ fn render_mixed_text_mid_w(
     if text.is_empty() {
         return;
     }
-    let total_width = text.chars().count() as f64 * cw;
-    let mut cur_x = cx - total_width / 2.0;
+
+    // Split text into (slice, is_symbol) segments at U+2000 boundary.
+    let mut segments: Vec<(&str, bool)> = Vec::new();
     let mut seg_start = 0usize;
     let mut in_symbol = text.chars().next().map_or(false, |c| (c as u32) >= 0x2000);
-
     for (byte_pos, c) in text.char_indices() {
         let is_sym = (c as u32) >= 0x2000;
         if is_sym != in_symbol {
-            let seg = &text[seg_start..byte_pos];
-            let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
-            let wt  = if in_symbol { "normal" } else { weight };
-            out.push_str(&svg_text_w(cur_x, y, seg, fam, font_size, wt));
-            cur_x    += seg.chars().count() as f64 * cw;
+            segments.push((&text[seg_start..byte_pos], in_symbol));
             seg_start = byte_pos;
             in_symbol = is_sym;
         }
     }
-    let seg = &text[seg_start..];
-    if !seg.is_empty() {
-        let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
-        let wt  = if in_symbol { "normal" } else { weight };
+    segments.push((&text[seg_start..], in_symbol));
+
+    // Strip CSS fallback list to get the bare font name for font_metrics.
+    let base_font = primary_family
+        .split(',')
+        .next()
+        .unwrap_or(primary_family)
+        .trim()
+        .trim_matches('\'')
+        .trim_matches('"');
+
+    // Measure each segment: exact metrics for Latin, char-count estimate for symbols.
+    let seg_widths: Vec<f64> = segments.iter().map(|(seg, is_sym)| {
+        if *is_sym {
+            seg.chars().count() as f64 * cw
+        } else {
+            font_metrics::measure_text(seg, base_font, font_size)
+                .unwrap_or_else(|| seg.chars().count() as f64 * cw)
+        }
+    }).collect();
+
+    let total_width: f64 = seg_widths.iter().sum();
+    let mut cur_x = cx - total_width / 2.0;
+
+    for ((seg, is_sym), &w) in segments.iter().zip(seg_widths.iter()) {
+        let fam = if *is_sym { SYMBOL_FONT_FAMILY } else { primary_family };
+        let wt  = if *is_sym { "normal" } else { weight };
         out.push_str(&svg_text_w(cur_x, y, seg, fam, font_size, wt));
+        cur_x += w;
     }
 }
 
