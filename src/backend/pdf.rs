@@ -248,15 +248,39 @@ fn assemble_multipage(
         page_h_pt: f32,
     }
 
-    let mut infos: Vec<TileInfo> = Vec::new();
+    // ── Phase A: parallel parse + chunk ──────────────────────────────────
+    // Each thread borrows usvg_opts (Sync) and copies conv_opts (Copy).
+    // Handles are joined in spawn order so results stay in tile order.
+    let raw_results: Vec<Result<(pdf_writer::Chunk, Ref, f32, f32)>> = std::thread::scope(|s| {
+        let handles: Vec<_> = tiles
+            .iter()
+            .map(|(svg_str, page_w_pt, page_h_pt)| {
+                let page_w = *page_w_pt;
+                let page_h = *page_h_pt;
+                s.spawn(move || -> Result<(pdf_writer::Chunk, Ref, f32, f32)> {
+                    let tree = svg2pdf::usvg::Tree::from_str(svg_str, usvg_opts)
+                        .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
+                    let (chunk, xobj_orig) = svg2pdf::to_chunk(&tree, conv_opts)
+                        .map_err(|e| anyhow::anyhow!("svg2pdf chunk error: {e}"))?;
+                    Ok((chunk, xobj_orig, page_w, page_h))
+                })
+            })
+            .collect();
 
-    for (svg_str, page_w_pt, page_h_pt) in tiles {
-        let tree = svg2pdf::usvg::Tree::from_str(svg_str, usvg_opts)
-            .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
-        let (chunk, xobj_orig) = svg2pdf::to_chunk(&tree, conv_opts)
-            .map_err(|e| anyhow::anyhow!("svg2pdf chunk error: {e}"))?;
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err(anyhow::anyhow!("tile render thread panicked")))
+            })
+            .collect()
+    });
 
-        // Renumber chunk refs into our allocation space; track the XObject ref.
+    // ── Phase B: sequential renumber + alloc (logic unchanged) ───────────
+    let mut infos: Vec<TileInfo> = Vec::with_capacity(tiles.len());
+    for result in raw_results {
+        let (chunk, xobj_orig, page_w_pt, page_h_pt) = result?;
+
         let mut xobj_new = xobj_orig;
         let mut map = std::collections::HashMap::new();
         let renumbered = chunk.renumber(|old| {
@@ -275,8 +299,8 @@ fn assemble_multipage(
             xobj_ref: xobj_new,
             page_ref,
             content_ref,
-            page_w_pt: *page_w_pt,
-            page_h_pt: *page_h_pt,
+            page_w_pt,
+            page_h_pt,
         });
     }
 
