@@ -1,11 +1,11 @@
-use anyhow::Result;
 use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
+use anyhow::Result;
 
-pub mod common;
-pub mod simple;
 pub mod boxed_couples;
+pub mod common;
 pub mod fan;
+pub mod simple;
 
 pub trait Layout {
     type Geo;

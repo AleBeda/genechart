@@ -1,39 +1,52 @@
 //! Plain-text output backend.
 
-use std::collections::{BTreeSet, HashMap};
 use crate::backend::Renderer;
 use crate::layout::LayoutOutput;
-use crate::parser::genrep::{GedDate, Genrep, Individual};
 use crate::layout::simple::SimpleGeo;
+use crate::parser::genrep::{GedDate, Genrep, Individual};
 use crate::preferences::Prefs;
+use std::collections::{BTreeSet, HashMap};
 
 pub(crate) fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
-    vars.insert("lastname".into(),  indi.surname.clone().unwrap_or_default());
-    vars.insert("sex".into(), match indi.sex {
-        Some('M') => "♂".into(),
-        Some('F') => "♀".into(),
-        _         => String::new(),
-    });
+    vars.insert("lastname".into(), indi.surname.clone().unwrap_or_default());
+    vars.insert(
+        "sex".into(),
+        match indi.sex {
+            Some('M') => "♂".into(),
+            Some('F') => "♀".into(),
+            _ => String::new(),
+        },
+    );
     strfmt::strfmt(&prefs.format.individual, &vars)
-        .unwrap_or_else(|_| format!("{} {}",
-            indi.given.as_deref().unwrap_or(""),
-            indi.surname.as_deref().unwrap_or("")))
+        .unwrap_or_else(|_| {
+            format!(
+                "{} {}",
+                indi.given.as_deref().unwrap_or(""),
+                indi.surname.as_deref().unwrap_or("")
+            )
+        })
         .trim()
         .to_string()
 }
 
-pub(crate) fn format_event(template: &str, date: Option<&GedDate>, place: Option<&str>) -> Option<String> {
+pub(crate) fn format_event(
+    template: &str,
+    date: Option<&GedDate>,
+    place: Option<&str>,
+) -> Option<String> {
     if date.is_none() && place.is_none() {
         return None;
     }
     let mut vars: HashMap<String, String> = HashMap::new();
-    vars.insert("date".into(),     date.map(|d| d.raw.clone()).unwrap_or_default());
+    vars.insert(
+        "date".into(),
+        date.map(|d| d.raw.clone()).unwrap_or_default(),
+    );
     vars.insert("location".into(), place.unwrap_or("").to_string());
 
-    let s = strfmt::strfmt(template, &vars)
-        .unwrap_or_else(|_| template.to_string());
+    let s = strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string());
 
     let s = s.trim_end_matches(|c| matches!(c, ',' | ' ')).to_string();
     if s.is_empty() {
@@ -69,15 +82,17 @@ fn gen_prefix_str(generation: usize) -> String {
 }
 
 struct Columns {
-    birth:    usize,
-    death:    usize,
+    birth: usize,
+    death: usize,
     marriage: usize,
 }
 
 fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
     let indent_chars = prefs.layout.simple.indent as usize;
 
-    let max_name_col = genrep.individuals.values()
+    let max_name_col = genrep
+        .individuals
+        .values()
         .filter(|i| i.in_scope)
         .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
         .map(|(indi, geo)| {
@@ -92,29 +107,41 @@ fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
         .max()
         .unwrap_or(20);
 
-    let max_birth = genrep.individuals.values()
+    let max_birth = genrep
+        .individuals
+        .values()
         .filter(|i| i.in_scope)
-        .filter_map(|i| i.birth.as_ref().and_then(|e| {
-            format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-        }))
+        .filter_map(|i| {
+            i.birth.as_ref().and_then(|e| {
+                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+            })
+        })
         .map(|s| display_len(&s))
         .max()
         .unwrap_or(24);
 
-    let max_death = genrep.individuals.values()
+    let max_death = genrep
+        .individuals
+        .values()
         .filter(|i| i.in_scope)
-        .filter_map(|i| i.death.as_ref().and_then(|e| {
-            format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-        }))
+        .filter_map(|i| {
+            i.death.as_ref().and_then(|e| {
+                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+            })
+        })
         .map(|s| display_len(&s))
         .max()
         .unwrap_or(24);
 
-    let birth_col    = max_name_col + 2;
-    let death_col    = birth_col  + max_birth  + 2;
-    let marriage_col = death_col  + max_death  + 2;
+    let birth_col = max_name_col + 2;
+    let death_col = birth_col + max_birth + 2;
+    let marriage_col = death_col + max_death + 2;
 
-    Columns { birth: birth_col, death: death_col, marriage: marriage_col }
+    Columns {
+        birth: birth_col,
+        death: death_col,
+        marriage: marriage_col,
+    }
 }
 
 // ── String helpers ────────────────────────────────────────────────────────────
@@ -210,9 +237,15 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
 
         let dl = prefs.output.style.dot_leaders;
         let mut line = format!("{indent}{gen_prefix}{name}");
-        if let Some(b) = birth_str  { write_at_col(&mut line, cols.birth,    &b, dl); }
-        if let Some(d) = death_str  { write_at_col(&mut line, cols.death,    &d, dl); }
-        if let Some(m) = marr_str   { write_at_col(&mut line, cols.marriage, &m, dl); }
+        if let Some(b) = birth_str {
+            write_at_col(&mut line, cols.birth, &b, dl);
+        }
+        if let Some(d) = death_str {
+            write_at_col(&mut line, cols.death, &d, dl);
+        }
+        if let Some(m) = marr_str {
+            write_at_col(&mut line, cols.marriage, &m, dl);
+        }
 
         lines[geo.line] = line;
     }
@@ -228,7 +261,11 @@ pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<Stri
             0
         };
         let col = (geo.indent + 1) * indent_chars + parent_gen_prefix;
-        for &lnum in geo.connectors_above.iter().chain(geo.connectors_below.iter()) {
+        for &lnum in geo
+            .connectors_above
+            .iter()
+            .chain(geo.connectors_below.iter())
+        {
             if lnum < lines.len() {
                 conn_per_line.entry(lnum).or_default().insert(col);
             }
@@ -305,8 +342,8 @@ pub fn render_to_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layout::{LayoutOutput, run_layout};
     use crate::parser::{compute_scope, parse_str};
-    use crate::layout::{run_layout, LayoutOutput};
 
     const GEDCOM: &str = "\
 0 HEAD
@@ -359,41 +396,70 @@ mod tests {
         let layout_out = run_layout(&genrep, prefs).unwrap();
         let mut buf = Vec::<u8>::new();
         TextRenderer.render(&layout_out, prefs, &mut buf).unwrap();
-        String::from_utf8(buf).unwrap().lines().map(|s| s.to_string()).collect()
+        String::from_utf8(buf)
+            .unwrap()
+            .lines()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     #[test]
     fn test_correct_names_and_order() {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
-        assert!(lines[0].contains("John") && lines[0].contains("Ancestor"),
-                "line 0 should be John: {:?}", lines[0]);
-        assert!(lines[1].contains("Jane"),
-                "line 1 should be Jane (spouse): {:?}", lines[1]);
-        assert!(lines[2].contains("Paul"),
-                "line 2 should be Paul (child): {:?}", lines[2]);
+        assert!(
+            lines[0].contains("John") && lines[0].contains("Ancestor"),
+            "line 0 should be John: {:?}",
+            lines[0]
+        );
+        assert!(
+            lines[1].contains("Jane"),
+            "line 1 should be Jane (spouse): {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[2].contains("Paul"),
+            "line 2 should be Paul (child): {:?}",
+            lines[2]
+        );
     }
 
     #[test]
     fn test_birth_data_on_root_line() {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
-        assert!(lines[0].contains("1 JAN 1812"), "birth date missing: {:?}", lines[0]);
-        assert!(lines[0].contains("London"),     "birth place missing: {:?}", lines[0]);
+        assert!(
+            lines[0].contains("1 JAN 1812"),
+            "birth date missing: {:?}",
+            lines[0]
+        );
+        assert!(
+            lines[0].contains("London"),
+            "birth place missing: {:?}",
+            lines[0]
+        );
     }
 
     #[test]
     fn test_marriage_on_spouse_line() {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
-        assert!(lines[1].contains("4 APR 1843"), "marriage date missing: {:?}", lines[1]);
+        assert!(
+            lines[1].contains("4 APR 1843"),
+            "marriage date missing: {:?}",
+            lines[1]
+        );
     }
 
     #[test]
     fn test_no_birth_prefix_when_absent() {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
-        assert!(!lines[1].contains("* "), "unexpected birth prefix on spouse line: {:?}", lines[1]);
+        assert!(
+            !lines[1].contains("* "),
+            "unexpected birth prefix on spouse line: {:?}",
+            lines[1]
+        );
     }
 
     #[test]
@@ -406,9 +472,11 @@ mod tests {
         let root_name_col = lines[0].find("John").expect("John not on line 0");
         // Jane (spouse) line should start "   Jane…" — same column as John
         let spouse_name_col = lines[1].find("Jane").expect("Jane not on line 1");
-        assert_eq!(root_name_col, spouse_name_col,
+        assert_eq!(
+            root_name_col, spouse_name_col,
             "spouse name column ({spouse_name_col}) must equal non-spouse name column ({root_name_col});\n  line0: {:?}\n  line1: {:?}",
-            lines[0], lines[1]);
+            lines[0], lines[1]
+        );
     }
 
     #[test]
@@ -416,8 +484,11 @@ mod tests {
         let prefs = make_prefs();
         let lines = render_text(&prefs);
         let birth_pos = lines[0].find("* ").expect("birth not found on line 0");
-        assert!(birth_pos > "1. John Ancestor".len(),
-                "birth should be after name: {:?}", lines[0]);
+        assert!(
+            birth_pos > "1. John Ancestor".len(),
+            "birth should be after name: {:?}",
+            lines[0]
+        );
     }
 
     #[test]
@@ -458,27 +529,50 @@ mod tests {
         prefs.show.marriage = false;
 
         let layout_out = run_layout(&genrep, &prefs).unwrap();
-        let g = match &layout_out { LayoutOutput::Simple(g) => g, _ => panic!() };
+        let g = match &layout_out {
+            LayoutOutput::Simple(g) => g,
+            _ => panic!(),
+        };
         let lines = build_lines(g, &prefs);
 
         // Use character counts (display columns), not byte offsets.
         // ♂ is 3 bytes but 1 display column — the test must measure visual alignment.
-        let char_positions: Vec<usize> = lines.iter()
+        let char_positions: Vec<usize> = lines
+            .iter()
             .filter_map(|l| l.find("* ").map(|b| l[..b].chars().count()))
             .collect();
-        assert_eq!(char_positions.len(), 2, "expected birth on both lines: {:?}", lines);
-        assert_eq!(char_positions[0], char_positions[1],
-                   "birth columns must align visually; lines:\n{:?}", lines);
-        assert_eq!(char_positions[0], "Big Nameperson".chars().count() + 2,
-                   "birth column should equal display width of longest name + 2");
+        assert_eq!(
+            char_positions.len(),
+            2,
+            "expected birth on both lines: {:?}",
+            lines
+        );
+        assert_eq!(
+            char_positions[0], char_positions[1],
+            "birth columns must align visually; lines:\n{:?}",
+            lines
+        );
+        assert_eq!(
+            char_positions[0],
+            "Big Nameperson".chars().count() + 2,
+            "birth column should equal display width of longest name + 2"
+        );
     }
 
     #[test]
     fn test_gen_prefix_str_fixed_width() {
         // Single-digit and double-digit generation numbers must produce the same width
         // so that name columns stay aligned across the gen-9 / gen-10 boundary.
-        assert_eq!(gen_prefix_str(1),  " 1. ", "gen 1 should be right-aligned in 2 chars");
-        assert_eq!(gen_prefix_str(9),  " 9. ", "gen 9 should be right-aligned in 2 chars");
+        assert_eq!(
+            gen_prefix_str(1),
+            " 1. ",
+            "gen 1 should be right-aligned in 2 chars"
+        );
+        assert_eq!(
+            gen_prefix_str(9),
+            " 9. ",
+            "gen 9 should be right-aligned in 2 chars"
+        );
         assert_eq!(gen_prefix_str(10), "10. ", "gen 10 should be 4 chars total");
         assert_eq!(
             gen_prefix_str(1).len(),
@@ -492,8 +586,11 @@ mod tests {
         // With generation numbers on, the root line must start with " 1. ".
         let prefs = make_prefs(); // show.generation_num = true
         let lines = render_text(&prefs);
-        assert!(lines[0].starts_with(" 1. "),
-            "root line should start with \" 1. \" (right-aligned); got: {:?}", lines[0]);
+        assert!(
+            lines[0].starts_with(" 1. "),
+            "root line should start with \" 1. \" (right-aligned); got: {:?}",
+            lines[0]
+        );
     }
 
     #[test]
@@ -511,6 +608,9 @@ mod tests {
         let text = String::from_utf8(buf).unwrap();
 
         assert!(text.starts_with("My Chart\n"), "title should be first line");
-        assert!(text.trim_end().ends_with("© 2026"), "copyright should be last line");
+        assert!(
+            text.trim_end().ends_with("© 2026"),
+            "copyright should be last line"
+        );
     }
 }

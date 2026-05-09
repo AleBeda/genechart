@@ -1,15 +1,15 @@
 //! Half-circle pedigree fan layout.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
-use crate::util::matches_direction;
 use crate::layout::common::{copy_families, copy_individual, resolve_root_id};
+use crate::util::matches_direction;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+use super::Layout;
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
-use super::Layout;
 
 #[derive(Debug, Clone)]
 pub struct FanGeo {
@@ -62,8 +62,15 @@ impl Layout for FanLayout {
             individuals.insert(root_id.to_string(), copy_individual(root, Some(root_geo)));
 
             place_ancestors(
-                genrep, root_id, 90.0, 180.0, 0u32,
-                ring_height, ring_gap, max_gen, &mut individuals,
+                genrep,
+                root_id,
+                90.0,
+                180.0,
+                0u32,
+                ring_height,
+                ring_gap,
+                max_gen,
+                &mut individuals,
             );
         }
 
@@ -127,8 +134,15 @@ fn place_ancestors(
                 };
                 out.insert(father_id.clone(), copy_individual(father, Some(geo)));
                 place_ancestors(
-                    genrep, father_id, father_angle, child_span,
-                    next_depth, ring_height, ring_gap, max_gen, out,
+                    genrep,
+                    father_id,
+                    father_angle,
+                    child_span,
+                    next_depth,
+                    ring_height,
+                    ring_gap,
+                    max_gen,
+                    out,
                 );
             }
         }
@@ -150,8 +164,15 @@ fn place_ancestors(
                 };
                 out.insert(mother_id.clone(), copy_individual(mother, Some(geo)));
                 place_ancestors(
-                    genrep, mother_id, mother_angle, child_span,
-                    next_depth, ring_height, ring_gap, max_gen, out,
+                    genrep,
+                    mother_id,
+                    mother_angle,
+                    child_span,
+                    next_depth,
+                    ring_height,
+                    ring_gap,
+                    max_gen,
+                    out,
                 );
             }
         }
@@ -205,14 +226,26 @@ mod tests {
         let mut families = HashMap::new();
 
         // I1 = root, I2 = father, I3 = mother, I4 = paternal grandfather, I5 = paternal grandmother
-        individuals.insert("I1".to_string(), make_individual("I1", vec!["F1".to_string()]));
-        individuals.insert("I2".to_string(), make_individual("I2", vec!["F2".to_string()]));
+        individuals.insert(
+            "I1".to_string(),
+            make_individual("I1", vec!["F1".to_string()]),
+        );
+        individuals.insert(
+            "I2".to_string(),
+            make_individual("I2", vec!["F2".to_string()]),
+        );
         individuals.insert("I3".to_string(), make_individual("I3", vec![]));
         individuals.insert("I4".to_string(), make_individual("I4", vec![]));
         individuals.insert("I5".to_string(), make_individual("I5", vec![]));
 
-        families.insert("F1".to_string(), make_family("F1", Some("I2"), Some("I3"), "I1"));
-        families.insert("F2".to_string(), make_family("F2", Some("I4"), Some("I5"), "I2"));
+        families.insert(
+            "F1".to_string(),
+            make_family("F1", Some("I2"), Some("I3"), "I1"),
+        );
+        families.insert(
+            "F2".to_string(),
+            make_family("F2", Some("I4"), Some("I5"), "I2"),
+        );
 
         Genrep {
             individuals,
@@ -233,7 +266,9 @@ mod tests {
 
     #[test]
     fn root_placement() {
-        let result = FanLayout.compute(&test_genrep(), &ancestors_prefs()).unwrap();
+        let result = FanLayout
+            .compute(&test_genrep(), &ancestors_prefs())
+            .unwrap();
         let geo = result.individuals["I1"].geo.as_ref().unwrap();
         assert_eq!(geo.angle_center, 90.0);
         assert_eq!(geo.angle_span, 180.0);
@@ -243,31 +278,51 @@ mod tests {
 
     #[test]
     fn father_arc() {
-        let result = FanLayout.compute(&test_genrep(), &ancestors_prefs()).unwrap();
+        let result = FanLayout
+            .compute(&test_genrep(), &ancestors_prefs())
+            .unwrap();
         let geo = result.individuals["I2"].geo.as_ref().unwrap();
-        assert!((geo.angle_center - 135.0).abs() < 1e-10, "father angle_center={}", geo.angle_center);
+        assert!(
+            (geo.angle_center - 135.0).abs() < 1e-10,
+            "father angle_center={}",
+            geo.angle_center
+        );
         assert!((geo.angle_span - 90.0).abs() < 1e-10);
     }
 
     #[test]
     fn mother_arc() {
-        let result = FanLayout.compute(&test_genrep(), &ancestors_prefs()).unwrap();
+        let result = FanLayout
+            .compute(&test_genrep(), &ancestors_prefs())
+            .unwrap();
         let geo = result.individuals["I3"].geo.as_ref().unwrap();
-        assert!((geo.angle_center - 45.0).abs() < 1e-10, "mother angle_center={}", geo.angle_center);
+        assert!(
+            (geo.angle_center - 45.0).abs() < 1e-10,
+            "mother angle_center={}",
+            geo.angle_center
+        );
         assert!((geo.angle_span - 90.0).abs() < 1e-10);
     }
 
     #[test]
     fn paternal_grandfather_arc() {
-        let result = FanLayout.compute(&test_genrep(), &ancestors_prefs()).unwrap();
+        let result = FanLayout
+            .compute(&test_genrep(), &ancestors_prefs())
+            .unwrap();
         let geo = result.individuals["I4"].geo.as_ref().unwrap();
-        assert!((geo.angle_center - 157.5).abs() < 1e-10, "paternal grandfather angle_center={}", geo.angle_center);
+        assert!(
+            (geo.angle_center - 157.5).abs() < 1e-10,
+            "paternal grandfather angle_center={}",
+            geo.angle_center
+        );
         assert!((geo.angle_span - 45.0).abs() < 1e-10);
     }
 
     #[test]
     fn no_overlap() {
-        let result = FanLayout.compute(&test_genrep(), &ancestors_prefs()).unwrap();
+        let result = FanLayout
+            .compute(&test_genrep(), &ancestors_prefs())
+            .unwrap();
 
         let fg = result.individuals["I2"].geo.as_ref().unwrap();
         let mg = result.individuals["I3"].geo.as_ref().unwrap();

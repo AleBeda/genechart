@@ -45,8 +45,7 @@ pub fn measure_text_w(text: &str, font_family: &str, font_size: f64, bold: bool)
         }
         let mut total = 0.0f64;
         for ch in text.chars() {
-            let gid = face.glyph_index(ch)
-                .unwrap_or(ttf_parser::GlyphId(0));
+            let gid = face.glyph_index(ch).unwrap_or(ttf_parser::GlyphId(0));
             let advance = face.glyph_hor_advance(gid).unwrap_or(0) as f64;
             total += advance;
         }
@@ -65,7 +64,10 @@ mod tests {
 
     #[test]
     fn test_measure_nonexistent_font_returns_none() {
-        assert_eq!(measure_text("hello", "ThisFontSurelyDoesNotExist_XYZ", 14.0), None);
+        assert_eq!(
+            measure_text("hello", "ThisFontSurelyDoesNotExist_XYZ", 14.0),
+            None
+        );
     }
 
     #[test]
@@ -83,14 +85,17 @@ mod tests {
         let w28 = measure_text("ABC", "monospace", 28.0);
         if let (Some(w14), Some(w28)) = (w14, w28) {
             let ratio = w28 / w14;
-            assert!((ratio - 2.0).abs() < 0.001, "expected 2× scaling, got {ratio}");
+            assert!(
+                (ratio - 2.0).abs() < 0.001,
+                "expected 2× scaling, got {ratio}"
+            );
         }
     }
 
     #[test]
     fn test_measure_longer_string_is_wider() {
         let short = measure_text("AB", "monospace", 14.0);
-        let long  = measure_text("ABCD", "monospace", 14.0);
+        let long = measure_text("ABCD", "monospace", 14.0);
         if let (Some(s), Some(l)) = (short, long) {
             assert!(l > s, "ABCD should be wider than AB: {s} vs {l}");
         }
@@ -100,7 +105,7 @@ mod tests {
     fn test_bold_wider_than_normal() {
         // Bold glyphs should be at least as wide as normal glyphs.
         let normal = measure_text_w("Hello World", "Georgia", 14.0, false);
-        let bold   = measure_text_w("Hello World", "Georgia", 14.0, true);
+        let bold = measure_text_w("Hello World", "Georgia", 14.0, true);
         if let (Some(n), Some(b)) = (normal, bold) {
             assert!(b >= n, "bold should be >= normal width: {n} vs {b}");
         }

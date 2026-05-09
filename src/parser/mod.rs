@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use genrep::{Event, Family, GedDate, Genrep, Individual};
 use crate::preferences::DiagnosticsPrefs;
 use crate::util::matches_direction;
+use genrep::{Event, Family, GedDate, Genrep, Individual};
 
 static DIAG: OnceLock<DiagnosticsPrefs> = OnceLock::new();
 
@@ -27,7 +27,10 @@ macro_rules! diag_warn {
 
 enum RecordCtx {
     None,
-    Indi { indi: Individual<()>, raw_name: Option<String> },
+    Indi {
+        indi: Individual<()>,
+        raw_name: Option<String>,
+    },
     Fam(Family<()>),
     Other,
 }
@@ -54,17 +57,20 @@ enum TextSlot {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-
 fn strip_at(s: &str) -> String {
     s.trim_matches('@').to_string()
 }
 
 /// Parse "Given /Surname/" into (given, surname).
 fn parse_name(raw: &str) -> (Option<String>, Option<String>) {
-    let given = raw.split('/').next()
+    let given = raw
+        .split('/')
+        .next()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    let surname = raw.split('/').nth(1)
+    let surname = raw
+        .split('/')
+        .nth(1)
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     (given, surname)
@@ -307,13 +313,19 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         }
                         "BIRT" => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
-                                indi.birth = Some(Event { date: Option::None, place: Option::None });
+                                indi.birth = Some(Event {
+                                    date: Option::None,
+                                    place: Option::None,
+                                });
                                 event_ctx = EventCtx::Birth;
                             }
                         }
                         "DEAT" => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
-                                indi.death = Some(Event { date: Option::None, place: Option::None });
+                                indi.death = Some(Event {
+                                    date: Option::None,
+                                    place: Option::None,
+                                });
                                 event_ctx = EventCtx::Death;
                             }
                         }
@@ -344,7 +356,10 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         }
                         "MARR" => {
                             if let RecordCtx::Fam(fam) = &mut ctx {
-                                fam.marriage = Some(Event { date: Option::None, place: Option::None });
+                                fam.marriage = Some(Event {
+                                    date: Option::None,
+                                    place: Option::None,
+                                });
                                 event_ctx = EventCtx::Marriage;
                             }
                         }
@@ -440,7 +455,9 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             }
                             EventCtx::None => {}
                         },
-                        _ => { text_slot = TextSlot::None; } // reset on unknown sub-fields so CONT can't bleed
+                        _ => {
+                            text_slot = TextSlot::None;
+                        } // reset on unknown sub-fields so CONT can't bleed
                     }
                 }
                 _ => {} // level 3+: silently skip
@@ -466,7 +483,11 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
         }
     }
 
-    Ok(Genrep { individuals, families, first_individual_id: first_indi_id })
+    Ok(Genrep {
+        individuals,
+        families,
+        first_individual_id: first_indi_id,
+    })
 }
 
 // ── scope computation ────────────────────────────────────────────────────────
@@ -543,7 +564,9 @@ fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) 
         indi_scope.insert(id.clone());
 
         if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
-            let fams: Vec<String> = genrep.individuals.get(&id)
+            let fams: Vec<String> = genrep
+                .individuals
+                .get(&id)
                 .map(|i| i.fams.clone())
                 .unwrap_or_default();
 
@@ -590,7 +613,9 @@ fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
         indi_scope.insert(id.clone());
 
         if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
-            let famcs: Vec<String> = genrep.individuals.get(&id)
+            let famcs: Vec<String> = genrep
+                .individuals
+                .get(&id)
                 .map(|i| i.famc.clone())
                 .unwrap_or_default();
 
@@ -613,11 +638,7 @@ fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
     apply_scope(genrep, &indi_scope, &fam_scope);
 }
 
-fn apply_scope(
-    genrep: &mut Genrep,
-    indi_scope: &HashSet<String>,
-    fam_scope: &HashSet<String>,
-) {
+fn apply_scope(genrep: &mut Genrep, indi_scope: &HashSet<String>, fam_scope: &HashSet<String>) {
     for id in indi_scope {
         if let Some(indi) = genrep.individuals.get_mut(id) {
             indi.in_scope = true;
@@ -673,7 +694,10 @@ mod tests {
         assert_eq!(i1.surname.as_deref(), Some("Ancestor"));
         assert_eq!(i1.sex, Some('M'));
         let birth = i1.birth.as_ref().expect("birth missing");
-        assert_eq!(birth.date.as_ref().map(|d| d.raw.as_str()), Some("1 JAN 1812"));
+        assert_eq!(
+            birth.date.as_ref().map(|d| d.raw.as_str()),
+            Some("1 JAN 1812")
+        );
         assert_eq!(birth.place.as_deref(), Some("London"));
     }
 
@@ -685,7 +709,10 @@ mod tests {
         assert_eq!(f1.wife_id.as_deref(), Some("I2"));
         assert_eq!(f1.children_ids, vec!["I3"]);
         let marr = f1.marriage.as_ref().expect("marriage missing");
-        assert_eq!(marr.date.as_ref().map(|d| d.raw.as_str()), Some("4 APR 1843"));
+        assert_eq!(
+            marr.date.as_ref().map(|d| d.raw.as_str()),
+            Some("4 APR 1843")
+        );
         assert_eq!(marr.place.as_deref(), Some("London"));
     }
 
@@ -743,16 +770,30 @@ mod tests {
         let mut gr = parse_str(SAMPLE_4GEN).unwrap();
         compute_scope(&mut gr, Some("I1"), "descendants", Some(3));
         // gen 1: root
-        assert!(gr.get_individual("I1").unwrap().in_scope, "root must be in scope");
+        assert!(
+            gr.get_individual("I1").unwrap().in_scope,
+            "root must be in scope"
+        );
         // gen 1: root's spouse (same generation as root)
-        assert!(gr.get_individual("I2").unwrap().in_scope, "spouse must be in scope");
+        assert!(
+            gr.get_individual("I2").unwrap().in_scope,
+            "spouse must be in scope"
+        );
         // gen 2: children
-        assert!(gr.get_individual("I3").unwrap().in_scope, "child must be in scope");
+        assert!(
+            gr.get_individual("I3").unwrap().in_scope,
+            "child must be in scope"
+        );
         // gen 3: grandchildren
-        assert!(gr.get_individual("I4").unwrap().in_scope, "grandchild must be in scope");
+        assert!(
+            gr.get_individual("I4").unwrap().in_scope,
+            "grandchild must be in scope"
+        );
         // gen 4: great-grandchildren — must NOT be shown with g=3
-        assert!(!gr.get_individual("I5").unwrap().in_scope,
-            "great-grandchild must NOT be in scope with g=3");
+        assert!(
+            !gr.get_individual("I5").unwrap().in_scope,
+            "great-grandchild must NOT be in scope with g=3"
+        );
     }
 
     #[test]
@@ -760,14 +801,25 @@ mod tests {
         let mut gr = parse_str(SAMPLE_4GEN).unwrap();
         compute_scope(&mut gr, Some("I5"), "ancestors", Some(3));
         // gen 1: root
-        assert!(gr.get_individual("I5").unwrap().in_scope, "root must be in scope");
+        assert!(
+            gr.get_individual("I5").unwrap().in_scope,
+            "root must be in scope"
+        );
         // gen 2: parent
-        assert!(gr.get_individual("I4").unwrap().in_scope, "parent must be in scope");
+        assert!(
+            gr.get_individual("I4").unwrap().in_scope,
+            "parent must be in scope"
+        );
         // gen 3: grandparent
-        assert!(gr.get_individual("I3").unwrap().in_scope, "grandparent must be in scope");
+        assert!(
+            gr.get_individual("I3").unwrap().in_scope,
+            "grandparent must be in scope"
+        );
         // gen 4: great-grandparent — must NOT be shown with g=3
-        assert!(!gr.get_individual("I1").unwrap().in_scope,
-            "great-grandparent must NOT be in scope with g=3");
+        assert!(
+            !gr.get_individual("I1").unwrap().in_scope,
+            "great-grandparent must NOT be in scope with g=3"
+        );
     }
 
     #[test]
@@ -787,16 +839,27 @@ mod tests {
         // "desc" is a valid prefix of "descendants" — I3's ancestors should not be in scope.
         let mut gr = parse_str(SAMPLE).unwrap();
         compute_scope(&mut gr, Some("I3"), "desc", Some(2));
-        assert!( gr.get_individual("I3").unwrap().in_scope, "I3 should be in scope");
-        assert!(!gr.get_individual("I1").unwrap().in_scope, "I1 is not a descendant of I3");
-        assert!(!gr.get_individual("I2").unwrap().in_scope, "I2 is not a descendant of I3");
+        assert!(
+            gr.get_individual("I3").unwrap().in_scope,
+            "I3 should be in scope"
+        );
+        assert!(
+            !gr.get_individual("I1").unwrap().in_scope,
+            "I1 is not a descendant of I3"
+        );
+        assert!(
+            !gr.get_individual("I2").unwrap().in_scope,
+            "I2 is not a descendant of I3"
+        );
 
         // "descABC" is NOT a valid prefix — must not silently match descendants.
         // The fallback is forest scope, so I1 ends up in scope.
         let mut gr2 = parse_str(SAMPLE).unwrap();
         compute_scope(&mut gr2, Some("I3"), "descABC", Some(2));
-        assert!(gr2.get_individual("I1").unwrap().in_scope,
-                "descABC must not match 'descendants'; forest fallback puts I1 in scope");
+        assert!(
+            gr2.get_individual("I1").unwrap().in_scope,
+            "descABC must not match 'descendants'; forest fallback puts I1 in scope"
+        );
     }
 
     #[test]
@@ -824,8 +887,15 @@ mod tests {
 ";
         let gr = parse_str(ged).unwrap();
         let i1 = gr.get_individual("I1").unwrap();
-        let place = i1.birth.as_ref().and_then(|e| e.place.as_deref()).unwrap_or("");
-        assert_eq!(place, "London", "CONT after unknown SOUR must not append to birth place");
+        let place = i1
+            .birth
+            .as_ref()
+            .and_then(|e| e.place.as_deref())
+            .unwrap_or("");
+        assert_eq!(
+            place, "London",
+            "CONT after unknown SOUR must not append to birth place"
+        );
     }
 
     #[test]
@@ -874,8 +944,14 @@ mod tests {
                       0 TRLR\n";
         let gr = parse_str(gedcom).unwrap();
         let i1 = gr.get_individual("I1").unwrap();
-        assert!(i1.fams.contains(&"F1".to_string()), "F1 should be in I1.fams");
-        assert!(i1.fams.contains(&"F2".to_string()), "F2 should be in I1.fams (repaired)");
+        assert!(
+            i1.fams.contains(&"F1".to_string()),
+            "F1 should be in I1.fams"
+        );
+        assert!(
+            i1.fams.contains(&"F2".to_string()),
+            "F2 should be in I1.fams (repaired)"
+        );
         let f2 = gr.get_family("F2").unwrap();
         assert_eq!(f2.children_ids, vec!["I4"], "F2 children must be parsed");
     }

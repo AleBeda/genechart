@@ -1,10 +1,10 @@
 //! PDF back-end: renders via the SVG back-end then converts with svg2pdf.
 
-use anyhow::Result;
-use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
 use crate::backend::Renderer;
 use crate::layout::LayoutOutput;
 use crate::preferences::Prefs;
+use anyhow::Result;
+use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
 
 pub struct PdfRenderer;
 
@@ -23,17 +23,21 @@ impl Renderer for PdfRenderer {
 
 pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> {
     let svg_string = crate::backend::svg::render_to_string(output, prefs)?;
-    let usvg_opts  = make_usvg_options();
+    let usvg_opts = make_usvg_options();
 
-    let rows    = prefs.output.poster.rows.max(1) as usize;
+    let rows = prefs.output.poster.rows.max(1) as usize;
     let columns = prefs.output.poster.columns.max(1) as usize;
 
     if rows == 1 && columns == 1 {
         // Apply paper sizing if specified.
         let final_svg = if let Some((pw_mm, ph_mm)) = crate::backend::svg::paper_size_mm(prefs) {
             const MM_TO_USER: f64 = 96.0 / 25.4;
-            let (vbx, vby, vbw, vbh) = parse_viewbox(&svg_string)
-                .unwrap_or((0.0, 0.0, pw_mm * MM_TO_USER, ph_mm * MM_TO_USER));
+            let (vbx, vby, vbw, vbh) = parse_viewbox(&svg_string).unwrap_or((
+                0.0,
+                0.0,
+                pw_mm * MM_TO_USER,
+                ph_mm * MM_TO_USER,
+            ));
             let w_str = format!("{pw_mm}mm");
             let h_str = format!("{ph_mm}mm");
             patch_svg_header(&svg_string, vbx, vby, vbw, vbh, &w_str, &h_str)
@@ -44,9 +48,13 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
         let pdf = svg2pdf::to_pdf(
             &tree,
-            svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() },
+            svg2pdf::ConversionOptions {
+                embed_text: true,
+                ..svg2pdf::ConversionOptions::default()
+            },
             svg2pdf::PageOptions { dpi: 96.0 },
-        ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
+        )
+        .map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
         return Ok(pdf);
     }
 
@@ -54,33 +62,39 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let (page_w_mm, page_h_mm) = match crate::backend::svg::paper_size_mm(prefs) {
         Some(dims) => dims,
         None => {
-            eprintln!("warning: multi-page tiling requires output.paper.size to be set; \
-                       falling back to single page");
+            eprintln!(
+                "warning: multi-page tiling requires output.paper.size to be set; \
+                       falling back to single page"
+            );
             let tree = svg2pdf::usvg::Tree::from_str(&svg_string, &usvg_opts)
                 .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
             let pdf = svg2pdf::to_pdf(
                 &tree,
-                svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() },
+                svg2pdf::ConversionOptions {
+                    embed_text: true,
+                    ..svg2pdf::ConversionOptions::default()
+                },
                 svg2pdf::PageOptions { dpi: 96.0 },
-            ).map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
+            )
+            .map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
             return Ok(pdf);
         }
     };
 
     // Coordinate conversions.
     const MM_TO_USER: f64 = 96.0 / 25.4; // SVG user units at 96 DPI
-    const MM_TO_PT:   f32 = 72.0 / 25.4; // PDF points at 72 DPI
+    const MM_TO_PT: f32 = 72.0 / 25.4; // PDF points at 72 DPI
     let page_user_w = page_w_mm * MM_TO_USER;
     let page_user_h = page_h_mm * MM_TO_USER;
-    let page_pt_w   = page_w_mm as f32 * MM_TO_PT;
-    let page_pt_h   = page_h_mm as f32 * MM_TO_PT;
+    let page_pt_w = page_w_mm as f32 * MM_TO_PT;
+    let page_pt_h = page_h_mm as f32 * MM_TO_PT;
 
     let overlap_user = prefs.output.poster.overlap_mm * MM_TO_USER;
     let step_x = (page_user_w - overlap_user).max(1.0);
     let step_y = (page_user_h - overlap_user).max(1.0);
 
-    let (vbx0, vby0, canvas_w, canvas_h) = parse_viewbox(&svg_string)
-        .unwrap_or((0.0, 0.0, page_user_w, page_user_h));
+    let (vbx0, vby0, canvas_w, canvas_h) =
+        parse_viewbox(&svg_string).unwrap_or((0.0, 0.0, page_user_w, page_user_h));
 
     // Total poster area in user units - the first page is not reduced by the overlap
     let poster_user_w = page_user_w + (columns as f64 - 1.0) * step_x;
@@ -107,7 +121,8 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
         svg_string.len()
     };
     let after_line1 = svg_string.find('\n').map(|i| i + 1).unwrap_or(0);
-    let after_line2 = svg_string[after_line1..].find('\n')
+    let after_line2 = svg_string[after_line1..]
+        .find('\n')
         .map(|i| after_line1 + i + 1)
         .unwrap_or(svg_string.len());
     let svg_body = &svg_string[after_line2..svg_body_end];
@@ -115,7 +130,10 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let w_str = format!("{page_w_mm}mm");
     let h_str = format!("{page_h_mm}mm");
 
-    let conv_opts = svg2pdf::ConversionOptions { embed_text: true, ..svg2pdf::ConversionOptions::default() };
+    let conv_opts = svg2pdf::ConversionOptions {
+        embed_text: true,
+        ..svg2pdf::ConversionOptions::default()
+    };
     let mut tiles: Vec<(String, f32, f32)> = Vec::new();
 
     for r in 0..rows {
@@ -131,9 +149,8 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             );
 
             let tile_svg = if prefs.output.poster.alignment_lines && (r > 0 || c > 0) {
-                let color = crate::backend::svg::hex_color(
-                    prefs.output.poster.alignment_lines_color
-                );
+                let color =
+                    crate::backend::svg::hex_color(prefs.output.poster.alignment_lines_color);
                 let mut al_lines = String::new();
                 if c > 0 {
                     let ax = tile_x + overlap_vb;
@@ -187,10 +204,18 @@ fn parse_viewbox(svg: &str) -> Option<(f64, f64, f64, f64)> {
 /// Replace the viewBox, width, and height attributes in the SVG header.
 /// The SVG produced by svg.rs always starts with the XML declaration on line 1
 /// and the `<svg ...>` element on line 2.
-fn patch_svg_header(svg: &str, vbx: f64, vby: f64, vbw: f64, vbh: f64,
-                    new_w: &str, new_h: &str) -> String {
+fn patch_svg_header(
+    svg: &str,
+    vbx: f64,
+    vby: f64,
+    vbw: f64,
+    vbh: f64,
+    new_w: &str,
+    new_h: &str,
+) -> String {
     let after_line1 = svg.find('\n').map(|i| i + 1).unwrap_or(0);
-    let after_line2 = svg[after_line1..].find('\n')
+    let after_line2 = svg[after_line1..]
+        .find('\n')
         .map(|i| after_line1 + i + 1)
         .unwrap_or(svg.len());
     let body = &svg[after_line2..];
@@ -211,7 +236,7 @@ fn assemble_multipage(
     conv_opts: svg2pdf::ConversionOptions,
 ) -> Result<Vec<u8>> {
     let mut alloc = Ref::new(1);
-    let catalog_ref   = alloc.bump();
+    let catalog_ref = alloc.bump();
     let page_tree_ref = alloc.bump();
 
     struct TileInfo {
@@ -236,11 +261,13 @@ fn assemble_multipage(
         let mut map = std::collections::HashMap::new();
         let renumbered = chunk.renumber(|old| {
             let new = *map.entry(old).or_insert_with(|| alloc.bump());
-            if old == xobj_orig { xobj_new = new; }
+            if old == xobj_orig {
+                xobj_new = new;
+            }
             new
         });
 
-        let page_ref    = alloc.bump();
+        let page_ref = alloc.bump();
         let content_ref = alloc.bump();
 
         infos.push(TileInfo {
@@ -289,8 +316,8 @@ fn assemble_multipage(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{compute_scope, parse_str};
     use crate::layout::run_layout;
+    use crate::parser::{compute_scope, parse_str};
 
     const GEDCOM: &str = "\
 0 HEAD
@@ -341,7 +368,11 @@ mod tests {
             p
         };
         let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();
-        assert!(bytes.len() > 100, "PDF output suspiciously small: {} bytes", bytes.len());
+        assert!(
+            bytes.len() > 100,
+            "PDF output suspiciously small: {} bytes",
+            bytes.len()
+        );
     }
 
     #[test]
@@ -367,7 +398,7 @@ mod tests {
         prefs.layout.layout_type = "simple".into();
         prefs.output.paper.size = "A4".into();
         prefs.output.paper.orientation = "portrait".into();
-        prefs.output.poster.rows    = 1;
+        prefs.output.poster.rows = 1;
         prefs.output.poster.columns = 2;
         prefs.output.poster.overlap_mm = 10.0;
         let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();
@@ -383,12 +414,15 @@ mod tests {
         prefs.layout.layout_type = "simple".into();
         prefs.output.paper.size = "A4".into();
         prefs.output.paper.orientation = "portrait".into();
-        prefs.output.poster.rows    = 1;
+        prefs.output.poster.rows = 1;
         prefs.output.poster.columns = 2;
         prefs.output.poster.overlap_mm = 10.0;
         prefs.output.poster.alignment_lines = true;
         let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();
-        assert!(bytes.len() > 500, "PDF with alignment lines unexpectedly small");
+        assert!(
+            bytes.len() > 500,
+            "PDF with alignment lines unexpectedly small"
+        );
         assert!(bytes.starts_with(b"%PDF-"));
     }
 
@@ -421,7 +455,7 @@ mod tests {
         prefs.layout.layout_type = "boxed_couples".into();
         prefs.output.paper.size = "A4".into();
         prefs.output.paper.orientation = "portrait".into();
-        prefs.output.poster.rows      = 2;
+        prefs.output.poster.rows = 2;
         prefs.output.poster.columns = 2;
         prefs.output.poster.overlap_mm = 10.0;
         let bytes = render_to_bytes(&make_layout(), &prefs).unwrap();

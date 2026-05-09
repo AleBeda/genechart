@@ -21,13 +21,13 @@
 //! 4. After all descendants are placed, [`compact_pass`] closes sibling gaps in
 //!    a top-down sweep so left-packed siblings move right without cascading overlaps.
 
-use anyhow::Result;
-use crate::parser::genrep::{Genrep, Individual};
-use crate::preferences::Prefs;
 use super::Layout;
 use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
-use std::collections::HashMap;
+use crate::parser::genrep::{Genrep, Individual};
+use crate::preferences::Prefs;
 use crate::util::matches_direction;
+use anyhow::Result;
+use std::collections::HashMap;
 
 /// Layout geometry for a placed descendant box.
 #[derive(Debug, Clone)]
@@ -81,7 +81,8 @@ fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
         None => return vec![],
     };
     let sorted_fams = sort_families_by_date(ind, genrep);
-    sorted_fams.iter()
+    sorted_fams
+        .iter()
         .filter_map(|fam_id| genrep.get_family(fam_id))
         .filter(|fam| fam.in_scope)
         .filter_map(|fam| {
@@ -101,7 +102,8 @@ fn children_with_spouse(ind_id: &str, spouse_id: &str, genrep: &Genrep) -> Vec<S
         Some(i) => i,
         None => return vec![],
     };
-    ind.fams.iter()
+    ind.fams
+        .iter()
         .filter_map(|fam_id| genrep.get_family(fam_id))
         .filter(|fam| {
             fam.husband_id.as_deref() == Some(spouse_id)
@@ -210,7 +212,8 @@ fn get_right_envelope(
     let mut result = vec![geo.x + geo.width / 2.0];
 
     let spouses = prune_spouses(ind_id, genrep);
-    let child_ids: Vec<String> = spouses.iter()
+    let child_ids: Vec<String> = spouses
+        .iter()
         .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
         .filter(|cid| out.contains_key(cid.as_str()))
         .collect();
@@ -274,11 +277,15 @@ fn build_family_geo(
     box_w: f64,
     box_w2: f64,
 ) -> Option<BoxedCouplesGeo> {
-    let is_placed = |id: &&str| matches!(
-        out.get(*id).and_then(|i| i.geo.as_ref()),
-        Some(BoxedCouplesGeo::Individual(_))
-    );
-    let parent_id = fam.husband_id.as_deref()
+    let is_placed = |id: &&str| {
+        matches!(
+            out.get(*id).and_then(|i| i.geo.as_ref()),
+            Some(BoxedCouplesGeo::Individual(_))
+        )
+    };
+    let parent_id = fam
+        .husband_id
+        .as_deref()
         .filter(is_placed)
         .or_else(|| fam.wife_id.as_deref().filter(is_placed))?;
     let parent = out.get(parent_id).unwrap(); // safe: is_placed guarantees presence
@@ -291,7 +298,10 @@ fn build_family_geo(
 
     let conn_out_y = geo.y + box_h / 2.0;
     let (conn_out1_x, conn_out2_x) = if has_spouse2 {
-        (geo.x - (box_w2 / 2.0 - box_w / 2.0), geo.x + (box_w2 / 2.0 - box_w / 2.0))
+        (
+            geo.x - (box_w2 / 2.0 - box_w / 2.0),
+            geo.x + (box_w2 / 2.0 - box_w / 2.0),
+        )
     } else {
         (geo.x, geo.x)
     };
@@ -398,7 +408,14 @@ fn compact_siblings(
 
         if safe_shift > 1e-6 {
             for j in 0..=i {
-                shift_subtree(&children[j], safe_shift, generation, genrep, out, global_right);
+                shift_subtree(
+                    &children[j],
+                    safe_shift,
+                    generation,
+                    genrep,
+                    out,
+                    global_right,
+                );
             }
         }
     }
@@ -445,7 +462,14 @@ fn compact_pass(
         if all_children.is_empty() {
             return;
         }
-        compact_siblings(&all_children, generation + 1, gap_w, genrep, out, global_right);
+        compact_siblings(
+            &all_children,
+            generation + 1,
+            gap_w,
+            genrep,
+            out,
+            global_right,
+        );
         for child_id in all_children {
             compact_pass(&child_id, genrep, out, global_right, gap_w, generation + 1);
         }
@@ -509,7 +533,19 @@ fn place_descendants(
             if children.is_empty() {
                 x_default
             } else {
-                place_descendants(genrep, &children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
+                place_descendants(
+                    genrep,
+                    &children[0],
+                    &env_left[1..],
+                    generation + 1,
+                    box_w,
+                    box_h,
+                    box_w2,
+                    gap_w,
+                    gap_h,
+                    out,
+                    global_right,
+                );
                 for i in 1..children.len() {
                     let right_env = fill_env_from_global(
                         get_right_envelope(&children[i - 1], genrep, out),
@@ -517,7 +553,19 @@ fn place_descendants(
                         global_right,
                         (generation as usize) + 1,
                     );
-                    place_descendants(genrep, &children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
+                    place_descendants(
+                        genrep,
+                        &children[i],
+                        &right_env,
+                        generation + 1,
+                        box_w,
+                        box_h,
+                        box_w2,
+                        gap_w,
+                        gap_h,
+                        out,
+                        global_right,
+                    );
                 }
 
                 let n = children.len();
@@ -541,12 +589,25 @@ fn place_descendants(
         _ => {
             let children1 = children_with_spouse(ind_id, &spouses[0], genrep);
             let children2 = children_with_spouse(ind_id, &spouses[1], genrep);
-            let all_children: Vec<String> = children1.iter().chain(children2.iter()).cloned().collect();
+            let all_children: Vec<String> =
+                children1.iter().chain(children2.iter()).cloned().collect();
 
             if all_children.is_empty() {
                 x_default
             } else {
-                place_descendants(genrep, &all_children[0], &env_left[1..], generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
+                place_descendants(
+                    genrep,
+                    &all_children[0],
+                    &env_left[1..],
+                    generation + 1,
+                    box_w,
+                    box_h,
+                    box_w2,
+                    gap_w,
+                    gap_h,
+                    out,
+                    global_right,
+                );
                 for i in 1..all_children.len() {
                     let right_env = fill_env_from_global(
                         get_right_envelope(&all_children[i - 1], genrep, out),
@@ -554,7 +615,19 @@ fn place_descendants(
                         global_right,
                         (generation as usize) + 1,
                     );
-                    place_descendants(genrep, &all_children[i], &right_env, generation + 1, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
+                    place_descendants(
+                        genrep,
+                        &all_children[i],
+                        &right_env,
+                        generation + 1,
+                        box_w,
+                        box_h,
+                        box_w2,
+                        gap_w,
+                        gap_h,
+                        out,
+                        global_right,
+                    );
                 }
 
                 let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
@@ -586,7 +659,10 @@ fn place_descendants(
         conn_in_x: x,
         conn_in_y: y - box_h / 2.0,
     };
-    out.insert(ind_id.to_string(), copy_individual(ind, Some(BoxedCouplesGeo::Individual(geo))));
+    out.insert(
+        ind_id.to_string(),
+        copy_individual(ind, Some(BoxedCouplesGeo::Individual(geo))),
+    );
     if (generation as usize) < global_right.len() {
         let right_edge = x + width / 2.0;
         global_right[generation as usize] = global_right[generation as usize].max(right_edge);
@@ -610,7 +686,19 @@ fn place_ancestors(
     global_right: &mut Vec<f64>,
 ) {
     // TODO: implement true ancestors traversal (walk famc, place parents above the child)
-    place_descendants(genrep, ind_id, env_left, generation, box_w, box_h, box_w2, gap_w, gap_h, out, global_right);
+    place_descendants(
+        genrep,
+        ind_id,
+        env_left,
+        generation,
+        box_w,
+        box_h,
+        box_w2,
+        gap_w,
+        gap_h,
+        out,
+        global_right,
+    );
 }
 
 pub struct BoxedCouplesLayout;
@@ -618,11 +706,7 @@ pub struct BoxedCouplesLayout;
 impl Layout for BoxedCouplesLayout {
     type Geo = BoxedCouplesGeo;
 
-    fn compute(
-        &self,
-        genrep: &Genrep,
-        prefs: &Prefs,
-    ) -> Result<Genrep<BoxedCouplesGeo>> {
+    fn compute(&self, genrep: &Genrep, prefs: &Prefs) -> Result<Genrep<BoxedCouplesGeo>> {
         let dir = prefs.scope.direction.to_lowercase();
 
         if matches_direction(&dir, "forest") {
@@ -652,17 +736,52 @@ impl Layout for BoxedCouplesLayout {
         let gap_w = bc.gap_width;
         let gap_h = bc.gap_height;
 
-        let max_gen = if prefs.scope.generations == 0 { 100 } else { prefs.scope.generations };
+        let max_gen = if prefs.scope.generations == 0 {
+            100
+        } else {
+            prefs.scope.generations
+        };
         let env_left: Vec<f64> = vec![0.0; max_gen as usize];
         let mut global_right: Vec<f64> = vec![0.0; max_gen as usize];
 
         let mut individuals: HashMap<String, Individual<BoxedCouplesGeo>> = HashMap::new();
 
         if matches_direction(&dir, "ancestors") {
-            place_ancestors(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
+            place_ancestors(
+                genrep,
+                root_id,
+                &env_left,
+                0,
+                box_w,
+                box_h,
+                box_w2,
+                gap_w,
+                gap_h,
+                &mut individuals,
+                &mut global_right,
+            );
         } else {
-            place_descendants(genrep, root_id, &env_left, 0, box_w, box_h, box_w2, gap_w, gap_h, &mut individuals, &mut global_right);
-            compact_pass(root_id, genrep, &mut individuals, &mut global_right, gap_w, 0);
+            place_descendants(
+                genrep,
+                root_id,
+                &env_left,
+                0,
+                box_w,
+                box_h,
+                box_w2,
+                gap_w,
+                gap_h,
+                &mut individuals,
+                &mut global_right,
+            );
+            compact_pass(
+                root_id,
+                genrep,
+                &mut individuals,
+                &mut global_right,
+                gap_w,
+                0,
+            );
         }
 
         // Add in-scope spouses of placed individuals to the output
@@ -678,7 +797,9 @@ impl Layout for BoxedCouplesLayout {
             }
         }
 
-        let families = copy_families(genrep, |fam| build_family_geo(fam, &individuals, box_h, box_w, box_w2));
+        let families = copy_families(genrep, |fam| {
+            build_family_geo(fam, &individuals, box_h, box_w, box_w2)
+        });
 
         Ok(Genrep {
             individuals,
@@ -696,123 +817,147 @@ mod tests {
         let mut individuals = HashMap::new();
         let mut families = HashMap::new();
 
-        individuals.insert("I1".to_string(), Individual {
-            id: "I1".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F1".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I1".to_string(),
+            Individual {
+                id: "I1".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F1".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I2".to_string(), Individual {
-            id: "I2".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F1".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I2".to_string(),
+            Individual {
+                id: "I2".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F1".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I3".to_string(), Individual {
-            id: "I3".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F2".to_string()],
-            famc: vec!["F1".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I3".to_string(),
+            Individual {
+                id: "I3".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F2".to_string()],
+                famc: vec!["F1".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I4".to_string(), Individual {
-            id: "I4".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F1".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I4".to_string(),
+            Individual {
+                id: "I4".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F1".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I5".to_string(), Individual {
-            id: "I5".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F1".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I5".to_string(),
+            Individual {
+                id: "I5".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F1".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I6".to_string(), Individual {
-            id: "I6".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F2".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I6".to_string(),
+            Individual {
+                id: "I6".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F2".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F1".to_string(), crate::parser::genrep::Family {
-            id: "F1".to_string(),
-            husband_id: Some("I1".to_string()),
-            wife_id: Some("I2".to_string()),
-            children_ids: vec!["I3".to_string(), "I4".to_string(), "I5".to_string()],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F1".to_string(),
+            crate::parser::genrep::Family {
+                id: "F1".to_string(),
+                husband_id: Some("I1".to_string()),
+                wife_id: Some("I2".to_string()),
+                children_ids: vec!["I3".to_string(), "I4".to_string(), "I5".to_string()],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F2".to_string(), crate::parser::genrep::Family {
-            id: "F2".to_string(),
-            husband_id: Some("I3".to_string()),
-            wife_id: None,
-            children_ids: vec!["I6".to_string()],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F2".to_string(),
+            crate::parser::genrep::Family {
+                id: "F2".to_string(),
+                husband_id: Some("I3".to_string()),
+                wife_id: None,
+                children_ids: vec!["I6".to_string()],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
         Genrep {
             individuals,
@@ -833,134 +978,161 @@ mod tests {
         let mut individuals = HashMap::new();
         let mut families = HashMap::new();
 
-        individuals.insert("I10".to_string(), Individual {
-            id: "I10".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F10".to_string(), "F11".to_string(), "F12".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I10".to_string(),
+            Individual {
+                id: "I10".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F10".to_string(), "F11".to_string(), "F12".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I11".to_string(), Individual {
-            id: "I11".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F10".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I11".to_string(),
+            Individual {
+                id: "I11".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F10".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I12".to_string(), Individual {
-            id: "I12".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F11".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I12".to_string(),
+            Individual {
+                id: "I12".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F11".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I13".to_string(), Individual {
-            id: "I13".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F12".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I13".to_string(),
+            Individual {
+                id: "I13".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F12".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I14".to_string(), Individual {
-            id: "I14".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F10".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I14".to_string(),
+            Individual {
+                id: "I14".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F10".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I15".to_string(), Individual {
-            id: "I15".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F11".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I15".to_string(),
+            Individual {
+                id: "I15".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F11".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F10".to_string(), crate::parser::genrep::Family {
-            id: "F10".to_string(),
-            husband_id: Some("I10".to_string()),
-            wife_id: Some("I11".to_string()),
-            children_ids: vec!["I14".to_string()],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F10".to_string(),
+            crate::parser::genrep::Family {
+                id: "F10".to_string(),
+                husband_id: Some("I10".to_string()),
+                wife_id: Some("I11".to_string()),
+                children_ids: vec!["I14".to_string()],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F11".to_string(), crate::parser::genrep::Family {
-            id: "F11".to_string(),
-            husband_id: Some("I10".to_string()),
-            wife_id: Some("I12".to_string()),
-            children_ids: vec!["I15".to_string()],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F11".to_string(),
+            crate::parser::genrep::Family {
+                id: "F11".to_string(),
+                husband_id: Some("I10".to_string()),
+                wife_id: Some("I12".to_string()),
+                children_ids: vec!["I15".to_string()],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F12".to_string(), crate::parser::genrep::Family {
-            id: "F12".to_string(),
-            husband_id: Some("I10".to_string()),
-            wife_id: Some("I13".to_string()),
-            children_ids: vec![],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F12".to_string(),
+            crate::parser::genrep::Family {
+                id: "F12".to_string(),
+                husband_id: Some("I10".to_string()),
+                wife_id: Some("I13".to_string()),
+                children_ids: vec![],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
         Genrep {
             individuals,
@@ -973,91 +1145,109 @@ mod tests {
         let mut individuals = HashMap::new();
         let mut families = HashMap::new();
 
-        individuals.insert("I20".to_string(), Individual {
-            id: "I20".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F20".to_string(), "F21".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I20".to_string(),
+            Individual {
+                id: "I20".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F20".to_string(), "F21".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I21".to_string(), Individual {
-            id: "I21".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F20".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I21".to_string(),
+            Individual {
+                id: "I21".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F20".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I22".to_string(), Individual {
-            id: "I22".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec!["F21".to_string()],
-            famc: vec![],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I22".to_string(),
+            Individual {
+                id: "I22".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec!["F21".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        individuals.insert("I23".to_string(), Individual {
-            id: "I23".to_string(),
-            given: None,
-            surname: None,
-            sex: None,
-            birth: None,
-            death: None,
-            fams: vec![],
-            famc: vec!["F21".to_string()],
-            alt_name: None,
-            name_heb: None,
-            living: None,
-            in_scope: true,
-            geo: None,
-        });
+        individuals.insert(
+            "I23".to_string(),
+            Individual {
+                id: "I23".to_string(),
+                given: None,
+                surname: None,
+                sex: None,
+                birth: None,
+                death: None,
+                fams: vec![],
+                famc: vec!["F21".to_string()],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F20".to_string(), crate::parser::genrep::Family {
-            id: "F20".to_string(),
-            husband_id: Some("I20".to_string()),
-            wife_id: Some("I21".to_string()),
-            children_ids: vec![],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F20".to_string(),
+            crate::parser::genrep::Family {
+                id: "F20".to_string(),
+                husband_id: Some("I20".to_string()),
+                wife_id: Some("I21".to_string()),
+                children_ids: vec![],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
-        families.insert("F21".to_string(), crate::parser::genrep::Family {
-            id: "F21".to_string(),
-            husband_id: Some("I20".to_string()),
-            wife_id: Some("I22".to_string()),
-            children_ids: vec!["I23".to_string()],
-            marriage: None,
-            jmar: None,
-            in_scope: true,
-            geo: None,
-        });
+        families.insert(
+            "F21".to_string(),
+            crate::parser::genrep::Family {
+                id: "F21".to_string(),
+                husband_id: Some("I20".to_string()),
+                wife_id: Some("I22".to_string()),
+                children_ids: vec!["I23".to_string()],
+                marriage: None,
+                jmar: None,
+                in_scope: true,
+                geo: None,
+            },
+        );
 
         Genrep {
             individuals,
@@ -1083,45 +1273,62 @@ mod tests {
 
     #[test]
     fn no_overlap_generation_1() {
-        let result = BoxedCouplesLayout.compute(&test_genrep(), &desc_prefs()).unwrap();
+        let result = BoxedCouplesLayout
+            .compute(&test_genrep(), &desc_prefs())
+            .unwrap();
         let prefs = desc_prefs();
         let box_w = prefs.layout.boxed_couples.box_width;
         let gap_w = prefs.layout.boxed_couples.gap_width;
 
         let mut xs: Vec<f64> = ["I3", "I4", "I5"]
-            .iter().map(|id| ind_geo(&result, id).x).collect();
+            .iter()
+            .map(|id| ind_geo(&result, id).x)
+            .collect();
         xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         for pair in xs.windows(2) {
             assert!(
                 pair[1] - pair[0] >= box_w + gap_w - 1e-6,
-                "siblings overlap: gap = {}", pair[1] - pair[0]
+                "siblings overlap: gap = {}",
+                pair[1] - pair[0]
             );
         }
     }
 
     #[test]
     fn root_centred_over_children() {
-        let result = BoxedCouplesLayout.compute(&test_genrep(), &desc_prefs()).unwrap();
+        let result = BoxedCouplesLayout
+            .compute(&test_genrep(), &desc_prefs())
+            .unwrap();
         let x_root = ind_geo(&result, "I1").x;
         let x_mid = ind_geo(&result, "I4").x;
-        assert!((x_root - x_mid).abs() < 1e-6,
-            "root x={x_root} should equal middle child (I4) x={x_mid}");
+        assert!(
+            (x_root - x_mid).abs() < 1e-6,
+            "root x={x_root} should equal middle child (I4) x={x_mid}"
+        );
     }
 
     #[test]
     fn connector_points() {
-        let result = BoxedCouplesLayout.compute(&test_genrep(), &desc_prefs()).unwrap();
+        let result = BoxedCouplesLayout
+            .compute(&test_genrep(), &desc_prefs())
+            .unwrap();
         let box_h = desc_prefs().layout.boxed_couples.box_height;
 
         let g1 = ind_geo(&result, "I1");
         let g3 = ind_geo(&result, "I3");
 
-        assert!((g1.conn_in_y - (0.0 - box_h / 2.0)).abs() < 1e-6,
-            "I1 conn_in_y wrong: got {}", g1.conn_in_y);
+        assert!(
+            (g1.conn_in_y - (0.0 - box_h / 2.0)).abs() < 1e-6,
+            "I1 conn_in_y wrong: got {}",
+            g1.conn_in_y
+        );
 
-        assert!((g3.conn_in_y - (g3.y - box_h / 2.0)).abs() < 1e-6,
-            "I3 conn_in_y wrong: got {}", g3.conn_in_y);
+        assert!(
+            (g3.conn_in_y - (g3.y - box_h / 2.0)).abs() < 1e-6,
+            "I3 conn_in_y wrong: got {}",
+            g3.conn_in_y
+        );
     }
 
     #[test]
@@ -1136,7 +1343,9 @@ mod tests {
 
     #[test]
     fn two_spouse_only_second_has_children() {
-        let result = BoxedCouplesLayout.compute(&two_spouse_genrep(), &two_spouse_prefs()).unwrap();
+        let result = BoxedCouplesLayout
+            .compute(&two_spouse_genrep(), &two_spouse_prefs())
+            .unwrap();
         let prefs = two_spouse_prefs();
         let box_w = prefs.layout.boxed_couples.box_width;
         let box_w2 = prefs.layout.boxed_couples.box_width_2_spouses;
@@ -1155,45 +1364,71 @@ mod tests {
     fn build_family_geo_wife_is_placed_individual() {
         // Family where WIFE is the placed descendant, HUSBAND is a spouse (None geo).
         let mut out: HashMap<String, Individual<BoxedCouplesGeo>> = HashMap::new();
-        out.insert("I_wife".to_string(), Individual {
-            id: "I_wife".to_string(),
-            given: None, surname: None, sex: Some('F'),
-            birth: None, death: None,
-            fams: vec!["F1".to_string()], famc: vec![],
-            alt_name: None, name_heb: None, living: None,
-            in_scope: true,
-            geo: Some(BoxedCouplesGeo::Individual(IndividualGeo {
-                x: 0.0, y: 0.0, width: 220.0, height: 160.0,
-                conn_in_x: 0.0, conn_in_y: -80.0,
-            })),
-        });
-        out.insert("I_husb".to_string(), Individual {
-            id: "I_husb".to_string(),
-            given: None, surname: None, sex: Some('M'),
-            birth: None, death: None,
-            fams: vec!["F1".to_string()], famc: vec![],
-            alt_name: None, name_heb: None, living: None,
-            in_scope: true,
-            geo: None, // spouse — not placed
-        });
+        out.insert(
+            "I_wife".to_string(),
+            Individual {
+                id: "I_wife".to_string(),
+                given: None,
+                surname: None,
+                sex: Some('F'),
+                birth: None,
+                death: None,
+                fams: vec!["F1".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: Some(BoxedCouplesGeo::Individual(IndividualGeo {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 220.0,
+                    height: 160.0,
+                    conn_in_x: 0.0,
+                    conn_in_y: -80.0,
+                })),
+            },
+        );
+        out.insert(
+            "I_husb".to_string(),
+            Individual {
+                id: "I_husb".to_string(),
+                given: None,
+                surname: None,
+                sex: Some('M'),
+                birth: None,
+                death: None,
+                fams: vec!["F1".to_string()],
+                famc: vec![],
+                alt_name: None,
+                name_heb: None,
+                living: None,
+                in_scope: true,
+                geo: None, // spouse — not placed
+            },
+        );
         let fam = crate::parser::genrep::Family {
             id: "F1".to_string(),
             husband_id: Some("I_husb".to_string()),
             wife_id: Some("I_wife".to_string()),
             children_ids: vec![],
-            marriage: None, jmar: None,
+            marriage: None,
+            jmar: None,
             in_scope: true,
             geo: None,
         };
         let result = build_family_geo(&fam, &out, 160.0, 220.0, 480.0);
-        assert!(result.is_some(), "build_family_geo must succeed when wife is the placed individual");
+        assert!(
+            result.is_some(),
+            "build_family_geo must succeed when wife is the placed individual"
+        );
     }
 
     #[test]
     fn test_last_sibling_children_placed() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         const GED: &str = "\
 0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
@@ -1222,7 +1457,9 @@ mod tests {
             _ => panic!("expected BoxedCouples layout"),
         };
 
-        let i6 = bc.individuals.get("I6")
+        let i6 = bc
+            .individuals
+            .get("I6")
             .expect("I6 (grandchild of last sibling) must be placed");
         assert!(
             matches!(i6.geo, Some(BoxedCouplesGeo::Individual(_))),
@@ -1232,9 +1469,9 @@ mod tests {
 
     #[test]
     fn test_global_right_tight_packing() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         // I1+I2 → [I3, I4(leaf), I5]
         // I3+I6 → [I7]          (single gen-2 grandchild under I3)
@@ -1281,9 +1518,9 @@ mod tests {
             _ => panic!("{id} not placed as Individual"),
         };
 
-        let x4  = get_x("I4");
-        let x5  = get_x("I5");
-        let x9  = get_x("I9");
+        let x4 = get_x("I4");
+        let x5 = get_x("I5");
+        let x9 = get_x("I9");
         let x10 = get_x("I10");
 
         let box_w = prefs.layout.boxed_couples.box_width;
@@ -1307,9 +1544,9 @@ mod tests {
 
     #[test]
     fn test_compact_left_packed_siblings() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         // I1+I2 → [I3(leaf), I4(leaf), I5]
         // I5+I6 → [I7, I8, I9, I10, I11, I12] (6 grandchildren)
@@ -1364,19 +1601,23 @@ mod tests {
         let x_i5 = get_x("I5");
 
         let gap_45 = x_i5 - box_w / 2.0 - (x_i4 + box_w / 2.0);
-        assert!((gap_45 - gap_w).abs() < 1e-6,
-            "gap I4→I5 should equal gap_w after compact pass (leaves), got {gap_45}");
+        assert!(
+            (gap_45 - gap_w).abs() < 1e-6,
+            "gap I4→I5 should equal gap_w after compact pass (leaves), got {gap_45}"
+        );
 
         let gap_34 = x_i4 - box_w / 2.0 - (x_i3 + box_w / 2.0);
-        assert!((gap_34 - gap_w).abs() < 1e-6,
-            "relative gap I3→I4 must be preserved, got {gap_34}");
+        assert!(
+            (gap_34 - gap_w).abs() < 1e-6,
+            "relative gap I3→I4 must be preserved, got {gap_34}"
+        );
     }
 
     #[test]
     fn test_compact_no_subtree_overlap() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         // I1+I2 → [I3(leaf), I4, I5]
         // I4+I6 → [I7(leaf)]
@@ -1434,7 +1675,7 @@ mod tests {
         let x_i9 = get_x("I9");
 
         let right_edge_i7 = x_i7 + box_w / 2.0;
-        let left_edge_i9  = x_i9 - box_w / 2.0;
+        let left_edge_i9 = x_i9 - box_w / 2.0;
         assert!(
             right_edge_i7 <= left_edge_i9 - gap_w + 1e-6,
             "compact moved I7 into I9 at depth 1: I7.right={right_edge_i7}, I9.left={left_edge_i9}"
@@ -1443,9 +1684,9 @@ mod tests {
 
     #[test]
     fn test_compact_no_second_cousin_overlap() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         // Reproduces the bedarida.ged pattern where bottom-up compact cascades into
         // second-cousin overlap.
@@ -1517,7 +1758,7 @@ mod tests {
         let x_i16 = get_x("I16");
 
         let right_edge_i13 = x_i13 + box_w / 2.0;
-        let left_edge_i16  = x_i16 - box_w / 2.0;
+        let left_edge_i16 = x_i16 - box_w / 2.0;
         assert!(
             right_edge_i13 <= left_edge_i16 - gap_w + 1e-6,
             "second-cousin overlap: I13.right={right_edge_i13}, I16.left={left_edge_i16}"
@@ -1531,9 +1772,9 @@ mod tests {
     /// Children of F11 (1850) should appear before children of F10 (1900).
     #[test]
     fn test_spouses_sorted_by_marriage_date() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         const GED: &str = "\
 0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
@@ -1580,9 +1821,11 @@ mod tests {
         };
 
         // I5 (earlier marriage 1850) should be placed to the left of I4 (later marriage 1900)
-        assert!(x_i5 < x_i4,
+        assert!(
+            x_i5 < x_i4,
             "Child of earlier marriage (I5, 1850) should be left of later marriage child (I4, 1900): \
-            I4.x={x_i4}, I5.x={x_i5}");
+            I4.x={x_i4}, I5.x={x_i5}"
+        );
     }
 
     // ── 2-spouse compact isolation test ──
@@ -1599,9 +1842,9 @@ mod tests {
     /// to close the gap before I5, breaking the connector invariant.
     #[test]
     fn test_two_spouse_compact_isolates_groups() {
+        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
-        use crate::layout::{run_layout, LayoutOutput};
 
         const GED: &str = "\
 0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
@@ -1652,7 +1895,7 @@ mod tests {
         let x_i4 = get_x("I4");
         let x_i5 = get_x("I5");
 
-        let box_w  = prefs.layout.boxed_couples.box_width;
+        let box_w = prefs.layout.boxed_couples.box_width;
         let box_w2 = prefs.layout.boxed_couples.box_width_2_spouses;
         let conn_offset = box_w2 / 2.0 - box_w / 2.0; // 140.0
 

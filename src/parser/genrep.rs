@@ -28,9 +28,9 @@ pub struct Individual<G = ()> {
     pub death: Option<Event>,
     pub fams: Vec<String>,
     pub famc: Vec<String>,
-    pub alt_name: Option<String>,   // NAM2: alternate name
-    pub name_heb: Option<String>,   // NAMH: Hebrew/transliterated name
-    pub living: Option<bool>,       // _LIVING: living flag
+    pub alt_name: Option<String>, // NAM2: alternate name
+    pub name_heb: Option<String>, // NAMH: Hebrew/transliterated name
+    pub living: Option<bool>,     // _LIVING: living flag
     pub in_scope: bool,
     pub geo: Option<G>,
 }
@@ -42,7 +42,7 @@ pub struct Family<G = ()> {
     pub wife_id: Option<String>,
     pub children_ids: Vec<String>,
     pub marriage: Option<Event>,
-    pub jmar: Option<String>,       // JMAR: Jewish marriage record reference
+    pub jmar: Option<String>, // JMAR: Jewish marriage record reference
     pub in_scope: bool,
     pub geo: Option<G>,
 }
@@ -62,5 +62,4 @@ impl<G> Genrep<G> {
     pub fn get_family(&self, id: &str) -> Option<&Family<G>> {
         self.families.get(id)
     }
-
 }

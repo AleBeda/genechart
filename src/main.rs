@@ -1,8 +1,8 @@
-mod cli;
-mod preferences;
-mod parser;
-mod layout;
 mod backend;
+mod cli;
+mod layout;
+mod parser;
+mod preferences;
 mod trace;
 mod util;
 
@@ -29,51 +29,78 @@ fn run() -> anyhow::Result<()> {
     let dump_mode = args.prefs.iter().any(|s| s.is_empty());
 
     // Filter out empty strings (dump-mode sentinels) before passing to preferences::load
-    let pref_overrides: Vec<String> = args.prefs.iter()
+    let pref_overrides: Vec<String> = args
+        .prefs
+        .iter()
         .filter(|s| !s.is_empty())
         .cloned()
         .collect();
 
     // 5. Load preferences (merging all sources + --preff file + --pref overrides)
-    let mut prefs = preferences::load(Some(&gedcom_path), args.preff.as_deref(), &pref_overrides, &tracer)?;
+    let mut prefs = preferences::load(
+        Some(&gedcom_path),
+        args.preff.as_deref(),
+        &pref_overrides,
+        &tracer,
+    )?;
 
     // 6. Apply CLI shortcuts (override preference-file values).
     //    Each shortcut that is set emits a trace line so --trace prefs shows
     //    the full resolution chain including command-line flags.
     //    Order: dir → type → output path → root → generations → output type
     {
-        let any = args.dir.is_some() || args.layout_type.is_some()
-            || args.output.is_some() || args.root.is_some()
+        let any = args.dir.is_some()
+            || args.layout_type.is_some()
+            || args.output.is_some()
+            || args.root.is_some()
             || args.generations.is_some()
-            || args.text || args.svg || args.pdf;
+            || args.text
+            || args.svg
+            || args.pdf;
         if any {
             tracer.emit("prefs", "PREF SOURCE <command-line flags>");
         }
 
         if let Some(dir) = &args.dir {
-            tracer.emit("prefs", &format!("PREF OVERRIDE KEY-VALUE scope.direction = \"{dir}\""));
+            tracer.emit(
+                "prefs",
+                &format!("PREF OVERRIDE KEY-VALUE scope.direction = \"{dir}\""),
+            );
             prefs.scope.direction = dir.clone();
         }
 
         if let Some(lt) = &args.layout_type {
-            tracer.emit("prefs", &format!("PREF OVERRIDE KEY-VALUE layout.type = \"{lt}\""));
+            tracer.emit(
+                "prefs",
+                &format!("PREF OVERRIDE KEY-VALUE layout.type = \"{lt}\""),
+            );
             prefs.layout.layout_type = lt.clone();
         }
 
         if let Some(out_path) = &args.output {
-            tracer.emit("prefs", &format!(
-                "PREF OVERRIDE KEY-VALUE output.path = \"{}\"", out_path.display()
-            ));
+            tracer.emit(
+                "prefs",
+                &format!(
+                    "PREF OVERRIDE KEY-VALUE output.path = \"{}\"",
+                    out_path.display()
+                ),
+            );
             prefs.output.path = out_path.display().to_string();
         }
 
         if let Some(root) = &args.root {
-            tracer.emit("prefs", &format!("PREF OVERRIDE KEY-VALUE scope.root = \"{root}\""));
+            tracer.emit(
+                "prefs",
+                &format!("PREF OVERRIDE KEY-VALUE scope.root = \"{root}\""),
+            );
             prefs.scope.root = root.clone();
         }
 
         if let Some(gens) = args.generations {
-            tracer.emit("prefs", &format!("PREF OVERRIDE KEY-VALUE scope.generations = {gens}"));
+            tracer.emit(
+                "prefs",
+                &format!("PREF OVERRIDE KEY-VALUE scope.generations = {gens}"),
+            );
             prefs.scope.generations = gens;
         }
 
@@ -88,17 +115,21 @@ fn run() -> anyhow::Result<()> {
             tracer.emit("prefs", "PREF OVERRIDE KEY-VALUE output.type = \"pdf\"");
             prefs.output.output_type = "pdf".to_string();
         } else if let Some(out_path) = &args.output {
-            let ext = out_path.extension()
+            let ext = out_path
+                .extension()
                 .and_then(|e| e.to_str())
                 .map(|e| e.to_lowercase());
             let inferred = match ext.as_deref() {
                 Some("txt") => Some("text"),
                 Some("svg") => Some("svg"),
                 Some("pdf") => Some("pdf"),
-                _           => None,
+                _ => None,
             };
             if let Some(t) = inferred {
-                tracer.emit("prefs", &format!("PREF OVERRIDE KEY-VALUE output.type = \"{t}\""));
+                tracer.emit(
+                    "prefs",
+                    &format!("PREF OVERRIDE KEY-VALUE output.type = \"{t}\""),
+                );
                 prefs.output.output_type = t.to_string();
             }
         }

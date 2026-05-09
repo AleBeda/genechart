@@ -1,21 +1,21 @@
 //! SVG back-end (simple and fan layouts).
 
-use anyhow::Result;
 use crate::backend::Renderer;
 use crate::backend::font_metrics;
+use crate::backend::text::{find_marriage, format_event, format_name};
 use crate::layout::LayoutOutput;
-use crate::layout::simple::SimpleGeo;
-use crate::layout::fan::FanGeo;
 use crate::layout::boxed_couples::BoxedCouplesGeo;
 use crate::layout::common::sort_families_by_date;
-use crate::parser::genrep::{Genrep, Individual, Family};
+use crate::layout::fan::FanGeo;
+use crate::layout::simple::SimpleGeo;
+use crate::parser::genrep::{Family, Genrep, Individual};
 use crate::preferences::Prefs;
-use crate::backend::text::{find_marriage, format_event, format_name};
+use anyhow::Result;
 
 // Fallback rendering constants (used when preferences are empty)
 const LINE_HEIGHT: f64 = 18.0;
-const FONT_SIZE:   f64 = 13.0;
-const MARGIN:      f64 = 20.0;
+const FONT_SIZE: f64 = 13.0;
+const MARGIN: f64 = 20.0;
 const FONT_FAMILY: &str = "monospace";
 // Estimated average character width as a fraction of font-size.
 // Used for column-position arithmetic when exact glyph metrics are unavailable.
@@ -24,16 +24,15 @@ const CHAR_WIDTH_RATIO: f64 = 0.6;
 const DOT_LEADER_GAP: f64 = 3.0;
 /// Font-family used for symbol characters rendered in their own <text> element.
 /// Lists only symbol fonts so usvg doesn't try the primary Latin font first.
-const SYMBOL_FONT_FAMILY: &str =
-    "'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif";
+const SYMBOL_FONT_FAMILY: &str = "'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif";
 
 // ── Low-level SVG primitives ──────────────────────────────────────────────────
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn svg_text(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
@@ -51,7 +50,16 @@ fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> Stri
     )
 }
 
-fn svg_rect(x: f64, y: f64, w: f64, h: f64, fill: &str, stroke: &str, sw: f64, radius: f64) -> String {
+fn svg_rect(
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    fill: &str,
+    stroke: &str,
+    sw: f64,
+    radius: f64,
+) -> String {
     format!(
         "  <rect x=\"{x:.1}\" y=\"{y:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" \
          rx=\"{radius:.1}\" ry=\"{radius:.1}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
@@ -104,21 +112,31 @@ fn parsed_font(font_pref: &str) -> (String, f64) {
 /// or `None` when the paper size is absent or unrecognised.
 pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
     let (w, h): (f64, f64) = match prefs.output.paper.size.trim().to_uppercase().as_str() {
-        "A0"     => (841.0, 1189.0),
-        "A1"     => (594.0,  841.0),
-        "A2"     => (420.0,  594.0),
-        "A3"     => (297.0,  420.0),
-        "A4"     => (210.0,  297.0),
-        "A5"     => (148.0,  210.0),
-        "LETTER" => (215.9,  279.4),
+        "A0" => (841.0, 1189.0),
+        "A1" => (594.0, 841.0),
+        "A2" => (420.0, 594.0),
+        "A3" => (297.0, 420.0),
+        "A4" => (210.0, 297.0),
+        "A5" => (148.0, 210.0),
+        "LETTER" => (215.9, 279.4),
         "CUSTOM" => {
             let cw = prefs.output.paper.custom.width;
             let ch = prefs.output.paper.custom.height;
-            if cw > 0.0 && ch > 0.0 { (cw, ch) } else { return None; }
+            if cw > 0.0 && ch > 0.0 {
+                (cw, ch)
+            } else {
+                return None;
+            }
         }
         _ => return None,
     };
-    let landscape = prefs.output.paper.orientation.trim().to_lowercase().starts_with("land");
+    let landscape = prefs
+        .output
+        .paper
+        .orientation
+        .trim()
+        .to_lowercase()
+        .starts_with("land");
     Some(if landscape { (h, w) } else { (w, h) })
 }
 
@@ -126,7 +144,7 @@ pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
 pub(crate) fn hex_color(val: i64) -> String {
     let r = (val >> 8) & 0xF;
     let g = (val >> 4) & 0xF;
-    let b =  val       & 0xF;
+    let b = val & 0xF;
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
 }
 
@@ -152,7 +170,8 @@ fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color:
 /// Latin characters — svg2pdf 0.13 corrupts cross-font text runs in the PDF.
 fn render_mixed_text(
     out: &mut String,
-    x: f64, y: f64,
+    x: f64,
+    y: f64,
     text: &str,
     primary_family: &str,
     font_size: f64,
@@ -163,7 +182,7 @@ fn render_mixed_text(
         return;
     }
 
-    let mut cur_x   = x;
+    let mut cur_x = x;
     let mut seg_start = 0usize;
     let mut in_symbol = (text.chars().next().map_or(0, |c| c as u32)) >= 0x2000;
 
@@ -171,9 +190,13 @@ fn render_mixed_text(
         let is_sym = (c as u32) >= 0x2000;
         if is_sym != in_symbol {
             let seg = &text[seg_start..byte_pos];
-            let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
+            let fam = if in_symbol {
+                SYMBOL_FONT_FAMILY
+            } else {
+                primary_family
+            };
             out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
-            cur_x    += seg.chars().count() as f64 * cw;
+            cur_x += seg.chars().count() as f64 * cw;
             seg_start = byte_pos;
             in_symbol = is_sym;
         }
@@ -181,7 +204,11 @@ fn render_mixed_text(
     // flush final segment
     let seg = &text[seg_start..];
     if !seg.is_empty() {
-        let fam = if in_symbol { SYMBOL_FONT_FAMILY } else { primary_family };
+        let fam = if in_symbol {
+            SYMBOL_FONT_FAMILY
+        } else {
+            primary_family
+        };
         out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
     }
 }
@@ -193,7 +220,8 @@ fn render_mixed_text(
 /// and `weight`.
 fn render_mixed_text_mid_w(
     out: &mut String,
-    cx: f64, y: f64,
+    cx: f64,
+    y: f64,
     text: &str,
     primary_family: &str,
     font_size: f64,
@@ -229,21 +257,28 @@ fn render_mixed_text_mid_w(
 
     // Measure each segment: exact metrics for Latin, char-count estimate for symbols.
     let is_bold = weight == "bold";
-    let seg_widths: Vec<f64> = segments.iter().map(|(seg, is_sym)| {
-        if *is_sym {
-            seg.chars().count() as f64 * cw
-        } else {
-            font_metrics::measure_text_w(seg, base_font, font_size, is_bold)
-                .unwrap_or_else(|| seg.chars().count() as f64 * cw)
-        }
-    }).collect();
+    let seg_widths: Vec<f64> = segments
+        .iter()
+        .map(|(seg, is_sym)| {
+            if *is_sym {
+                seg.chars().count() as f64 * cw
+            } else {
+                font_metrics::measure_text_w(seg, base_font, font_size, is_bold)
+                    .unwrap_or_else(|| seg.chars().count() as f64 * cw)
+            }
+        })
+        .collect();
 
     let total_width: f64 = seg_widths.iter().sum();
     let mut cur_x = cx - total_width / 2.0;
 
     for ((seg, is_sym), &w) in segments.iter().zip(seg_widths.iter()) {
-        let fam = if *is_sym { SYMBOL_FONT_FAMILY } else { primary_family };
-        let wt  = if *is_sym { "normal" } else { weight };
+        let fam = if *is_sym {
+            SYMBOL_FONT_FAMILY
+        } else {
+            primary_family
+        };
+        let wt = if *is_sym { "normal" } else { weight };
         out.push_str(&svg_text_w(cur_x, y, seg, fam, font_size, wt));
         cur_x += w;
     }
@@ -284,7 +319,7 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         "{font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
     );
     let line_height = font_size * (LINE_HEIGHT / FONT_SIZE);
-    let cw          = font_size * CHAR_WIDTH_RATIO; // estimated character width
+    let cw = font_size * CHAR_WIDTH_RATIO; // estimated character width
 
     // Connector style
     let conn_color = hex_color(prefs.output.style.connectors.border);
@@ -295,7 +330,9 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     };
 
     // Collect and sort in-scope individuals by line number.
-    let mut entries: Vec<(&Individual<SimpleGeo>, &SimpleGeo)> = genrep.individuals.values()
+    let mut entries: Vec<(&Individual<SimpleGeo>, &SimpleGeo)> = genrep
+        .individuals
+        .values()
         .filter(|i| i.in_scope)
         .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
         .collect();
@@ -309,8 +346,8 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         );
     }
 
-    let max_line   = entries.iter().map(|(_, g)| g.line).max().unwrap_or(0);
-    let indent_px  = (prefs.layout.simple.indent as f64 * cw).max(cw);
+    let max_line = entries.iter().map(|(_, g)| g.line).max().unwrap_or(0);
+    let indent_px = (prefs.layout.simple.indent as f64 * cw).max(cw);
 
     // Width (in px) of the generation-number prefix "N. " for a given generation.
     // Uses exact font metrics when the font is available, falls back to estimate.
@@ -333,68 +370,104 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // ── Compute pixel column positions ────────────────────────────────────────
 
     // Right edge of the widest name (considering indent + gen-prefix + name).
-    let max_name_end: f64 = entries.iter().map(|(indi, geo)| {
-        MARGIN
-            + geo.indent as f64 * indent_px
-            + gen_prefix_w(geo.generation)
-            + text_w(&format_name(indi, prefs))
-    }).fold(0.0_f64, f64::max);
+    let max_name_end: f64 = entries
+        .iter()
+        .map(|(indi, geo)| {
+            MARGIN
+                + geo.indent as f64 * indent_px
+                + gen_prefix_w(geo.generation)
+                + text_w(&format_name(indi, prefs))
+        })
+        .fold(0.0_f64, f64::max);
 
     let gap = cw * 2.0; // column gap
 
     let max_birth_w: f64 = if prefs.show.birth {
-        entries.iter()
-            .filter_map(|(i, _)| i.birth.as_ref().and_then(|e| {
-                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-            }))
+        entries
+            .iter()
+            .filter_map(|(i, _)| {
+                i.birth.as_ref().and_then(|e| {
+                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+                })
+            })
             .map(|s| text_w(&s))
             .fold(0.0_f64, f64::max)
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     let max_death_w: f64 = if prefs.show.death {
-        entries.iter()
-            .filter_map(|(i, _)| i.death.as_ref().and_then(|e| {
-                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-            }))
+        entries
+            .iter()
+            .filter_map(|(i, _)| {
+                i.death.as_ref().and_then(|e| {
+                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+                })
+            })
             .map(|s| text_w(&s))
             .fold(0.0_f64, f64::max)
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     let max_marr_w: f64 = if prefs.show.marriage {
-        entries.iter()
+        entries
+            .iter()
             .filter_map(|(i, g)| {
                 if g.is_spouse {
                     find_marriage(i, genrep).and_then(|e| {
                         format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
                     })
-                } else { None }
+                } else {
+                    None
+                }
             })
             .map(|s| text_w(&s))
             .fold(0.0_f64, f64::max)
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
-    let x_birth    = max_name_end + gap;
-    let x_death    = x_birth  + max_birth_w + gap;
-    let x_marriage = x_death  + max_death_w + gap;
+    let x_birth = max_name_end + gap;
+    let x_death = x_birth + max_birth_w + gap;
+    let x_marriage = x_death + max_death_w + gap;
 
-    let content_right = if max_marr_w  > 0.0 { x_marriage + max_marr_w  }
-                   else if max_death_w > 0.0 { x_death    + max_death_w }
-                   else if max_birth_w > 0.0 { x_birth    + max_birth_w }
-                   else                      { max_name_end };
+    let content_right = if max_marr_w > 0.0 {
+        x_marriage + max_marr_w
+    } else if max_death_w > 0.0 {
+        x_death + max_death_w
+    } else if max_birth_w > 0.0 {
+        x_birth + max_birth_w
+    } else {
+        max_name_end
+    };
     let content_w = content_right + MARGIN;
 
     // Title / copyright
     let title_text = expand_title_template(&prefs.output.text.title, prefs);
     let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
-    let title_line_h = if title_text.is_empty() { 0.0 } else { title_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let title_line_h = if title_text.is_empty() {
+        0.0
+    } else {
+        title_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
     let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
     let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
-    let copy_line_h = if copy_text.is_empty() { 0.0 } else { copy_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let copy_line_h = if copy_text.is_empty() {
+        0.0
+    } else {
+        copy_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
     // chart_top_offset: how far down the chart body starts (to make room for title)
-    let chart_top_offset = if title_text.is_empty() { 0.0 } else { title_line_h };
-    let content_h = MARGIN * 2.0 + chart_top_offset + (max_line + 1) as f64 * line_height + copy_line_h;
+    let chart_top_offset = if title_text.is_empty() {
+        0.0
+    } else {
+        title_line_h
+    };
+    let content_h =
+        MARGIN * 2.0 + chart_top_offset + (max_line + 1) as f64 * line_height + copy_line_h;
 
     // ── Build SVG ─────────────────────────────────────────────────────────────
 
@@ -407,43 +480,61 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // ── Title ─────────────────────────────────────────────────────────────────
     if !title_text.is_empty() {
         let y = MARGIN + title_font_size; // baseline of title line
-        out.push_str(&svg_text(MARGIN, y, &title_text, &title_font_family, title_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &title_text,
+            &title_font_family,
+            title_font_size,
+        ));
     }
 
     // ── Copyright ─────────────────────────────────────────────────────────────
     if !copy_text.is_empty() {
         let y = MARGIN + chart_top_offset + (max_line + 1) as f64 * line_height + copy_font_size;
-        out.push_str(&svg_text(MARGIN, y, &copy_text, &copy_font_family, copy_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &copy_text,
+            &copy_font_family,
+            copy_font_size,
+        ));
     }
 
     let dot_leaders = prefs.output.style.dot_leaders;
 
     // Compute font weights for descendants and spouses
     let descendant_weight = font_weight_from_pref(&prefs.output.style.fonts.descendant);
-    let spouse_weight     = font_weight_from_pref(&prefs.output.style.fonts.spouse);
+    let spouse_weight = font_weight_from_pref(&prefs.output.style.fonts.spouse);
 
     // ── Text elements ─────────────────────────────────────────────────────────
     for (indi, geo) in &entries {
-        let y      = MARGIN + chart_top_offset + (geo.line as f64 + 1.0) * line_height;
+        let y = MARGIN + chart_top_offset + (geo.line as f64 + 1.0) * line_height;
         let x_base = MARGIN + geo.indent as f64 * indent_px;
-        let gpw    = gen_prefix_w(geo.generation);
+        let gpw = gen_prefix_w(geo.generation);
 
         // Pre-compute event strings (needed for dot-leader geometry).
         let birth_s: Option<String> = if prefs.show.birth {
             indi.birth.as_ref().and_then(|e| {
                 format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
             })
-        } else { None };
+        } else {
+            None
+        };
         let death_s: Option<String> = if prefs.show.death {
             indi.death.as_ref().and_then(|e| {
                 format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
             })
-        } else { None };
+        } else {
+            None
+        };
         let marr_s: Option<String> = if geo.is_spouse && prefs.show.marriage {
             find_marriage(indi, genrep).and_then(|e| {
                 format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
             })
-        } else { None };
+        } else {
+            None
+        };
 
         // Generation number (non-spouse only)
         if prefs.show.generation_num && !geo.is_spouse {
@@ -454,8 +545,19 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
         // Name — rendered as a single element so sex symbols (♂/♀) at the end
         // stay flush with the name text (no positioning gap from our width estimate).
         let name = format_name(indi, prefs);
-        let name_weight = if geo.is_spouse { spouse_weight } else { descendant_weight };
-        out.push_str(&svg_text_w(x_base + gpw, y, &name, &font_family, font_size, name_weight));
+        let name_weight = if geo.is_spouse {
+            spouse_weight
+        } else {
+            descendant_weight
+        };
+        out.push_str(&svg_text_w(
+            x_base + gpw,
+            y,
+            &name,
+            &font_family,
+            font_size,
+            name_weight,
+        ));
         let mut last_x = x_base + gpw + text_w(&name);
 
         // Birth (with optional dot leader)
@@ -469,14 +571,18 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
         // Death (with optional dot leader)
         if let Some(ref s) = death_s {
-            if dot_leaders { dot_leader(&mut out, last_x, x_death, y, font_size, &conn_color); }
+            if dot_leaders {
+                dot_leader(&mut out, last_x, x_death, y, font_size, &conn_color);
+            }
             render_mixed_text(&mut out, x_death, y, s, &font_family, font_size, cw);
             last_x = x_death + text_w(s);
         }
 
         // Marriage — spouse only (with optional dot leader)
         if let Some(ref s) = marr_s {
-            if dot_leaders { dot_leader(&mut out, last_x, x_marriage, y, font_size, &conn_color); }
+            if dot_leaders {
+                dot_leader(&mut out, last_x, x_marriage, y, font_size, &conn_color);
+            }
             render_mixed_text(&mut out, x_marriage, y, s, &font_family, font_size, cw);
         }
     }
@@ -487,21 +593,23 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     // y: lines stop at the TOP / BOTTOM of the child row so they do not cross the name.
     for (_, geo) in &entries {
         // x at the parent's name-start (parent is one generation deeper = geo.generation + 1).
-        let x_conn = MARGIN
-            + (geo.indent + 1) as f64 * indent_px
-            + gen_prefix_w(geo.generation + 1);
+        let x_conn =
+            MARGIN + (geo.indent + 1) as f64 * indent_px + gen_prefix_w(geo.generation + 1);
         let y_ctr = |line: usize| MARGIN + chart_top_offset + (line as f64 + 0.5) * line_height;
-        let y_top = |line: usize| MARGIN + chart_top_offset +  line as f64         * line_height;
-        let y_bot = |line: usize| MARGIN + chart_top_offset + (line as f64 + 1.0)  * line_height;
+        let y_top = |line: usize| MARGIN + chart_top_offset + line as f64 * line_height;
+        let y_bot = |line: usize| MARGIN + chart_top_offset + (line as f64 + 1.0) * line_height;
 
         if !geo.connectors_above.is_empty() {
             let first = *geo.connectors_above.iter().min().unwrap();
             if first > 0 {
                 let father_line = first - 1;
                 out.push_str(&svg_line(
-                    x_conn, y_ctr(father_line),
-                    x_conn, y_top(geo.line),
-                    &conn_color, conn_width,
+                    x_conn,
+                    y_ctr(father_line),
+                    x_conn,
+                    y_top(geo.line),
+                    &conn_color,
+                    conn_width,
                 ));
             }
         }
@@ -510,9 +618,12 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
             let last = *geo.connectors_below.iter().max().unwrap();
             let mother_line = last + 1;
             out.push_str(&svg_line(
-                x_conn, y_bot(geo.line),
-                x_conn, y_ctr(mother_line),
-                &conn_color, conn_width,
+                x_conn,
+                y_bot(geo.line),
+                x_conn,
+                y_ctr(mother_line),
+                &conn_color,
+                conn_width,
             ));
         }
     }
@@ -523,13 +634,16 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
 
 // ── Fan layout rendering ──────────────────────────────────────────────────────
 
-
 fn placed_geo<'a>(
     ind_id: &str,
     genrep: &'a crate::parser::genrep::Genrep<crate::layout::boxed_couples::BoxedCouplesGeo>,
 ) -> Option<&'a crate::layout::boxed_couples::IndividualGeo> {
     genrep.individuals.get(ind_id)?.geo.as_ref().and_then(|g| {
-        if let BoxedCouplesGeo::Individual(geo) = g { Some(geo) } else { None }
+        if let BoxedCouplesGeo::Individual(geo) = g {
+            Some(geo)
+        } else {
+            None
+        }
     })
 }
 
@@ -577,50 +691,100 @@ fn render_bc_spouse_section(
     if prefs.show.marriage {
         if let Some(marr) = &fam.marriage {
             if let Some(marr_str) = format_event(
-                &prefs.format.marriage, marr.date.as_ref(), marr.place.as_deref(),
+                &prefs.format.marriage,
+                marr.date.as_ref(),
+                marr.place.as_deref(),
             ) {
-                render_mixed_text_mid_w(out, cx, marr_y, &marr_str,
-                    date_font_family, date_font_size, "normal", date_cw);
+                render_mixed_text_mid_w(
+                    out,
+                    cx,
+                    marr_y,
+                    &marr_str,
+                    date_font_family,
+                    date_font_size,
+                    "normal",
+                    date_cw,
+                );
             }
         }
     }
 
     if prefs.show.id {
         let fam_id_text = fam_id.trim_start_matches('@').trim_end_matches('@');
-        out.push_str(&svg_text_colored(id_x, marr_y, fam_id_text,
-            id_font_family, id_font_size, id_color));
+        out.push_str(&svg_text_colored(
+            id_x,
+            marr_y,
+            fam_id_text,
+            id_font_family,
+            id_font_size,
+            id_color,
+        ));
     }
 
     let sp_name_y = sp_name_top_y + spacing.name_above + font_size;
-    render_mixed_text_mid_w(out, cx, sp_name_y, &format_name(sp, prefs),
-        font_family, font_size, spouse_weight, cw);
+    render_mixed_text_mid_w(
+        out,
+        cx,
+        sp_name_y,
+        &format_name(sp, prefs),
+        font_family,
+        font_size,
+        spouse_weight,
+        cw,
+    );
 
     if prefs.show.id {
         let sp_id_text = sp.id.trim_start_matches('@').trim_end_matches('@');
-        out.push_str(&svg_text_colored(id_x, sp_name_y, sp_id_text,
-            id_font_family, id_font_size, id_color));
+        out.push_str(&svg_text_colored(
+            id_x,
+            sp_name_y,
+            sp_id_text,
+            id_font_family,
+            id_font_size,
+            id_color,
+        ));
     }
 
     let mut y = sp_name_y;
     if prefs.show.birth {
         if let Some(ref birth) = sp.birth {
-            if let Some(s) = format_event(&prefs.format.birth,
-                birth.date.as_ref(), birth.place.as_deref())
-            {
+            if let Some(s) = format_event(
+                &prefs.format.birth,
+                birth.date.as_ref(),
+                birth.place.as_deref(),
+            ) {
                 y += spacing.date_above + date_font_size;
-                render_mixed_text_mid_w(out, cx, y, &s,
-                    date_font_family, date_font_size, "normal", date_cw);
+                render_mixed_text_mid_w(
+                    out,
+                    cx,
+                    y,
+                    &s,
+                    date_font_family,
+                    date_font_size,
+                    "normal",
+                    date_cw,
+                );
             }
         }
     }
     if prefs.show.death {
         if let Some(ref death) = sp.death {
-            if let Some(s) = format_event(&prefs.format.death,
-                death.date.as_ref(), death.place.as_deref())
-            {
+            if let Some(s) = format_event(
+                &prefs.format.death,
+                death.date.as_ref(),
+                death.place.as_deref(),
+            ) {
                 y += spacing.date_above + date_font_size;
-                render_mixed_text_mid_w(out, cx, y, &s,
-                    date_font_family, date_font_size, "normal", date_cw);
+                render_mixed_text_mid_w(
+                    out,
+                    cx,
+                    y,
+                    &s,
+                    date_font_family,
+                    date_font_size,
+                    "normal",
+                    date_cw,
+                );
             }
         }
     }
@@ -631,19 +795,24 @@ fn render_boxed_couples(
     prefs: &Prefs,
 ) -> String {
     // Step 1: Collect placed individuals
-    let placed: Vec<(&str, &crate::layout::boxed_couples::IndividualGeo)> = genrep.individuals.iter()
+    let placed: Vec<(&str, &crate::layout::boxed_couples::IndividualGeo)> = genrep
+        .individuals
+        .iter()
         .filter(|(_, ind)| ind.in_scope)
         .filter_map(|(id, ind)| {
             if let Some(BoxedCouplesGeo::Individual(ref g)) = ind.geo {
                 Some((id.as_str(), g))
-            } else { None }
+            } else {
+                None
+            }
         })
         .collect();
 
     if placed.is_empty() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                 <svg xmlns=\"http://www.w3.org/2000/svg\" \
-                width=\"100\" height=\"100\"></svg>\n".into();
+                width=\"100\" height=\"100\"></svg>\n"
+            .into();
     }
 
     // Step 2: Compute canvas bounds
@@ -660,15 +829,17 @@ fn render_boxed_couples(
             "{date_font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
         )
     };
-    let date_font_size = if date_font_size <= 0.0 { font_size } else { date_font_size };
+    let date_font_size = if date_font_size <= 0.0 {
+        font_size
+    } else {
+        date_font_size
+    };
 
     let (id_font_family_base, id_font_size) = parsed_font(&prefs.output.style.fonts.id);
     let id_font_family = if id_font_family_base.trim().is_empty() {
         font_family.clone()
     } else {
-        format!(
-            "{id_font_family_base}, Courier New, monospace"
-        )
+        format!("{id_font_family_base}, Courier New, monospace")
     };
     let id_color = hex_color(prefs.output.style.text.id);
     let descendant_weight = font_weight_from_pref(&prefs.output.style.fonts.descendant);
@@ -679,63 +850,96 @@ fn render_boxed_couples(
     let bc = &prefs.layout.boxed_couples;
     let spacing = &prefs.output.style.spacing.boxed_couples;
 
-    let canvas_min_x = placed.iter().map(|(_, g)| g.x - g.width / 2.0).fold(f64::INFINITY, f64::min);
+    let canvas_min_x = placed
+        .iter()
+        .map(|(_, g)| g.x - g.width / 2.0)
+        .fold(f64::INFINITY, f64::min);
 
     let to_svg_x = |lx: f64| lx - canvas_min_x + MARGIN;
 
     // Title / copyright
     let title_text = expand_title_template(&prefs.output.text.title, prefs);
     let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
-    let title_line_h = if title_text.is_empty() { 0.0 } else { title_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let title_line_h = if title_text.is_empty() {
+        0.0
+    } else {
+        title_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
     let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
     let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
-    let copy_line_h = if copy_text.is_empty() { 0.0 } else { copy_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let copy_line_h = if copy_text.is_empty() {
+        0.0
+    } else {
+        copy_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
-    let chart_top_offset = if title_text.is_empty() { 0.0 } else { title_line_h };
+    let chart_top_offset = if title_text.is_empty() {
+        0.0
+    } else {
+        title_line_h
+    };
 
-    let root_pos_bottom = prefs.layout.root_pos.is_empty()
-        || prefs.layout.root_pos.starts_with("bot");
+    let root_pos_bottom =
+        prefs.layout.root_pos.is_empty() || prefs.layout.root_pos.starts_with("bot");
 
     let (to_svg_y, content_h): (Box<dyn Fn(f64) -> f64>, f64) = if root_pos_bottom {
         // Natural: deepest generation at SVG top, root at SVG bottom
-        let canvas_min_y = placed.iter()
+        let canvas_min_y = placed
+            .iter()
             .map(|(_, g)| g.y - g.height / 2.0)
             .fold(f64::INFINITY, f64::min);
         let c_min = canvas_min_y;
         let to_svg_y_rb = move |ly: f64| ly - c_min + MARGIN + chart_top_offset;
-        let root_box_top       = to_svg_y_rb(
-            placed.iter().map(|(_, g)| g.y + g.height / 2.0).fold(f64::NEG_INFINITY, f64::max)
+        let root_box_top = to_svg_y_rb(
+            placed
+                .iter()
+                .map(|(_, g)| g.y + g.height / 2.0)
+                .fold(f64::NEG_INFINITY, f64::max),
         );
         let h = root_box_top + MARGIN + copy_line_h;
         (Box::new(to_svg_y_rb), h)
     } else {
         // Flipped: root at SVG top
-        let canvas_max_y = placed.iter()
+        let canvas_max_y = placed
+            .iter()
             .map(|(_, g)| g.y + g.height / 2.0)
             .fold(f64::NEG_INFINITY, f64::max);
         let c_max = canvas_max_y;
         let to_svg_y_top = move |ly: f64| c_max - ly + MARGIN + chart_top_offset;
         let lowest_box_bottom = to_svg_y_top(
-            placed.iter().map(|(_, g)| g.y - g.height / 2.0).fold(f64::INFINITY, f64::min)
+            placed
+                .iter()
+                .map(|(_, g)| g.y - g.height / 2.0)
+                .fold(f64::INFINITY, f64::min),
         );
         let h = lowest_box_bottom + MARGIN + copy_line_h;
         (Box::new(to_svg_y_top), h)
     };
 
-    let content_w = placed.iter().map(|(_, g)| to_svg_x(g.x + g.width / 2.0)).fold(0.0_f64, f64::max) + MARGIN;
+    let content_w = placed
+        .iter()
+        .map(|(_, g)| to_svg_x(g.x + g.width / 2.0))
+        .fold(0.0_f64, f64::max)
+        + MARGIN;
 
     let conn_color = hex_color(prefs.output.style.connectors.border);
     let conn_width = if prefs.output.style.connectors.width > 0.0 {
         prefs.output.style.connectors.width
-    } else { 1.0 };
+    } else {
+        1.0
+    };
 
     let box_fill = if prefs.output.style.boxes.background != 0 {
         hex_color(prefs.output.style.boxes.background)
-    } else { "white".to_string() };
+    } else {
+        "white".to_string()
+    };
     let box_stroke = if prefs.output.style.boxes.border != 0 {
         hex_color(prefs.output.style.boxes.border)
-    } else { "black".to_string() };
+    } else {
+        "black".to_string()
+    };
     let box_sw = if prefs.output.style.boxes.width > 0.0 {
         prefs.output.style.boxes.width
     } else {
@@ -754,18 +958,31 @@ fn render_boxed_couples(
     // Step 4: Title and copyright
     if !title_text.is_empty() {
         let y = MARGIN + title_font_size;
-        out.push_str(&svg_text(MARGIN, y, &title_text, &title_font_family, title_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &title_text,
+            &title_font_family,
+            title_font_size,
+        ));
     }
 
     if !copy_text.is_empty() {
         let y = MARGIN + chart_top_offset + (total_h - copy_line_h - MARGIN);
-        out.push_str(&svg_text(MARGIN, y, &copy_text, &copy_font_family, copy_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &copy_text,
+            &copy_font_family,
+            copy_font_size,
+        ));
     }
 
     // Step 5: Draw boxes and text
     for (ind_id, geo) in &placed {
         out.push_str(&format!(
-            "<g><g class=\"individual\" id=\"{}\">\n", xml_escape(ind_id)
+            "<g><g class=\"individual\" id=\"{}\">\n",
+            xml_escape(ind_id)
         ));
 
         let box_left_svg = to_svg_x(geo.x - geo.width / 2.0);
@@ -777,15 +994,25 @@ fn render_boxed_couples(
             to_svg_y(geo.y - geo.height / 2.0),
         );
 
-        out.push_str(&svg_rect(box_left_svg, box_visual_top, box_w, box_h,
-                               &box_fill, &box_stroke, box_sw, box_radius));
+        out.push_str(&svg_rect(
+            box_left_svg,
+            box_visual_top,
+            box_w,
+            box_h,
+            &box_fill,
+            &box_stroke,
+            box_sw,
+            box_radius,
+        ));
 
         let ind = &genrep.individuals[*ind_id];
         let sorted_fam_ids = sort_families_by_date(ind, genrep);
-        let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> = sorted_fam_ids.iter()
-            .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
-            .filter(|(_, f)| f.in_scope)
-            .collect();
+        let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> =
+            sorted_fam_ids
+                .iter()
+                .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
+                .filter(|(_, f)| f.in_scope)
+                .collect();
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
         // Three-region box: top (spouse or individual), middle (marriage), bottom (other)
@@ -793,40 +1020,91 @@ fn render_boxed_couples(
         let region_height = (geo.height - bc.spouse_sep_height) / 2.0;
         let top_region_svg = center_svg_y - bc.spouse_sep_height / 2.0 - region_height;
         let bottom_region_svg = center_svg_y + bc.spouse_sep_height / 2.0;
-        let sp_section_top_svg = if root_pos_bottom { top_region_svg } else { bottom_region_svg };
-        let ind_section_top_svg = if root_pos_bottom { bottom_region_svg } else { top_region_svg };
+        let sp_section_top_svg = if root_pos_bottom {
+            top_region_svg
+        } else {
+            bottom_region_svg
+        };
+        let ind_section_top_svg = if root_pos_bottom {
+            bottom_region_svg
+        } else {
+            top_region_svg
+        };
         // Marriage (and family ID) centered vertically in the box
         let marr_y = center_svg_y + date_font_size / 2.0;
 
         if is_two_spouse {
             let left_cx_svg = to_svg_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
-            let right_cx_svg = to_svg_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
+            let right_cx_svg =
+                to_svg_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
             let ind_cx_svg = to_svg_x(geo.x);
 
             // Render individual in centre of wide box
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            render_mixed_text_mid_w(&mut out, ind_cx_svg, name_y, &format_name(ind, prefs), &font_family, font_size, &descendant_weight, cw);
+            render_mixed_text_mid_w(
+                &mut out,
+                ind_cx_svg,
+                name_y,
+                &format_name(ind, prefs),
+                &font_family,
+                font_size,
+                &descendant_weight,
+                cw,
+            );
 
             // Individual ID aligned with name
             if prefs.show.id {
                 let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
-                out.push_str(&svg_text_colored(box_left_svg + 2.0, name_y, ind_id_text, &id_font_family, id_font_size, &id_color));
+                out.push_str(&svg_text_colored(
+                    box_left_svg + 2.0,
+                    name_y,
+                    ind_id_text,
+                    &id_font_family,
+                    id_font_size,
+                    &id_color,
+                ));
             }
 
             let mut y_pos = name_y;
             if prefs.show.birth {
                 if let Some(ref birth) = ind.birth {
-                    if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
+                    if let Some(birth_str) = format_event(
+                        &prefs.format.birth,
+                        birth.date.as_ref(),
+                        birth.place.as_deref(),
+                    ) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_mid_w(&mut out, ind_cx_svg, y_pos, &birth_str, &date_font_family, date_font_size, "normal", date_cw);
+                        render_mixed_text_mid_w(
+                            &mut out,
+                            ind_cx_svg,
+                            y_pos,
+                            &birth_str,
+                            &date_font_family,
+                            date_font_size,
+                            "normal",
+                            date_cw,
+                        );
                     }
                 }
             }
             if prefs.show.death {
                 if let Some(ref death) = ind.death {
-                    if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
+                    if let Some(death_str) = format_event(
+                        &prefs.format.death,
+                        death.date.as_ref(),
+                        death.place.as_deref(),
+                    ) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_mid_w(&mut out, ind_cx_svg, y_pos, &death_str, &date_font_family, date_font_size, "normal", date_cw);
+                        render_mixed_text_mid_w(
+                            &mut out,
+                            ind_cx_svg,
+                            y_pos,
+                            &death_str,
+                            &date_font_family,
+                            date_font_size,
+                            "normal",
+                            date_cw,
+                        );
                     }
                 }
             }
@@ -837,12 +1115,25 @@ fn render_boxed_couples(
                     if let Some(sp1) = genrep.individuals.get(&sp1_id) {
                         let id_x = to_svg_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
                         render_bc_spouse_section(
-                            &mut out, left_cx_svg, id_x, marr_y, sp_section_top_svg,
-                            sp1, fam1, fam1_id,
-                            prefs, &font_family, font_size,
-                            &date_font_family, date_font_size,
-                            &id_font_family, id_font_size, &id_color, &spouse_weight,
-                            cw, date_cw,
+                            &mut out,
+                            left_cx_svg,
+                            id_x,
+                            marr_y,
+                            sp_section_top_svg,
+                            sp1,
+                            fam1,
+                            fam1_id,
+                            prefs,
+                            &font_family,
+                            font_size,
+                            &date_font_family,
+                            date_font_size,
+                            &id_font_family,
+                            id_font_size,
+                            &id_color,
+                            &spouse_weight,
+                            cw,
+                            date_cw,
                         );
                     }
                 }
@@ -852,14 +1143,28 @@ fn render_boxed_couples(
             if let Some((fam2_id, fam2)) = spouses.get(1) {
                 if let Some(sp2_id) = spouse_id_from_family(ind_id, fam2) {
                     if let Some(sp2) = genrep.individuals.get(&sp2_id) {
-                        let id_x = to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
+                        let id_x =
+                            to_svg_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
                         render_bc_spouse_section(
-                            &mut out, right_cx_svg, id_x, marr_y, sp_section_top_svg,
-                            sp2, fam2, fam2_id,
-                            prefs, &font_family, font_size,
-                            &date_font_family, date_font_size,
-                            &id_font_family, id_font_size, &id_color, &spouse_weight,
-                            cw, date_cw,
+                            &mut out,
+                            right_cx_svg,
+                            id_x,
+                            marr_y,
+                            sp_section_top_svg,
+                            sp2,
+                            fam2,
+                            fam2_id,
+                            prefs,
+                            &font_family,
+                            font_size,
+                            &date_font_family,
+                            date_font_size,
+                            &id_font_family,
+                            id_font_size,
+                            &id_color,
+                            &spouse_weight,
+                            cw,
+                            date_cw,
                         );
                     }
                 }
@@ -868,28 +1173,70 @@ fn render_boxed_couples(
             // Single spouse or no spouse
             let section_cx = to_svg_x(geo.x);
             let name_y = ind_section_top_svg + spacing.name_above + font_size;
-            render_mixed_text_mid_w(&mut out, section_cx, name_y, &format_name(ind, prefs), &font_family, font_size, &descendant_weight, cw);
+            render_mixed_text_mid_w(
+                &mut out,
+                section_cx,
+                name_y,
+                &format_name(ind, prefs),
+                &font_family,
+                font_size,
+                &descendant_weight,
+                cw,
+            );
 
             // Individual ID aligned with name
             if prefs.show.id {
                 let ind_id_text = ind.id.trim_start_matches('@').trim_end_matches('@');
-                out.push_str(&svg_text_colored(box_left_svg + 2.0, name_y, ind_id_text, &id_font_family, id_font_size, &id_color));
+                out.push_str(&svg_text_colored(
+                    box_left_svg + 2.0,
+                    name_y,
+                    ind_id_text,
+                    &id_font_family,
+                    id_font_size,
+                    &id_color,
+                ));
             }
 
             let mut y_pos = name_y;
             if prefs.show.birth {
                 if let Some(ref birth) = ind.birth {
-                    if let Some(birth_str) = format_event(&prefs.format.birth, birth.date.as_ref(), birth.place.as_deref()) {
+                    if let Some(birth_str) = format_event(
+                        &prefs.format.birth,
+                        birth.date.as_ref(),
+                        birth.place.as_deref(),
+                    ) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_mid_w(&mut out, section_cx, y_pos, &birth_str, &date_font_family, date_font_size, "normal", date_cw);
+                        render_mixed_text_mid_w(
+                            &mut out,
+                            section_cx,
+                            y_pos,
+                            &birth_str,
+                            &date_font_family,
+                            date_font_size,
+                            "normal",
+                            date_cw,
+                        );
                     }
                 }
             }
             if prefs.show.death {
                 if let Some(ref death) = ind.death {
-                    if let Some(death_str) = format_event(&prefs.format.death, death.date.as_ref(), death.place.as_deref()) {
+                    if let Some(death_str) = format_event(
+                        &prefs.format.death,
+                        death.date.as_ref(),
+                        death.place.as_deref(),
+                    ) {
                         y_pos += spacing.date_above + date_font_size;
-                        render_mixed_text_mid_w(&mut out, section_cx, y_pos, &death_str, &date_font_family, date_font_size, "normal", date_cw);
+                        render_mixed_text_mid_w(
+                            &mut out,
+                            section_cx,
+                            y_pos,
+                            &death_str,
+                            &date_font_family,
+                            date_font_size,
+                            "normal",
+                            date_cw,
+                        );
                     }
                 }
             }
@@ -898,12 +1245,25 @@ fn render_boxed_couples(
                 if let Some(sp_id) = spouse_id_from_family(ind_id, fam) {
                     if let Some(sp) = genrep.individuals.get(&sp_id) {
                         render_bc_spouse_section(
-                            &mut out, section_cx, box_left_svg + 2.0, marr_y, sp_section_top_svg,
-                            sp, fam, fam_id,
-                            prefs, &font_family, font_size,
-                            &date_font_family, date_font_size,
-                            &id_font_family, id_font_size, &id_color, &spouse_weight,
-                            cw, date_cw,
+                            &mut out,
+                            section_cx,
+                            box_left_svg + 2.0,
+                            marr_y,
+                            sp_section_top_svg,
+                            sp,
+                            fam,
+                            fam_id,
+                            prefs,
+                            &font_family,
+                            font_size,
+                            &date_font_family,
+                            date_font_size,
+                            &id_font_family,
+                            id_font_size,
+                            &id_color,
+                            &spouse_weight,
+                            cw,
+                            date_cw,
                         );
                     }
                 }
@@ -914,17 +1274,27 @@ fn render_boxed_couples(
 
     // Step 6: Draw connectors
     for (fam_id, fam) in &genrep.families {
-        if !fam.in_scope { continue }
+        if !fam.in_scope {
+            continue;
+        }
         let fam_geo = match &fam.geo {
             Some(BoxedCouplesGeo::Family(g)) => g,
             _ => continue,
         };
 
-        let parent_id = fam.husband_id.as_deref()
+        let parent_id = fam
+            .husband_id
+            .as_deref()
             .filter(|pid| placed_geo(pid, genrep).is_some())
-            .or_else(|| fam.wife_id.as_deref()
-                .filter(|pid| placed_geo(pid, genrep).is_some()));
-        let parent_id = match parent_id { Some(p) => p, None => continue };
+            .or_else(|| {
+                fam.wife_id
+                    .as_deref()
+                    .filter(|pid| placed_geo(pid, genrep).is_some())
+            });
+        let parent_id = match parent_id {
+            Some(p) => p,
+            None => continue,
+        };
 
         let parent_ind = &genrep.individuals[parent_id];
         let sorted_fams = sort_families_by_date(parent_ind, genrep);
@@ -936,13 +1306,18 @@ fn render_boxed_couples(
             fam_geo.conn_out2_x
         };
 
-        let child_geos: Vec<&crate::layout::boxed_couples::IndividualGeo> = fam.children_ids.iter()
+        let child_geos: Vec<&crate::layout::boxed_couples::IndividualGeo> = fam
+            .children_ids
+            .iter()
             .filter_map(|cid| placed_geo(cid, genrep))
             .collect();
-        if child_geos.is_empty() { continue }
+        if child_geos.is_empty() {
+            continue;
+        }
 
         out.push_str(&format!(
-            "<g><g class=\"connectors\" id=\"fam-{}\">\n", xml_escape(fam_id)
+            "<g><g class=\"connectors\" id=\"fam-{}\">\n",
+            xml_escape(fam_id)
         ));
 
         let parent_geo = placed_geo(parent_id, genrep).unwrap();
@@ -956,12 +1331,16 @@ fn render_boxed_couples(
         let svg_child0_in_y = to_svg_y(child_geos[0].y + child_geos[0].height / 2.0);
         let bar_y = (svg_out_y + svg_child0_in_y) / 2.0;
 
-        out.push_str(&svg_line(svg_out_x, svg_out_y, svg_out_x, bar_y,
-                              &conn_color, conn_width));
+        out.push_str(&svg_line(
+            svg_out_x,
+            svg_out_y,
+            svg_out_x,
+            bar_y,
+            &conn_color,
+            conn_width,
+        ));
 
-        let svg_xs: Vec<f64> = child_geos.iter()
-            .map(|g| to_svg_x(g.conn_in_x))
-            .collect();
+        let svg_xs: Vec<f64> = child_geos.iter().map(|g| to_svg_x(g.conn_in_x)).collect();
 
         // The horizontal bar must span from the parent's exit point to cover all children.
         let mut bar_x0 = svg_out_x;
@@ -969,13 +1348,25 @@ fn render_boxed_couples(
         bar_x0 = bar_x0.min(svg_xs.iter().cloned().fold(f64::INFINITY, f64::min));
         bar_x1 = bar_x1.max(svg_xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
 
-        out.push_str(&svg_line(bar_x0, bar_y, bar_x1, bar_y,
-                              &conn_color, conn_width));
+        out.push_str(&svg_line(
+            bar_x0,
+            bar_y,
+            bar_x1,
+            bar_y,
+            &conn_color,
+            conn_width,
+        ));
 
         for (child_geo, &svg_cx) in child_geos.iter().zip(svg_xs.iter()) {
             let svg_in_y = to_svg_y(child_geo.y + child_geo.height / 2.0);
-            out.push_str(&svg_line(svg_cx, bar_y, svg_cx, svg_in_y,
-                                  &conn_color, conn_width));
+            out.push_str(&svg_line(
+                svg_cx,
+                bar_y,
+                svg_cx,
+                svg_in_y,
+                &conn_color,
+                conn_width,
+            ));
         }
 
         out.push_str("</g></g>\n");
@@ -995,26 +1386,36 @@ fn wedge_path(cx: f64, cy: f64, geo: &FanGeo) -> String {
     let ri = geo.radius_inner;
     let ro = geo.radius_outer;
 
-    let ox0 = cx + ro * a0.cos();  let oy0 = cy - ro * a0.sin();
-    let ox1 = cx + ro * a1.cos();  let oy1 = cy - ro * a1.sin();
+    let ox0 = cx + ro * a0.cos();
+    let oy0 = cy - ro * a0.sin();
+    let ox1 = cx + ro * a1.cos();
+    let oy1 = cy - ro * a1.sin();
 
     let laf = if geo.angle_span >= 180.0 { 1 } else { 0 };
 
     if ri < 1.0 {
-        format!("M {cx:.1} {cy:.1} L {ox0:.1} {oy0:.1} \
-                 A {ro:.1} {ro:.1} 0 {laf} 0 {ox1:.1} {oy1:.1} Z")
+        format!(
+            "M {cx:.1} {cy:.1} L {ox0:.1} {oy0:.1} \
+                 A {ro:.1} {ro:.1} 0 {laf} 0 {ox1:.1} {oy1:.1} Z"
+        )
     } else {
-        let ix0 = cx + ri * a0.cos();  let iy0 = cy - ri * a0.sin();
-        let ix1 = cx + ri * a1.cos();  let iy1 = cy - ri * a1.sin();
-        format!("M {ox0:.1} {oy0:.1} \
+        let ix0 = cx + ri * a0.cos();
+        let iy0 = cy - ri * a0.sin();
+        let ix1 = cx + ri * a1.cos();
+        let iy1 = cy - ri * a1.sin();
+        format!(
+            "M {ox0:.1} {oy0:.1} \
                  A {ro:.1} {ro:.1} 0 {laf} 0 {ox1:.1} {oy1:.1} \
                  L {ix1:.1} {iy1:.1} \
-                 A {ri:.1} {ri:.1} 0 {laf} 1 {ix0:.1} {iy0:.1} Z")
+                 A {ri:.1} {ri:.1} 0 {laf} 1 {ix0:.1} {iy0:.1} Z"
+        )
     }
 }
 
 fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
-    let max_radius = genrep.individuals.values()
+    let max_radius = genrep
+        .individuals
+        .values()
         .filter_map(|i| i.geo.as_ref())
         .map(|g| g.radius_outer)
         .fold(0.0_f64, f64::max);
@@ -1022,7 +1423,8 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
     if max_radius < 1.0 {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                 <svg xmlns=\"http://www.w3.org/2000/svg\" \
-                width=\"100\" height=\"100\"></svg>\n".into();
+                width=\"100\" height=\"100\"></svg>\n"
+            .into();
     }
 
     let (font_family, font_size) = parsed_font(&prefs.output.style.fonts.names);
@@ -1030,11 +1432,19 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
     // Title / copyright
     let title_text = expand_title_template(&prefs.output.text.title, prefs);
     let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
-    let title_line_h = if title_text.is_empty() { 0.0 } else { title_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let title_line_h = if title_text.is_empty() {
+        0.0
+    } else {
+        title_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
     let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
     let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
-    let copy_line_h = if copy_text.is_empty() { 0.0 } else { copy_font_size * (LINE_HEIGHT / FONT_SIZE) };
+    let copy_line_h = if copy_text.is_empty() {
+        0.0
+    } else {
+        copy_font_size * (LINE_HEIGHT / FONT_SIZE)
+    };
 
     let content_w = 2.0 * (max_radius + MARGIN);
     let fan_h = max_radius + 2.0 * MARGIN;
@@ -1052,20 +1462,37 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
     // ── Title ─────────────────────────────────────────────────────────────────
     if !title_text.is_empty() {
         let y = title_font_size; // baseline at top
-        out.push_str(&svg_text(MARGIN, y, &title_text, &title_font_family, title_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &title_text,
+            &title_font_family,
+            title_font_size,
+        ));
     }
 
     // ── Copyright ─────────────────────────────────────────────────────────────
     if !copy_text.is_empty() {
         let y = title_line_h + fan_h + copy_font_size - MARGIN;
-        out.push_str(&svg_text(MARGIN, y, &copy_text, &copy_font_family, copy_font_size));
+        out.push_str(&svg_text(
+            MARGIN,
+            y,
+            &copy_text,
+            &copy_font_family,
+            copy_font_size,
+        ));
     }
 
-    let mut indis: Vec<_> = genrep.individuals.values()
+    let mut indis: Vec<_> = genrep
+        .individuals
+        .values()
         .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
         .collect();
-    indis.sort_by(|(_, a), (_, b)|
-        a.radius_inner.partial_cmp(&b.radius_inner).unwrap_or(std::cmp::Ordering::Equal));
+    indis.sort_by(|(_, a), (_, b)| {
+        a.radius_inner
+            .partial_cmp(&b.radius_inner)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     for (indi, geo) in &indis {
         let path = wedge_path(cx, cy, geo);
@@ -1073,9 +1500,9 @@ fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
             "  <path d=\"{path}\" fill=\"white\" stroke=\"black\" stroke-width=\"0.5\"/>\n"
         ));
 
-        let label  = format_name(indi, prefs);
-        let tx     = cx + geo.x;
-        let ty     = cy - geo.y;
+        let label = format_name(indi, prefs);
+        let tx = cx + geo.x;
+        let ty = cy - geo.y;
         let rotate = 90.0 - geo.angle_center;
         out.push_str(&format!(
             "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \
@@ -1110,9 +1537,9 @@ impl Renderer for SvgRenderer {
 
 pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> {
     match output {
-        LayoutOutput::Simple(genrep)    => Ok(render_simple(genrep, prefs)),
+        LayoutOutput::Simple(genrep) => Ok(render_simple(genrep, prefs)),
         LayoutOutput::BoxedCouples(genrep) => Ok(render_boxed_couples(genrep, prefs)),
-        LayoutOutput::Fan(genrep)       => Ok(render_fan(genrep, prefs)),
+        LayoutOutput::Fan(genrep) => Ok(render_fan(genrep, prefs)),
     }
 }
 
@@ -1121,8 +1548,8 @@ pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{compute_scope, parse_str};
     use crate::layout::run_layout;
+    use crate::parser::{compute_scope, parse_str};
 
     const GEDCOM: &str = "\
 0 HEAD
@@ -1173,9 +1600,9 @@ mod tests {
     fn test_svg_structure() {
         let prefs = simple_prefs();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("<svg "),   "missing <svg: {out}");
-        assert!(out.contains("</svg>"),  "missing </svg: {out}");
-        assert!(out.contains("<text "),  "missing <text: {out}");
+        assert!(out.contains("<svg "), "missing <svg: {out}");
+        assert!(out.contains("</svg>"), "missing </svg: {out}");
+        assert!(out.contains("<text "), "missing <text: {out}");
         assert!(out.contains("viewBox="), "missing viewBox: {out}");
     }
 
@@ -1223,7 +1650,10 @@ mod tests {
         compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
         let layout_out = run_layout(&genrep, &prefs).unwrap();
         let out = render_to_string(&layout_out, &prefs).unwrap();
-        assert!(!out.contains('│'), "SVG must not contain │ bar characters: {out}");
+        assert!(
+            !out.contains('│'),
+            "SVG must not contain │ bar characters: {out}"
+        );
     }
 
     #[test]
@@ -1237,7 +1667,10 @@ mod tests {
         compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
         let layout_out = run_layout(&genrep, &prefs).unwrap();
         let out = render_to_string(&layout_out, &prefs).unwrap();
-        assert!(out.contains("<line "), "connector <line> elements expected: {out}");
+        assert!(
+            out.contains("<line "),
+            "connector <line> elements expected: {out}"
+        );
     }
 
     // ── Paper sizing ──
@@ -1247,10 +1680,16 @@ mod tests {
         let prefs = simple_prefs();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         let width_val: String = out
-            .split("width=\"").nth(1).unwrap_or("")
-            .chars().take_while(|c| *c != '"').collect();
-        assert!(width_val.parse::<f64>().is_ok(),
-            "content-sized width should be a number, got: {width_val:?}");
+            .split("width=\"")
+            .nth(1)
+            .unwrap_or("")
+            .chars()
+            .take_while(|c| *c != '"')
+            .collect();
+        assert!(
+            width_val.parse::<f64>().is_ok(),
+            "content-sized width should be a number, got: {width_val:?}"
+        );
     }
 
     // ── Font prefs ──
@@ -1261,7 +1700,7 @@ mod tests {
         prefs.output.style.fonts.names = "Helvetica 16".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         // Font-family includes the base name plus fallbacks; check for base name presence.
-        assert!(out.contains("Helvetica"),      "custom font family: {out}");
+        assert!(out.contains("Helvetica"), "custom font family: {out}");
         assert!(out.contains("font-size=\"16\""), "custom font size: {out}");
     }
 
@@ -1282,7 +1721,10 @@ mod tests {
         prefs.format.birth = "* {date}".into();
         prefs.output.style.dot_leaders = true;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("stroke-dasharray"), "dot-leader lines expected: {out}");
+        assert!(
+            out.contains("stroke-dasharray"),
+            "dot-leader lines expected: {out}"
+        );
     }
 
     #[test]
@@ -1293,17 +1735,23 @@ mod tests {
         prefs.format.birth = "* {date}".into();
         prefs.output.style.dot_leaders = false;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(!out.contains("stroke-dasharray"), "no dot leaders expected: {out}");
+        assert!(
+            !out.contains("stroke-dasharray"),
+            "no dot leaders expected: {out}"
+        );
     }
 
     // ── Unit helpers ──
 
     #[test]
     fn test_parsed_font() {
-        assert_eq!(parsed_font("Georgia 14"),    ("Georgia".to_string(), 14.0));
-        assert_eq!(parsed_font("Arial Bold 10"), ("Arial Bold".to_string(), 10.0));
-        assert_eq!(parsed_font(""),              (FONT_FAMILY.to_string(), FONT_SIZE));
-        assert_eq!(parsed_font("Courier"),       ("Courier".to_string(), FONT_SIZE));
+        assert_eq!(parsed_font("Georgia 14"), ("Georgia".to_string(), 14.0));
+        assert_eq!(
+            parsed_font("Arial Bold 10"),
+            ("Arial Bold".to_string(), 10.0)
+        );
+        assert_eq!(parsed_font(""), (FONT_FAMILY.to_string(), FONT_SIZE));
+        assert_eq!(parsed_font("Courier"), ("Courier".to_string(), FONT_SIZE));
     }
 
     #[test]
@@ -1339,18 +1787,22 @@ mod tests {
 
         // The ⚭ character must be in a text element that does NOT start with Georgia.
         // SYMBOL_FONT_FAMILY starts with "'Apple Symbols'".
-        let symbol_in_apple = out.lines().any(|l| {
-            l.contains("Apple Symbols") && l.contains("⚭")
-        });
-        assert!(symbol_in_apple,
-            "⚭ should be in a text element using the symbol font: {out}");
+        let symbol_in_apple = out
+            .lines()
+            .any(|l| l.contains("Apple Symbols") && l.contains("⚭"));
+        assert!(
+            symbol_in_apple,
+            "⚭ should be in a text element using the symbol font: {out}"
+        );
 
         // Latin characters ("APR") must not be in a symbol-font element.
-        let latin_in_georgia = out.lines().any(|l| {
-            l.contains("Georgia") && l.contains("APR")
-        });
-        assert!(latin_in_georgia,
-            "Latin text should be in the primary-font element: {out}");
+        let latin_in_georgia = out
+            .lines()
+            .any(|l| l.contains("Georgia") && l.contains("APR"));
+        assert!(
+            latin_in_georgia,
+            "Latin text should be in the primary-font element: {out}"
+        );
     }
 
     #[test]
@@ -1366,9 +1818,11 @@ mod tests {
                 && (l.contains("♂") || l.contains("♀"))
                 && (l.contains("John") || l.contains("Jane") || l.contains("Paul"))
         });
-        assert!(has_combined,
+        assert!(
+            has_combined,
             "name and sex symbol should be in the same <text> element: {}",
-            &out[..out.len().min(500)]);
+            &out[..out.len().min(500)]
+        );
     }
 
     #[test]
@@ -1381,7 +1835,9 @@ mod tests {
         prefs.output.style.fonts.names = "monospace 14".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(out.contains("stroke-dasharray"));
-        let has_leader_line = out.lines().any(|l| l.contains("stroke-dasharray") && l.contains("x1="));
+        let has_leader_line = out
+            .lines()
+            .any(|l| l.contains("stroke-dasharray") && l.contains("x1="));
         assert!(has_leader_line, "no dot leader line found: {out}");
     }
 
@@ -1393,8 +1849,14 @@ mod tests {
         prefs.output.text.title = "My Family Chart".into();
         prefs.output.text.copyright = "© 2026 Alex".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("My Family Chart"), "title should appear in SVG: {out}");
-        assert!(out.contains("© 2026 Alex"),     "copyright should appear in SVG: {out}");
+        assert!(
+            out.contains("My Family Chart"),
+            "title should appear in SVG: {out}"
+        );
+        assert!(
+            out.contains("© 2026 Alex"),
+            "copyright should appear in SVG: {out}"
+        );
     }
 
     #[test]
@@ -1403,7 +1865,10 @@ mod tests {
         prefs.output.text.title = "Chart of {gedcom}".into();
         // prefs.files.gedcom is empty by default → "unknown"
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("Chart of"), "template title should appear in SVG: {out}");
+        assert!(
+            out.contains("Chart of"),
+            "template title should appear in SVG: {out}"
+        );
     }
 
     #[test]
@@ -1417,7 +1882,10 @@ mod tests {
         // Should not inject spurious text for empty title/copyright.
         // Count <text elements: just the three names (John, Jane, Paul).
         let count = out.matches("<text ").count();
-        assert!(count <= 5, "unexpected extra <text elements when title/copyright empty: {out}");
+        assert!(
+            count <= 5,
+            "unexpected extra <text elements when title/copyright empty: {out}"
+        );
     }
 
     // ── Boxed couples layout ──
@@ -1441,10 +1909,10 @@ mod tests {
     fn test_bc_svg_structure() {
         let prefs = bc_prefs();
         let out = render_to_string(&bc_layout(), &prefs).unwrap();
-        assert!(out.contains("<svg "),    "missing <svg");
-        assert!(out.contains("</svg>"),   "missing </svg>");
-        assert!(out.contains("<rect "),   "missing <rect> for boxes");
-        assert!(out.contains("<line "),   "missing <line> for connectors");
+        assert!(out.contains("<svg "), "missing <svg");
+        assert!(out.contains("</svg>"), "missing </svg>");
+        assert!(out.contains("<rect "), "missing <rect> for boxes");
+        assert!(out.contains("<line "), "missing <line> for connectors");
         assert!(out.contains("viewBox="), "missing viewBox");
     }
 
@@ -1463,14 +1931,18 @@ mod tests {
         let mut prefs = simple_prefs();
         prefs.format.individual = "{firstname} {lastname}".into();
         prefs.output.style.fonts.descendant = "bold".into();
-        prefs.output.style.fonts.spouse     = "regular".into();
+        prefs.output.style.fonts.spouse = "regular".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         // Descendant name must carry bold weight
-        assert!(out.contains("font-weight=\"bold\""),
-            "descendant name must have font-weight=bold");
+        assert!(
+            out.contains("font-weight=\"bold\""),
+            "descendant name must have font-weight=bold"
+        );
         // Spouse name must carry normal weight (regular maps to normal)
-        assert!(out.contains("font-weight=\"normal\""),
-            "spouse name must have font-weight=normal");
+        assert!(
+            out.contains("font-weight=\"normal\""),
+            "spouse name must have font-weight=normal"
+        );
     }
 
     #[test]
@@ -1485,7 +1957,10 @@ mod tests {
         // Family ID should appear without @ delimiter
         assert!(out.contains("F1"), "family ID F1 should appear: {out}");
         // IDs should be rendered with fill color (from id_color)
-        assert!(out.contains("fill=\""), "ID text should have fill attribute: {out}");
+        assert!(
+            out.contains("fill=\""),
+            "ID text should have fill attribute: {out}"
+        );
     }
 
     #[test]
@@ -1495,12 +1970,22 @@ mod tests {
         let out = render_to_string(&bc_layout(), &prefs).unwrap();
         // When show.id is false, no svg_text_colored calls are made for IDs
         // so there should be no fill attribute on text elements that contain IDs
-        let id_text_lines = out.lines().filter(|l|
-            l.contains("<text ") && l.contains("fill=\"") &&
-            (l.contains("I1") || l.contains("I2") || l.contains("I3") || l.contains("F1"))
-        ).count();
+        let id_text_lines = out
+            .lines()
+            .filter(|l| {
+                l.contains("<text ")
+                    && l.contains("fill=\"")
+                    && (l.contains("I1")
+                        || l.contains("I2")
+                        || l.contains("I3")
+                        || l.contains("F1"))
+            })
+            .count();
         // Group wrapper IDs (class="individual" id="...") are not counted because they don't have fill
-        assert_eq!(id_text_lines, 0, "no ID text elements should appear when show.id is false: {out}");
+        assert_eq!(
+            id_text_lines, 0,
+            "no ID text elements should appear when show.id is false: {out}"
+        );
     }
 
     #[test]
@@ -1512,19 +1997,24 @@ mod tests {
         let out = render_to_string(&bc_layout(), &prefs).unwrap();
         // Default fonts.descendant = "bold", fonts.spouse = "regular"
         // Descendant names should have font-weight="bold"
-        assert!(out.lines().any(|l|
-            l.contains("font-weight=\"bold\"") && l.contains("John")),
-            "descendant name must have font-weight=bold");
+        assert!(
+            out.lines()
+                .any(|l| l.contains("font-weight=\"bold\"") && l.contains("John")),
+            "descendant name must have font-weight=bold"
+        );
         // Spouse names should have font-weight="normal"
-        assert!(out.lines().any(|l|
-            l.contains("font-weight=\"normal\"") && l.contains("Jane")),
-            "spouse name must have font-weight=normal");
+        assert!(
+            out.lines()
+                .any(|l| l.contains("font-weight=\"normal\"") && l.contains("Jane")),
+            "spouse name must have font-weight=normal"
+        );
     }
 
     #[test]
     fn test_box_height_does_not_shift_text_positions() {
         fn extract_name_y(svg: &str, name: &str) -> Option<f64> {
-            svg.lines().find(|l| l.contains(name) && l.contains("<text "))
+            svg.lines()
+                .find(|l| l.contains(name) && l.contains("<text "))
                 .and_then(|l| {
                     let start = l.find("y=\"")?;
                     let sub = &l[start + 3..];
@@ -1546,12 +2036,24 @@ mod tests {
         let layout_b = run_layout(&genrep, &prefs_b).unwrap();
         let svg_b = render_to_string(&layout_b, &prefs_b).unwrap();
 
-        if let (Some(ya), Some(yb)) = (extract_name_y(&svg_a, "Jane"), extract_name_y(&svg_b, "Jane")) {
-            assert!((ya - yb).abs() < 0.01, "spouse name Y shifted with box_height: {ya} vs {yb}");
+        if let (Some(ya), Some(yb)) = (
+            extract_name_y(&svg_a, "Jane"),
+            extract_name_y(&svg_b, "Jane"),
+        ) {
+            assert!(
+                (ya - yb).abs() < 0.01,
+                "spouse name Y shifted with box_height: {ya} vs {yb}"
+            );
         }
 
-        if let (Some(ya), Some(yb)) = (extract_name_y(&svg_a, "John"), extract_name_y(&svg_b, "John")) {
-            assert!((ya - yb).abs() < 0.01, "individual name Y shifted with box_height: {ya} vs {yb}");
+        if let (Some(ya), Some(yb)) = (
+            extract_name_y(&svg_a, "John"),
+            extract_name_y(&svg_b, "John"),
+        ) {
+            assert!(
+                (ya - yb).abs() < 0.01,
+                "individual name Y shifted with box_height: {ya} vs {yb}"
+            );
         }
     }
 }

@@ -2,7 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "genechart", version, about = "Genealogical chart generator from GEDCOM files")]
+#[command(
+    name = "genechart",
+    version,
+    about = "Genealogical chart generator from GEDCOM files"
+)]
 pub struct Args {
     /// Path to the .ged file (defaults to first *.ged in current directory)
     pub gedcom: Option<PathBuf>,
@@ -62,7 +66,6 @@ pub struct Args {
         default_missing_value = "all",
     )]
     pub trace: Vec<String>,
-
 }
 
 pub fn parse() -> Args {
@@ -149,19 +152,24 @@ mod tests {
     #[test]
     fn output_path_short() {
         let args = Args::try_parse_from(["genechart", "-o", "/tmp/chart.svg"]).unwrap();
-        assert_eq!(args.output.as_deref(), Some(std::path::Path::new("/tmp/chart.svg")));
+        assert_eq!(
+            args.output.as_deref(),
+            Some(std::path::Path::new("/tmp/chart.svg"))
+        );
     }
 
     #[test]
     fn output_path_long() {
         let args = Args::try_parse_from(["genechart", "--output", "/tmp/chart.pdf"]).unwrap();
-        assert_eq!(args.output.as_deref(), Some(std::path::Path::new("/tmp/chart.pdf")));
+        assert_eq!(
+            args.output.as_deref(),
+            Some(std::path::Path::new("/tmp/chart.pdf"))
+        );
     }
 
     #[test]
     fn multiple_prefs() {
-        let args =
-            Args::try_parse_from(["genechart", "--pref", "a=1", "--pref", "b=2"]).unwrap();
+        let args = Args::try_parse_from(["genechart", "--pref", "a=1", "--pref", "b=2"]).unwrap();
         assert_eq!(args.prefs, vec!["a=1", "b=2"]);
     }
 
@@ -169,14 +177,19 @@ mod tests {
     fn bare_pref_dump_mode() {
         let args = Args::try_parse_from(["genechart", "--pref"]).unwrap();
         assert_eq!(args.prefs, vec![""]);
-        assert!(args.prefs.iter().any(|s| s.is_empty()),
-            "bare --pref should set dump mode");
+        assert!(
+            args.prefs.iter().any(|s| s.is_empty()),
+            "bare --pref should set dump mode"
+        );
     }
 
     #[test]
     fn preff_arg() {
         let args = Args::try_parse_from(["genechart", "--preff", "/tmp/my.toml"]).unwrap();
-        assert_eq!(args.preff.as_deref(), Some(std::path::Path::new("/tmp/my.toml")));
+        assert_eq!(
+            args.preff.as_deref(),
+            Some(std::path::Path::new("/tmp/my.toml"))
+        );
     }
 
     #[test]

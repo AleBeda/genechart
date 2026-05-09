@@ -9,7 +9,9 @@ const DEFAULTS_TOML: &str = include_str!("defaults.toml");
 
 // ── Structs ──────────────────────────────────────────────────────────────────
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiagnosticsPrefs {
@@ -25,7 +27,12 @@ pub struct DiagnosticsPrefs {
 
 impl Default for DiagnosticsPrefs {
     fn default() -> Self {
-        Self { errors: true, warnings: false, info: false, debug: false }
+        Self {
+            errors: true,
+            warnings: false,
+            info: false,
+            debug: false,
+        }
     }
 }
 
@@ -367,7 +374,9 @@ pub fn load(
         merge_pref_str(&mut base, pref_str, tracer);
     }
 
-    let prefs: Prefs = base.try_into().context("failed to deserialize preferences")?;
+    let prefs: Prefs = base
+        .try_into()
+        .context("failed to deserialize preferences")?;
     Ok(prefs)
 }
 
@@ -395,11 +404,7 @@ fn merge_file(base: &mut Value, path: &Path, tracer: &crate::trace::Tracer) {
 
 /// Like `merge_file`, but returns an error instead of silently skipping a missing file.
 /// Used for `--preff` where the user explicitly named the file.
-fn merge_file_required(
-    base: &mut Value,
-    path: &Path,
-    tracer: &crate::trace::Tracer,
-) -> Result<()> {
+fn merge_file_required(base: &mut Value, path: &Path, tracer: &crate::trace::Tracer) -> Result<()> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("--preff: failed to read '{}'", path.display()))?;
     let overlay = content
@@ -420,18 +425,22 @@ fn split_pref_assignments(s: &str) -> Vec<&str> {
     let bytes = s.as_bytes();
     for i in 0..bytes.len() {
         match bytes[i] {
-            b'"'  if !in_single => in_double = !in_double,
+            b'"' if !in_single => in_double = !in_double,
             b'\'' if !in_double => in_single = !in_single,
-            b','  if !in_double && !in_single => {
+            b',' if !in_double && !in_single => {
                 let seg = s[start..i].trim();
-                if !seg.is_empty() { result.push(seg); }
+                if !seg.is_empty() {
+                    result.push(seg);
+                }
                 start = i + 1;
             }
             _ => {}
         }
     }
     let last = s[start..].trim();
-    if !last.is_empty() { result.push(last); }
+    if !last.is_empty() {
+        result.push(last);
+    }
     result
 }
 
@@ -454,9 +463,9 @@ fn toml_value_str(val: &Value) -> String {
             format!("\"{escaped}\"")
         }
         Value::Integer(n) => n.to_string(),
-        Value::Float(f)   => f.to_string(),
+        Value::Float(f) => f.to_string(),
         Value::Boolean(b) => b.to_string(),
-        _                 => "[complex]".to_string(),
+        _ => "[complex]".to_string(),
     }
 }
 
@@ -517,10 +526,13 @@ fn merge_toml_tracked(
             // Existing leaf (or table replaced by leaf) → OVERRIDE.
             Some(base_val) => {
                 if !val.is_table() {
-                    tracer.emit("prefs", &format!(
-                        "PREF OVERRIDE KEY-VALUE {full_key} = {}",
-                        toml_value_str(&val)
-                    ));
+                    tracer.emit(
+                        "prefs",
+                        &format!(
+                            "PREF OVERRIDE KEY-VALUE {full_key} = {}",
+                            toml_value_str(&val)
+                        ),
+                    );
                 }
                 *base_val = val;
             }
@@ -533,10 +545,13 @@ fn merge_toml_tracked(
                     merge_toml_tracked(&mut empty, val, &full_key, tracer);
                     base_map.insert(key, empty);
                 } else {
-                    tracer.emit("prefs", &format!(
-                        "PREF          KEY-VALUE {full_key} = {}",
-                        toml_value_str(&val)
-                    ));
+                    tracer.emit(
+                        "prefs",
+                        &format!(
+                            "PREF          KEY-VALUE {full_key} = {}",
+                            toml_value_str(&val)
+                        ),
+                    );
                     base_map.insert(key, val);
                 }
             }
@@ -631,7 +646,12 @@ mod tests {
 
     #[test]
     fn missing_file_silent() {
-        let result = load(Some(Path::new("/nonexistent/path/family.ged")), None, &[], &crate::trace::Tracer::disabled());
+        let result = load(
+            Some(Path::new("/nonexistent/path/family.ged")),
+            None,
+            &[],
+            &crate::trace::Tracer::disabled(),
+        );
         assert!(result.is_ok());
     }
 
@@ -648,7 +668,10 @@ mod tests {
         let tmp = std::env::temp_dir().join("genechart_test_preff.toml");
         fs::write(&tmp, "scope.generations = 42\n").unwrap();
         let prefs = load(None, Some(&tmp), &[], &crate::trace::Tracer::disabled()).unwrap();
-        assert_eq!(prefs.scope.generations, 42, "--preff should override defaults");
+        assert_eq!(
+            prefs.scope.generations, 42,
+            "--preff should override defaults"
+        );
         let _ = fs::remove_file(&tmp);
     }
 
@@ -656,14 +679,28 @@ mod tests {
     fn pref_overrides_preff() {
         let tmp = std::env::temp_dir().join("genechart_test_preff2.toml");
         fs::write(&tmp, "scope.generations = 42\n").unwrap();
-        let prefs = load(None, Some(&tmp), &["scope.generations = 99".into()], &crate::trace::Tracer::disabled()).unwrap();
-        assert_eq!(prefs.scope.generations, 99, "--pref should override --preff");
+        let prefs = load(
+            None,
+            Some(&tmp),
+            &["scope.generations = 99".into()],
+            &crate::trace::Tracer::disabled(),
+        )
+        .unwrap();
+        assert_eq!(
+            prefs.scope.generations, 99,
+            "--pref should override --preff"
+        );
         let _ = fs::remove_file(&tmp);
     }
 
     #[test]
     fn preff_missing_file_is_error() {
-        let result = load(None, Some(Path::new("/nonexistent/preff_xyz.toml")), &[], &crate::trace::Tracer::disabled());
+        let result = load(
+            None,
+            Some(Path::new("/nonexistent/preff_xyz.toml")),
+            &[],
+            &crate::trace::Tracer::disabled(),
+        );
         assert!(result.is_err(), "missing --preff file should be an error");
         let msg = format!("{:#}", result.unwrap_err());
         assert!(
@@ -677,12 +714,21 @@ mod tests {
         let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
         // format.marriage value contains a comma; output.type must still be applied.
         let tracer = crate::trace::Tracer::disabled();
-        merge_pref_str(&mut base, r#"format.marriage = "m. {date}, {location}", output.type = "pdf""#, &tracer);
+        merge_pref_str(
+            &mut base,
+            r#"format.marriage = "m. {date}, {location}", output.type = "pdf""#,
+            &tracer,
+        );
         let prefs: Prefs = base.try_into().unwrap();
-        assert_eq!(prefs.output.output_type, "pdf",
-            "output.type should be overridden even when a quoted value contains a comma");
-        assert!(prefs.format.marriage.contains(", "),
-            "marriage format should preserve the comma: {}", prefs.format.marriage);
+        assert_eq!(
+            prefs.output.output_type, "pdf",
+            "output.type should be overridden even when a quoted value contains a comma"
+        );
+        assert!(
+            prefs.format.marriage.contains(", "),
+            "marriage format should preserve the comma: {}",
+            prefs.format.marriage
+        );
     }
 
     #[test]

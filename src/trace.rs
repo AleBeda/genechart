@@ -18,14 +18,15 @@ impl Tracer {
 
     /// A no-op tracer (used in tests and when `--trace` is absent).
     pub fn disabled() -> Self {
-        Self { components: HashSet::new() }
+        Self {
+            components: HashSet::new(),
+        }
     }
 
     /// Returns true if the named component is being traced.
     pub fn enabled(&self, component: &str) -> bool {
         !self.components.is_empty()
-            && (self.components.contains("all")
-                || self.components.contains(component))
+            && (self.components.contains("all") || self.components.contains(component))
     }
 
     /// Emit a trace line to stderr for `component` if that component is enabled.

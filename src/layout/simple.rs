@@ -1,10 +1,10 @@
 //! Text-like layout: descendants, ancestors, forest (stub).
 
-use anyhow::Result;
-use crate::parser::genrep::Genrep;
-use crate::preferences::Prefs;
 use super::Layout;
 use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
+use crate::parser::genrep::Genrep;
+use crate::preferences::Prefs;
+use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 
 use crate::util::matches_direction;
@@ -102,7 +102,12 @@ fn visit(
     }
 }
 
-fn layout_descendants(genrep: &Genrep, root: &str, spacing: usize, geo_map: &mut HashMap<String, SimpleGeo>) {
+fn layout_descendants(
+    genrep: &Genrep,
+    root: &str,
+    spacing: usize,
+    geo_map: &mut HashMap<String, SimpleGeo>,
+) {
     let mut visited: HashSet<String> = HashSet::new();
     let mut line: usize = 0;
     visit(root, 0, spacing, &mut line, geo_map, &mut visited, genrep);
@@ -120,12 +125,16 @@ fn in_order(
     }
     visited.insert(id.to_string());
 
-    let Some(indi) = genrep.individuals.get(id) else { return };
+    let Some(indi) = genrep.individuals.get(id) else {
+        return;
+    };
     if !indi.in_scope {
         return;
     }
 
-    let parents = indi.famc.first()
+    let parents = indi
+        .famc
+        .first()
         .and_then(|fam_id| genrep.families.get(fam_id));
 
     let father_id = parents.and_then(|f| f.husband_id.as_deref());
@@ -142,7 +151,12 @@ fn in_order(
     }
 }
 
-fn layout_ancestors(genrep: &Genrep, root: &str, spacing: usize, geo_map: &mut HashMap<String, SimpleGeo>) {
+fn layout_ancestors(
+    genrep: &Genrep,
+    root: &str,
+    spacing: usize,
+    geo_map: &mut HashMap<String, SimpleGeo>,
+) {
     let mut visited = HashSet::new();
     let mut ordered: Vec<(String, usize)> = Vec::new();
     in_order(root, 0, genrep, &mut visited, &mut ordered);
@@ -167,10 +181,14 @@ fn layout_ancestors(genrep: &Genrep, root: &str, spacing: usize, geo_map: &mut H
 
     // Second pass: compute connectors
     for (id, _depth) in &ordered {
-        let Some(indi) = genrep.individuals.get(id.as_str()) else { continue };
+        let Some(indi) = genrep.individuals.get(id.as_str()) else {
+            continue;
+        };
         let self_line = id_to_line[id.as_str()];
 
-        let parents = indi.famc.first()
+        let parents = indi
+            .famc
+            .first()
             .and_then(|fam_id| genrep.families.get(fam_id));
 
         if let Some(fam) = parents {
@@ -216,9 +234,7 @@ impl Layout for SimpleLayout {
                 }
             }
             d if matches_direction(d, "forest") => {
-                eprintln!(
-                    "warning: forest direction is not yet implemented; output will be empty"
-                );
+                eprintln!("warning: forest direction is not yet implemented; output will be empty");
             }
             other => {
                 eprintln!("warning: unknown direction {other:?}, falling back to descendants");
@@ -397,8 +413,16 @@ mod tests {
         let i1_line = result.individuals["I1"].geo.as_ref().unwrap().line;
         let i2_line = result.individuals["I2"].geo.as_ref().unwrap().line;
         let i3_line = result.individuals["I3"].geo.as_ref().unwrap().line;
-        assert_eq!(i2_line, i1_line + 2, "spouse should be 2 lines below root with spacing=1");
-        assert_eq!(i3_line, i2_line + 2, "child should be 2 lines below spouse with spacing=1");
+        assert_eq!(
+            i2_line,
+            i1_line + 2,
+            "spouse should be 2 lines below root with spacing=1"
+        );
+        assert_eq!(
+            i3_line,
+            i2_line + 2,
+            "child should be 2 lines below spouse with spacing=1"
+        );
     }
 
     #[test]
@@ -414,14 +438,24 @@ mod tests {
         let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
 
         let father_line = result.individuals["I1"].geo.as_ref().unwrap().line;
-        let root_line   = result.individuals["I3"].geo.as_ref().unwrap().line;
+        let root_line = result.individuals["I3"].geo.as_ref().unwrap().line;
         let mother_line = result.individuals["I2"].geo.as_ref().unwrap().line;
-        assert_eq!(root_line,   father_line + 2, "root should be 2 lines below father");
-        assert_eq!(mother_line, root_line   + 2, "mother should be 2 lines below root");
+        assert_eq!(
+            root_line,
+            father_line + 2,
+            "root should be 2 lines below father"
+        );
+        assert_eq!(
+            mother_line,
+            root_line + 2,
+            "mother should be 2 lines below root"
+        );
 
         let root_geo = result.individuals["I3"].geo.as_ref().unwrap();
-        assert!(root_geo.connectors_above.contains(&(father_line + 1)),
-                "gap line between father and root must carry a connector");
+        assert!(
+            root_geo.connectors_above.contains(&(father_line + 1)),
+            "gap line between father and root must carry a connector"
+        );
     }
 
     #[test]
@@ -492,9 +526,11 @@ mod tests {
         let i3_line = result.individuals["I3"].geo.as_ref().unwrap().line; // 1850
 
         // I3 (married 1850) must appear on an earlier line than I2 (married 1900).
-        assert!(i3_line < i2_line,
+        assert!(
+            i3_line < i2_line,
             "Earlier spouse (I3, 1850) should appear before later spouse (I2, 1900): \
-             I1={i1_line}, I2={i2_line}, I3={i3_line}");
+             I1={i1_line}, I2={i2_line}, I3={i3_line}"
+        );
         // Root must be on line 0
         assert_eq!(i1_line, 0, "root must be on line 0");
     }
