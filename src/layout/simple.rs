@@ -244,6 +244,16 @@ impl Layout for SimpleLayout {
             }
         }
 
+        if !prefs.show.last_gen_spouses {
+            let max_non_spouse_gen = geo_map
+                .values()
+                .filter(|g| !g.is_spouse)
+                .map(|g| g.generation)
+                .max()
+                .unwrap_or(0);
+            geo_map.retain(|_, g| !(g.is_spouse && g.generation == max_non_spouse_gen));
+        }
+
         let mut out_individuals = HashMap::new();
         for (id, indi) in &genrep.individuals {
             let geo = geo_map.get(id).cloned();
@@ -848,6 +858,7 @@ mod tests {
         let mut prefs = Prefs::default();
         prefs.scope.root = "I1".to_string();
         prefs.scope.direction = "descendants".to_string();
+        prefs.show.last_gen_spouses = true;
 
         let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
 

@@ -45,6 +45,8 @@ pub struct IndividualGeo {
     /// y of the incoming-connector attachment point (top edge of box).
     #[allow(dead_code)]
     pub conn_in_y: f64,
+    /// Generation depth (root = 0, children = 1, …).
+    pub generation: u32,
 }
 
 /// Layout geometry for the outgoing connectors of a placed family (parent → children).
@@ -664,6 +666,7 @@ fn place_descendants(
         height: box_h,
         conn_in_x: x,
         conn_in_y: y - box_h / 2.0,
+        generation,
     };
     out.insert(
         ind_id.to_string(),
@@ -791,9 +794,37 @@ impl Layout for BoxedCouplesLayout {
             );
         }
 
-        // Add in-scope spouses of placed individuals to the output
+        // Add in-scope spouses of placed individuals to the output,
+        // skipping spouses of the last (deepest) generation unless opted in.
         let placed_ids: Vec<String> = individuals.keys().cloned().collect();
+
+        let max_gen: Option<u32> = if !prefs.show.last_gen_spouses {
+            placed_ids
+                .iter()
+                .filter_map(|id| {
+                    individuals.get(id).and_then(|i| {
+                        if let Some(BoxedCouplesGeo::Individual(g)) = &i.geo {
+                            Some(g.generation)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .max()
+        } else {
+            None
+        };
+
         for ind_id in placed_ids {
+            if let Some(last_gen) = max_gen {
+                if let Some(i) = individuals.get(&ind_id) {
+                    if let Some(BoxedCouplesGeo::Individual(g)) = &i.geo {
+                        if g.generation == last_gen {
+                            continue;
+                        }
+                    }
+                }
+            }
             let spouses = spouses_of(&ind_id, genrep);
             for spouse_id in spouses {
                 #[allow(clippy::map_entry)]
@@ -2067,6 +2098,7 @@ mod tests {
                     height: 160.0,
                     conn_in_x: 0.0,
                     conn_in_y: -80.0,
+                    generation: 0,
                 })),
             },
         );

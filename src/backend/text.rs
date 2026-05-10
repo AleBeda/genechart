@@ -327,6 +327,7 @@ mod tests {
         prefs.format.birth = "* {date}".into();
         prefs.show.death = false;
         prefs.show.marriage = false;
+        prefs.show.last_gen_spouses = true;
 
         let layout_out = run_layout(&genrep, &prefs).unwrap();
         let mut buf = Vec::<u8>::new();
