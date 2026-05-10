@@ -615,7 +615,12 @@ mod tests {
     fn cli_override_wins() {
         let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
         // file-level value
-        merge_toml(&mut base, "scope.generations = 7".parse::<Value>().unwrap());
+        merge_toml_tracked(
+            &mut base,
+            "scope.generations = 7".parse::<Value>().unwrap(),
+            "",
+            &crate::trace::Tracer::disabled(),
+        );
         // CLI override
         let tracer = crate::trace::Tracer::disabled();
         merge_pref_str(&mut base, "scope.generations = 99", &tracer);
