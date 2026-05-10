@@ -43,6 +43,7 @@ pub struct IndividualGeo {
     /// x of the incoming-connector attachment point (horizontally centred on box).
     pub conn_in_x: f64,
     /// y of the incoming-connector attachment point (top edge of box).
+    #[allow(dead_code)]
     pub conn_in_y: f64,
 }
 
@@ -54,9 +55,11 @@ pub struct FamilyGeo {
     /// is offset left to the centre of the first spouse's column.
     pub conn_out1_x: f64,
     /// y of both outgoing connectors (bottom edge of the parent box).
+    #[allow(dead_code)]
     pub conn_out1_y: f64,
     /// x of the outgoing connector for the second spouse's children (right column).
     pub conn_out2_x: f64,
+    #[allow(dead_code)]
     pub conn_out2_y: f64,
     /// `true` when the parent box uses the wide `box_w2` form (2 in-scope spouses).
     pub has_spouse2: bool,
