@@ -21,6 +21,7 @@ fn font_db() -> &'static Database {
 ///
 /// Returns `None` when the font is not found on the system or metrics are unavailable.
 /// Characters absent from the font's cmap use the `.notdef` (glyph 0) advance.
+#[allow(dead_code)]
 pub fn measure_text(text: &str, font_family: &str, font_size: f64) -> Option<f64> {
     measure_text_w(text, font_family, font_size, false)
 }

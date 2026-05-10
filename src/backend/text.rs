@@ -1,107 +1,21 @@
 //! Plain-text output backend.
 
 use crate::backend::Renderer;
-use crate::format::{format_event, format_name};
 use crate::layout::LayoutOutput;
-use crate::layout::simple::SimpleGeo;
-use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
-use std::collections::{BTreeSet, HashMap};
+use crate::scene::{Primitive, Scene, TextAttr};
+use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
+use std::collections::HashMap;
 
-pub(crate) fn find_marriage<'a>(
-    indi: &Individual<SimpleGeo>,
-    genrep: &'a Genrep<SimpleGeo>,
-) -> Option<&'a crate::parser::genrep::Event> {
-    for fam_id in &indi.fams {
-        if let Some(fam) = genrep.families.get(fam_id) {
-            if fam.in_scope {
-                return fam.marriage.as_ref();
-            }
-        }
-    }
-    None
-}
-
-// ── Column layout ─────────────────────────────────────────────────────────────
+// ── String helpers ────────────────────────────────────────────────────────────
 
 fn display_len(s: &str) -> usize {
     s.chars().count()
 }
 
-/// Right-align the generation number in a 2-char field: " 1. ", " 9. ", "10. ".
-/// Fixed width prevents column shift at the single-digit / double-digit boundary.
-fn gen_prefix_str(generation: usize) -> String {
-    format!("{:>2}. ", generation)
-}
-
-struct Columns {
-    birth: usize,
-    death: usize,
-    marriage: usize,
-}
-
-fn compute_columns(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Columns {
-    let indent_chars = prefs.layout.simple.indent as usize;
-
-    let max_name_col = genrep
-        .individuals
-        .values()
-        .filter(|i| i.in_scope)
-        .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
-        .map(|(indi, geo)| {
-            let indent = geo.indent * indent_chars;
-            let gen_prefix_len = if prefs.show.generation_num {
-                gen_prefix_str(geo.generation).len()
-            } else {
-                0
-            };
-            indent + gen_prefix_len + display_len(&format_name(indi, prefs))
-        })
-        .max()
-        .unwrap_or(20);
-
-    let max_birth = genrep
-        .individuals
-        .values()
-        .filter(|i| i.in_scope)
-        .filter_map(|i| {
-            i.birth.as_ref().and_then(|e| {
-                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-            })
-        })
-        .map(|s| display_len(&s))
-        .max()
-        .unwrap_or(24);
-
-    let max_death = genrep
-        .individuals
-        .values()
-        .filter(|i| i.in_scope)
-        .filter_map(|i| {
-            i.death.as_ref().and_then(|e| {
-                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-            })
-        })
-        .map(|s| display_len(&s))
-        .max()
-        .unwrap_or(24);
-
-    let birth_col = max_name_col + 2;
-    let death_col = birth_col + max_birth + 2;
-    let marriage_col = death_col + max_death + 2;
-
-    Columns {
-        birth: birth_col,
-        death: death_col,
-        marriage: marriage_col,
-    }
-}
-
-// ── String helpers ────────────────────────────────────────────────────────────
-
 fn write_at_col(s: &mut String, col: usize, text: &str, dot_leaders: bool) {
     let cur = display_len(s);
-    if cur < col {
+    if cur <= col {
         let gap = col - cur;
         if dot_leaders && gap >= 4 {
             s.push(' ');
@@ -128,111 +42,55 @@ fn set_char_at(s: &mut String, byte_pos: usize, ch: char) {
     }
 }
 
-// ── Line assembly ─────────────────────────────────────────────────────────────
+// ── Scene → text-grid rendering ───────────────────────────────────────────────
 
-pub(crate) fn build_lines(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> Vec<String> {
-    let indent_chars = prefs.layout.simple.indent as usize;
-    let cols = compute_columns(genrep, prefs);
+fn render_scene_text(scene: &Scene, prefs: &Prefs) -> String {
+    let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
+    let char_width_px = font_size * CHAR_WIDTH_RATIO;
+    let total_lines = ((scene.canvas_bounds.h / line_height_px).ceil() as usize).max(1);
+    let mut lines: Vec<String> = vec![String::new(); total_lines];
 
-    let mut entries: Vec<(&str, &Individual<SimpleGeo>, &SimpleGeo)> = genrep
-        .individuals
-        .iter()
-        .filter(|(_, i)| i.in_scope)
-        .filter_map(|(id, i)| i.geo.as_ref().map(|g| (id.as_str(), i, g)))
-        .collect();
-    entries.sort_by_key(|(_, _, g)| g.line);
+    let dot_leaders = prefs.output.style.dot_leaders;
 
-    if entries.is_empty() {
-        return Vec::new();
-    }
-
-    let max_line = entries.iter().map(|(_, _, g)| g.line).max().unwrap_or(0);
-    let mut lines: Vec<String> = vec![String::new(); max_line + 1];
-
-    for (_, indi, geo) in &entries {
-        let indent = " ".repeat(geo.indent * indent_chars);
-
-        let gen_prefix = if prefs.show.generation_num {
-            if geo.is_spouse {
-                " ".repeat(gen_prefix_str(geo.generation).len())
-            } else {
-                gen_prefix_str(geo.generation)
+    for prim in &scene.primitives {
+        match prim {
+            Primitive::Text(t) => {
+                let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+                let col = (t.bbox.x / char_width_px).round() as usize;
+                let use_dot_leaders = dot_leaders
+                    && matches!(
+                        t.attr,
+                        TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
+                    );
+                write_at_col(&mut lines[line_idx], col, &t.content, use_dot_leaders);
             }
-        } else {
-            String::new()
-        };
-
-        let name = format_name(indi, prefs);
-
-        let birth_str = if prefs.show.birth {
-            indi.birth.as_ref().and_then(|e| {
-                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-
-        let death_str = if prefs.show.death {
-            indi.death.as_ref().and_then(|e| {
-                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-
-        let marr_str = if geo.is_spouse && prefs.show.marriage {
-            find_marriage(indi, genrep).and_then(|e| {
-                format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-
-        let dl = prefs.output.style.dot_leaders;
-        let mut line = format!("{indent}{gen_prefix}{name}");
-        if let Some(b) = birth_str {
-            write_at_col(&mut line, cols.birth, &b, dl);
-        }
-        if let Some(d) = death_str {
-            write_at_col(&mut line, cols.death, &d, dl);
-        }
-        if let Some(m) = marr_str {
-            write_at_col(&mut line, cols.marriage, &m, dl);
-        }
-
-        lines[geo.line] = line;
-    }
-
-    // Connector pass: insert │ on blank lines between ancestors.
-    // Collect per-line columns, then insert right-to-left to preserve byte positions.
-    let mut conn_per_line: HashMap<usize, BTreeSet<usize>> = HashMap::new();
-    for (_, _, geo) in &entries {
-        // Align with the first character of the parent's name (after gen-prefix).
-        let parent_gen_prefix = if prefs.show.generation_num {
-            gen_prefix_str(geo.generation + 1).len()
-        } else {
-            0
-        };
-        let col = (geo.indent + 1) * indent_chars + parent_gen_prefix;
-        for &lnum in geo
-            .connectors_above
-            .iter()
-            .chain(geo.connectors_below.iter())
-        {
-            if lnum < lines.len() {
-                conn_per_line.entry(lnum).or_default().insert(col);
+            Primitive::Connector(c) => {
+                if c.parent_points.is_empty() || c.child_points.is_empty() {
+                    continue;
+                }
+                let x_col = (c.parent_points[0].x / char_width_px).round() as usize;
+                let y_start = (c.parent_points[0].y / line_height_px).round() as usize;
+                let y_end = (c.child_points[0].y / line_height_px).round() as usize;
+                for row in y_start..y_end {
+                    if row < total_lines {
+                        pad_line_to(&mut lines[row], x_col + 1);
+                        set_char_at(&mut lines[row], x_col, '│');
+                    }
+                }
+            }
+            Primitive::Box(_) | Primitive::Wedge(_) => {
+                // Not used in simple layout text output
             }
         }
     }
-    for (lnum, col_set) in &conn_per_line {
-        let max_col = *col_set.iter().max().unwrap();
-        pad_line_to(&mut lines[*lnum], max_col + 1);
-        for &col in col_set.iter().rev() {
-            set_char_at(&mut lines[*lnum], col, '│');
-        }
+
+    // Trim trailing empty lines
+    while lines.last().map_or(false, |l| l.is_empty()) {
+        lines.pop();
     }
 
-    lines
+    lines.join("\n")
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -246,8 +104,8 @@ impl Renderer for TextRenderer {
         prefs: &Prefs,
         writer: &mut dyn std::io::Write,
     ) -> anyhow::Result<()> {
-        let genrep = match output {
-            LayoutOutput::Simple(g) => g,
+        let scene = match output {
+            LayoutOutput::Simple(s) => s,
             _ => anyhow::bail!("TextRenderer only supports Simple layout output"),
         };
 
@@ -266,10 +124,8 @@ impl Renderer for TextRenderer {
         }
 
         // Body
-        let lines = build_lines(genrep, prefs);
-        for line in &lines {
-            writeln!(writer, "{line}")?;
-        }
+        let body = render_scene_text(scene, prefs);
+        writeln!(writer, "{body}")?;
 
         // Copyright
         if !prefs.output.text.copyright.is_empty() {
@@ -286,7 +142,7 @@ impl Renderer for TextRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::{LayoutOutput, run_layout};
+    use crate::layout::run_layout;
     use crate::parser::{compute_scope, parse_str};
 
     const GEDCOM: &str = "\
@@ -473,11 +329,10 @@ mod tests {
         prefs.show.marriage = false;
 
         let layout_out = run_layout(&genrep, &prefs).unwrap();
-        let g = match &layout_out {
-            LayoutOutput::Simple(g) => g,
-            _ => panic!(),
-        };
-        let lines = build_lines(g, &prefs);
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
 
         // Use character counts (display columns), not byte offsets.
         // ♂ is 3 bytes but 1 display column — the test must measure visual alignment.
@@ -507,6 +362,7 @@ mod tests {
     fn test_gen_prefix_str_fixed_width() {
         // Single-digit and double-digit generation numbers must produce the same width
         // so that name columns stay aligned across the gen-9 / gen-10 boundary.
+        use crate::layout::simple::gen_prefix_str;
         assert_eq!(
             gen_prefix_str(1),
             " 1. ",

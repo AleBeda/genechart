@@ -5,6 +5,7 @@ mod layout;
 mod parser;
 mod preferences;
 mod scene;
+mod text_metrics;
 mod trace;
 mod util;
 

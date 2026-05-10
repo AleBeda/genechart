@@ -2,24 +2,17 @@
 
 use crate::backend::Renderer;
 use crate::backend::font_metrics;
-use crate::backend::text::find_marriage;
-use crate::format::{format_event, format_name};
+use crate::format::format_name;
 use crate::layout::LayoutOutput;
 use crate::layout::fan::FanGeo;
-use crate::layout::simple::SimpleGeo;
-use crate::parser::genrep::{Genrep, Individual};
+use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
 use crate::scene::{Scene, TextAlign, TextAttr};
+use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
 use anyhow::Result;
 
-// Fallback rendering constants (used when preferences are empty)
-const LINE_HEIGHT: f64 = 18.0;
-const FONT_SIZE: f64 = 13.0;
+// SVG-specific rendering constants
 const MARGIN: f64 = 20.0;
-const FONT_FAMILY: &str = "monospace";
-// Estimated average character width as a fraction of font-size.
-// Used for column-position arithmetic when exact glyph metrics are unavailable.
-const CHAR_WIDTH_RATIO: f64 = 0.6;
 // Fixed pixel gap between text and the start/end of a dot leader.
 const DOT_LEADER_GAP: f64 = 3.0;
 /// Font-family used for symbol characters rendered in their own <text> element.
@@ -92,22 +85,6 @@ fn svg_text_w(x: f64, y: f64, text: &str, family: &str, size: f64, weight: &str)
 }
 
 // ── Preference helpers ────────────────────────────────────────────────────────
-
-/// Parse "Family Name Size" preference string → (family, size).
-/// The last whitespace-delimited token is tried as a float; the rest is the family.
-fn parsed_font(font_pref: &str) -> (String, f64) {
-    if font_pref.trim().is_empty() {
-        return (FONT_FAMILY.to_string(), FONT_SIZE);
-    }
-    let mut parts = font_pref.trim().rsplitn(2, ' ');
-    let last = parts.next().unwrap_or("");
-    let rest = parts.next().unwrap_or(font_pref.trim());
-    if let Ok(size) = last.parse::<f64>() {
-        (rest.to_string(), size)
-    } else {
-        (font_pref.trim().to_string(), FONT_SIZE)
-    }
-}
 
 /// Return paper dimensions `(width_mm, height_mm)` from preferences,
 /// or `None` when the paper size is absent or unrecognised.
@@ -313,328 +290,6 @@ fn expand_title_template(template: &str, prefs: &Prefs) -> String {
     strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string())
 }
 
-fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
-    // Font metrics
-    let (font_family_base, font_size) = parsed_font(&prefs.output.style.fonts.names);
-    // Include symbol-font fallbacks so PDF renderers can find glyphs for ⚭, ×, etc.
-    let font_family = format!(
-        "{font_family_base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif"
-    );
-    let line_height = font_size * (LINE_HEIGHT / FONT_SIZE);
-    let cw = font_size * CHAR_WIDTH_RATIO; // estimated character width
-
-    // Connector style
-    let conn_color = hex_color(prefs.output.style.connectors.border);
-    let conn_width = if prefs.output.style.connectors.width > 0.0 {
-        prefs.output.style.connectors.width
-    } else {
-        0.5
-    };
-
-    // Collect and sort in-scope individuals by line number.
-    let mut entries: Vec<(&Individual<SimpleGeo>, &SimpleGeo)> = genrep
-        .individuals
-        .values()
-        .filter(|i| i.in_scope)
-        .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
-        .collect();
-    entries.sort_by_key(|(_, g)| g.line);
-
-    if entries.is_empty() {
-        #[allow(clippy::useless_format)] // For consistency with other
-        return format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-             <svg xmlns=\"http://www.w3.org/2000/svg\" \
-             width=\"100\" height=\"100\"></svg>\n"
-        );
-    }
-
-    let max_line = entries.iter().map(|(_, g)| g.line).max().unwrap_or(0);
-    let indent_px = (prefs.layout.simple.indent as f64 * cw).max(cw);
-
-    // Width (in px) of the generation-number prefix "N. " for a given generation.
-    // Uses exact font metrics when the font is available, falls back to estimate.
-    let gen_prefix_w = |generation: usize| -> f64 {
-        if prefs.show.generation_num {
-            let s = format!("{:>2}. ", generation);
-            font_metrics::measure_text(&s, &font_family_base, font_size)
-                .unwrap_or_else(|| s.chars().count() as f64 * cw)
-        } else {
-            0.0
-        }
-    };
-
-    // Pixel width of a string: exact when font is available, estimate otherwise.
-    let text_w = |s: &str| -> f64 {
-        font_metrics::measure_text(s, &font_family_base, font_size)
-            .unwrap_or_else(|| s.chars().count() as f64 * cw)
-    };
-
-    // ── Compute pixel column positions ────────────────────────────────────────
-
-    // Right edge of the widest name (considering indent + gen-prefix + name).
-    let max_name_end: f64 = entries
-        .iter()
-        .map(|(indi, geo)| {
-            MARGIN
-                + geo.indent as f64 * indent_px
-                + gen_prefix_w(geo.generation)
-                + text_w(&format_name(indi, prefs))
-        })
-        .fold(0.0_f64, f64::max);
-
-    let gap = cw * 2.0; // column gap
-
-    let max_birth_w: f64 = if prefs.show.birth {
-        entries
-            .iter()
-            .filter_map(|(i, _)| {
-                i.birth.as_ref().and_then(|e| {
-                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-                })
-            })
-            .map(|s| text_w(&s))
-            .fold(0.0_f64, f64::max)
-    } else {
-        0.0
-    };
-
-    let max_death_w: f64 = if prefs.show.death {
-        entries
-            .iter()
-            .filter_map(|(i, _)| {
-                i.death.as_ref().and_then(|e| {
-                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-                })
-            })
-            .map(|s| text_w(&s))
-            .fold(0.0_f64, f64::max)
-    } else {
-        0.0
-    };
-
-    let max_marr_w: f64 = if prefs.show.marriage {
-        entries
-            .iter()
-            .filter_map(|(i, g)| {
-                if g.is_spouse {
-                    find_marriage(i, genrep).and_then(|e| {
-                        format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
-                    })
-                } else {
-                    None
-                }
-            })
-            .map(|s| text_w(&s))
-            .fold(0.0_f64, f64::max)
-    } else {
-        0.0
-    };
-
-    let x_birth = max_name_end + gap;
-    let x_death = x_birth + max_birth_w + gap;
-    let x_marriage = x_death + max_death_w + gap;
-
-    let content_right = if max_marr_w > 0.0 {
-        x_marriage + max_marr_w
-    } else if max_death_w > 0.0 {
-        x_death + max_death_w
-    } else if max_birth_w > 0.0 {
-        x_birth + max_birth_w
-    } else {
-        max_name_end
-    };
-    let content_w = content_right + MARGIN;
-
-    // Title / copyright
-    let title_text = expand_title_template(&prefs.output.text.title, prefs);
-    let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
-    let title_line_h = if title_text.is_empty() {
-        0.0
-    } else {
-        title_font_size * (LINE_HEIGHT / FONT_SIZE)
-    };
-
-    let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
-    let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
-    let copy_line_h = if copy_text.is_empty() {
-        0.0
-    } else {
-        copy_font_size * (LINE_HEIGHT / FONT_SIZE)
-    };
-
-    // chart_top_offset: how far down the chart body starts (to make room for title)
-    let chart_top_offset = if title_text.is_empty() {
-        0.0
-    } else {
-        title_line_h
-    };
-    let content_h =
-        MARGIN * 2.0 + chart_top_offset + (max_line + 1) as f64 * line_height + copy_line_h;
-
-    // ── Build SVG ─────────────────────────────────────────────────────────────
-
-    let canvas_w = format!("{content_w:.0}");
-    let canvas_h = format!("{content_h:.0}");
-    let viewbox = format!("0 0 {content_w:.1} {content_h:.1}");
-
-    let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
-
-    // ── Title ─────────────────────────────────────────────────────────────────
-    if !title_text.is_empty() {
-        let y = MARGIN + title_font_size; // baseline of title line
-        out.push_str(&svg_text(
-            MARGIN,
-            y,
-            &title_text,
-            &title_font_family,
-            title_font_size,
-        ));
-    }
-
-    // ── Copyright ─────────────────────────────────────────────────────────────
-    if !copy_text.is_empty() {
-        let y = MARGIN + chart_top_offset + (max_line + 1) as f64 * line_height + copy_font_size;
-        out.push_str(&svg_text(
-            MARGIN,
-            y,
-            &copy_text,
-            &copy_font_family,
-            copy_font_size,
-        ));
-    }
-
-    let dot_leaders = prefs.output.style.dot_leaders;
-
-    // Compute font weights for descendants and spouses
-    let descendant_weight = font_weight_from_pref(&prefs.output.style.fonts.descendant);
-    let spouse_weight = font_weight_from_pref(&prefs.output.style.fonts.spouse);
-
-    // ── Text elements ─────────────────────────────────────────────────────────
-    for (indi, geo) in &entries {
-        let y = MARGIN + chart_top_offset + (geo.line as f64 + 1.0) * line_height;
-        let x_base = MARGIN + geo.indent as f64 * indent_px;
-        let gpw = gen_prefix_w(geo.generation);
-
-        // Pre-compute event strings (needed for dot-leader geometry).
-        let birth_s: Option<String> = if prefs.show.birth {
-            indi.birth.as_ref().and_then(|e| {
-                format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-        let death_s: Option<String> = if prefs.show.death {
-            indi.death.as_ref().and_then(|e| {
-                format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-        let marr_s: Option<String> = if geo.is_spouse && prefs.show.marriage {
-            find_marriage(indi, genrep).and_then(|e| {
-                format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
-            })
-        } else {
-            None
-        };
-
-        // Generation number (non-spouse only)
-        if prefs.show.generation_num && !geo.is_spouse {
-            let prefix = format!("{:>2}. ", geo.generation);
-            out.push_str(&svg_text(x_base, y, &prefix, &font_family, font_size));
-        }
-
-        // Name — rendered as a single element so sex symbols (♂/♀) at the end
-        // stay flush with the name text (no positioning gap from our width estimate).
-        let name = format_name(indi, prefs);
-        let name_weight = if geo.is_spouse {
-            spouse_weight
-        } else {
-            descendant_weight
-        };
-        out.push_str(&svg_text_w(
-            x_base + gpw,
-            y,
-            &name,
-            &font_family,
-            font_size,
-            name_weight,
-        ));
-        let mut last_x = x_base + gpw + text_w(&name);
-
-        // Birth (with optional dot leader)
-        if let Some(ref s) = birth_s {
-            if dot_leaders {
-                dot_leader(&mut out, last_x, x_birth, y, font_size, &conn_color);
-            }
-            render_mixed_text(&mut out, x_birth, y, s, &font_family, font_size, cw);
-            last_x = x_birth + text_w(s);
-        }
-
-        // Death (with optional dot leader)
-        if let Some(ref s) = death_s {
-            if dot_leaders {
-                dot_leader(&mut out, last_x, x_death, y, font_size, &conn_color);
-            }
-            render_mixed_text(&mut out, x_death, y, s, &font_family, font_size, cw);
-            last_x = x_death + text_w(s);
-        }
-
-        // Marriage — spouse only (with optional dot leader)
-        if let Some(ref s) = marr_s {
-            if dot_leaders {
-                dot_leader(&mut out, last_x, x_marriage, y, font_size, &conn_color);
-            }
-            render_mixed_text(&mut out, x_marriage, y, s, &font_family, font_size, cw);
-        }
-    }
-
-    // ── Connector <line> elements (ancestors mode) ────────────────────────────
-    //
-    // x: aligned with the first character of the parent's name (after gen-prefix).
-    // y: lines stop at the TOP / BOTTOM of the child row so they do not cross the name.
-    for (_, geo) in &entries {
-        // x at the parent's name-start (parent is one generation deeper = geo.generation + 1).
-        let x_conn =
-            MARGIN + (geo.indent + 1) as f64 * indent_px + gen_prefix_w(geo.generation + 1);
-        let y_ctr = |line: usize| MARGIN + chart_top_offset + (line as f64 + 0.5) * line_height;
-        let y_top = |line: usize| MARGIN + chart_top_offset + line as f64 * line_height;
-        let y_bot = |line: usize| MARGIN + chart_top_offset + (line as f64 + 1.0) * line_height;
-
-        if !geo.connectors_above.is_empty() {
-            let first = *geo.connectors_above.iter().min().unwrap();
-            if first > 0 {
-                let father_line = first - 1;
-                out.push_str(&svg_line(
-                    x_conn,
-                    y_ctr(father_line),
-                    x_conn,
-                    y_top(geo.line),
-                    &conn_color,
-                    conn_width,
-                ));
-            }
-        }
-
-        if !geo.connectors_below.is_empty() {
-            let last = *geo.connectors_below.iter().max().unwrap();
-            let mother_line = last + 1;
-            out.push_str(&svg_line(
-                x_conn,
-                y_bot(geo.line),
-                x_conn,
-                y_ctr(mother_line),
-                &conn_color,
-                conn_width,
-            ));
-        }
-    }
-
-    out.push_str("</svg>\n");
-    out
-}
-
 // SVG arc path for one wedge of the fan.
 // Angles follow the math convention (0°=right, 90°=top, 180°=left).
 // SVG y is flipped: svg_y = cy - math_y.
@@ -793,10 +448,13 @@ fn font_for_attr(attr: &TextAttr, prefs: &Prefs) -> (String, f64) {
         }
         TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData => {
             let (fam_base, sz_base) = parsed_font(&prefs.output.style.fonts.names);
-            let (fam, sz) = parsed_font(&prefs.output.style.fonts.dates);
-            let sz = if sz <= 0.0 { sz_base } else { sz };
-            let fam = if fam.trim().is_empty() { fam_base } else { fam };
-            (with_symbol_fallback(&fam), sz)
+            if prefs.output.style.fonts.dates.trim().is_empty() {
+                (with_symbol_fallback(&fam_base), sz_base)
+            } else {
+                let (fam, sz) = parsed_font(&prefs.output.style.fonts.dates);
+                let sz = if sz <= 0.0 { sz_base } else { sz };
+                (with_symbol_fallback(&fam), sz)
+            }
         }
         TextAttr::IndividualId => {
             let (fam, sz) = parsed_font(&prefs.output.style.fonts.id);
@@ -922,6 +580,34 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
         ));
     }
 
+    // Pre-compute name-end x per row (for dot-leader rendering).
+    // Key = bbox.y rounded to i64 (one value per logical text row).
+    let name_end_x: std::collections::HashMap<i64, f64> = scene
+        .primitives
+        .iter()
+        .filter_map(|p| {
+            if let crate::scene::Primitive::Text(t) = p {
+                if matches!(
+                    t.attr,
+                    TextAttr::IndividualName | TextAttr::SpouseName | TextAttr::GenerationNum
+                ) {
+                    let row = t.bbox.y.round() as i64;
+                    Some((row, t.bbox.x + t.bbox.w))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .fold(std::collections::HashMap::new(), |mut map, (row, x_end)| {
+            let entry = map.entry(row).or_insert(0.0_f64);
+            if x_end > *entry {
+                *entry = x_end;
+            }
+            map
+        });
+
     // Render primitives
     for prim in &scene.primitives {
         match prim {
@@ -946,6 +632,21 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                 // baseline = bbox.y + bbox.h converted to SVG
                 let baseline_svg = to_svg_y(t.bbox.y + t.bbox.h);
                 let cw = font_size * CHAR_WIDTH_RATIO;
+
+                // Emit dot leader before event data if enabled
+                if prefs.output.style.dot_leaders
+                    && matches!(
+                        t.attr,
+                        TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
+                    )
+                {
+                    let row = t.bbox.y.round() as i64;
+                    if let Some(&name_end) = name_end_x.get(&row) {
+                        let x1 = to_svg_x(name_end);
+                        let x2 = to_svg_x(t.bbox.x);
+                        dot_leader(&mut out, x1, x2, baseline_svg, font_size, "black");
+                    }
+                }
 
                 match t.align {
                     TextAlign::Center => {
@@ -972,6 +673,19 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                                 font_size,
                                 &color,
                             ));
+                        } else if matches!(
+                            t.attr,
+                            TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
+                        ) {
+                            render_mixed_text(
+                                &mut out,
+                                x,
+                                baseline_svg,
+                                &t.content,
+                                &font_family,
+                                font_size,
+                                cw,
+                            );
                         } else {
                             out.push_str(&svg_text_w(
                                 x,
@@ -1080,7 +794,7 @@ impl Renderer for SvgRenderer {
 
 pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> {
     match output {
-        LayoutOutput::Simple(genrep) => Ok(render_simple(genrep, prefs)),
+        LayoutOutput::Simple(scene) => Ok(render_scene(scene, prefs)),
         LayoutOutput::BoxedCouples(scene) => Ok(render_scene(scene, prefs)),
         LayoutOutput::Fan(genrep) => Ok(render_fan(genrep, prefs)),
     }
@@ -1293,7 +1007,7 @@ mod tests {
             parsed_font("Arial Bold 10"),
             ("Arial Bold".to_string(), 10.0)
         );
-        assert_eq!(parsed_font(""), (FONT_FAMILY.to_string(), FONT_SIZE));
+        assert_eq!(parsed_font(""), ("monospace".to_string(), FONT_SIZE));
         assert_eq!(parsed_font("Courier"), ("Courier".to_string(), FONT_SIZE));
     }
 
@@ -1572,16 +1286,6 @@ mod tests {
                     let end = sub.find('\"')?;
                     sub[..end].parse::<f64>().ok()
                 })
-        }
-
-        fn extract_rect_y(svg: &str) -> Option<f64> {
-            // First rect = first individual box
-            svg.lines().find(|l| l.contains("<rect ")).and_then(|l| {
-                let start = l.find("y=\"")?;
-                let sub = &l[start + 3..];
-                let end = sub.find('\"')?;
-                sub[..end].parse::<f64>().ok()
-            })
         }
 
         let mut genrep = parse_str(GEDCOM).unwrap();

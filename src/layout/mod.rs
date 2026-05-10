@@ -14,7 +14,7 @@ pub trait Layout {
 }
 
 pub enum LayoutOutput {
-    Simple(Genrep<simple::SimpleGeo>),
+    Simple(Scene),
     BoxedCouples(Scene),
     Fan(Genrep<fan::FanGeo>),
 }
@@ -23,7 +23,7 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
     match prefs.layout.layout_type.to_lowercase().as_str() {
         "simple" => {
             let result = simple::SimpleLayout.compute(genrep, prefs)?;
-            Ok(LayoutOutput::Simple(result))
+            Ok(LayoutOutput::Simple(simple::emit_scene(&result, prefs)))
         }
         "boxed_couples" => {
             let result = boxed_couples::BoxedCouplesLayout.compute(genrep, prefs)?;
@@ -37,7 +37,7 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
         other => {
             eprintln!("warning: unknown layout type {other:?}, falling back to 'simple'");
             let result = simple::SimpleLayout.compute(genrep, prefs)?;
-            Ok(LayoutOutput::Simple(result))
+            Ok(LayoutOutput::Simple(simple::emit_scene(&result, prefs)))
         }
     }
 }

@@ -260,6 +260,336 @@ impl Layout for SimpleLayout {
     }
 }
 
+/// Right-align the generation number in a 2-char field: " 1. ", " 9. ", "10. ".
+/// Fixed width prevents column shift at the single-digit / double-digit boundary.
+pub fn gen_prefix_str(generation: usize) -> String {
+    format!("{:>2}. ", generation)
+}
+
+/// Convert a `Genrep<SimpleGeo>` into a `Scene` IR in pixel coordinates.
+///
+/// The coordinate system:
+/// - `y_display = (geo.line as f64 + 1.0) * line_height_px` — text baseline (y-down)
+/// - `top_y     = geo.line as f64 * line_height_px`
+/// - `x_name    = geo.indent as f64 * indent_px + gen_prefix_px`
+pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Scene {
+    use crate::format::{format_event, format_name};
+    use crate::scene::{
+        ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+    };
+    use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
+
+    // ── Font metrics ──────────────────────────────────────────────────────────
+    let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
+    let char_width_px = font_size * CHAR_WIDTH_RATIO;
+    let indent_chars = prefs.layout.simple.indent as f64;
+    let indent_px = (indent_chars * char_width_px).max(char_width_px);
+
+    // Width in pixels of the generation-number prefix string.
+    let gen_prefix_px = |generation: usize| -> f64 {
+        if prefs.show.generation_num {
+            gen_prefix_str(generation).chars().count() as f64 * char_width_px
+        } else {
+            0.0
+        }
+    };
+
+    // ── Collect and sort in-scope individuals ─────────────────────────────────
+    let mut entries: Vec<(
+        &str,
+        &crate::parser::genrep::Individual<SimpleGeo>,
+        &SimpleGeo,
+    )> = genrep
+        .individuals
+        .iter()
+        .filter(|(_, i)| i.in_scope)
+        .filter_map(|(id, i)| i.geo.as_ref().map(|g| (id.as_str(), i, g)))
+        .collect();
+    entries.sort_by_key(|(_, _, g)| g.line);
+
+    if entries.is_empty() {
+        return Scene {
+            primitives: Vec::new(),
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 0.0,
+                h: 0.0,
+            },
+        };
+    }
+
+    let max_line = entries.iter().map(|(_, _, g)| g.line).max().unwrap_or(0);
+
+    // ── Compute pixel column positions (mirror render_simple column logic) ────
+    let max_name_end_px: f64 = entries
+        .iter()
+        .map(|(_, indi, geo)| {
+            geo.indent as f64 * indent_px
+                + gen_prefix_px(geo.generation)
+                + format_name(*indi, prefs).chars().count() as f64 * char_width_px
+        })
+        .fold(0.0_f64, f64::max);
+
+    let gap_px = 2.0 * char_width_px;
+
+    let max_birth_w_px: f64 = if prefs.show.birth {
+        entries
+            .iter()
+            .filter_map(|(_, i, _)| {
+                i.birth.as_ref().and_then(|e| {
+                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+                })
+            })
+            .map(|s| s.chars().count() as f64 * char_width_px)
+            .fold(0.0_f64, f64::max)
+    } else {
+        0.0
+    };
+
+    let max_death_w_px: f64 = if prefs.show.death {
+        entries
+            .iter()
+            .filter_map(|(_, i, _)| {
+                i.death.as_ref().and_then(|e| {
+                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+                })
+            })
+            .map(|s| s.chars().count() as f64 * char_width_px)
+            .fold(0.0_f64, f64::max)
+    } else {
+        0.0
+    };
+
+    let max_marr_w_px: f64 = if prefs.show.marriage {
+        entries
+            .iter()
+            .filter_map(|(id, _i, g)| {
+                if g.is_spouse {
+                    find_marriage_in_genrep(id, genrep).and_then(|e| {
+                        format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
+                    })
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.chars().count() as f64 * char_width_px)
+            .fold(0.0_f64, f64::max)
+    } else {
+        0.0
+    };
+
+    let x_birth_px = max_name_end_px + gap_px;
+    let x_death_px = x_birth_px + max_birth_w_px + gap_px;
+    let x_marriage_px = x_death_px + max_death_w_px + gap_px;
+
+    let max_x_px = if max_marr_w_px > 0.0 {
+        x_marriage_px + max_marr_w_px
+    } else if max_death_w_px > 0.0 {
+        x_death_px + max_death_w_px
+    } else if max_birth_w_px > 0.0 {
+        x_birth_px + max_birth_w_px
+    } else {
+        max_name_end_px
+    };
+
+    // ── Build primitives ──────────────────────────────────────────────────────
+    let mut primitives: Vec<Primitive> = Vec::new();
+
+    for (id, indi, geo) in &entries {
+        let top_y = geo.line as f64 * line_height_px;
+        let x_name = geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
+        let gpx = gen_prefix_px(geo.generation);
+
+        // Generation number (non-spouse only)
+        if prefs.show.generation_num && !geo.is_spouse {
+            let prefix = gen_prefix_str(geo.generation);
+            primitives.push(Primitive::Text(TextPrimitive {
+                content: prefix,
+                bbox: Rect {
+                    x: geo.indent as f64 * indent_px,
+                    y: top_y,
+                    w: gpx,
+                    h: line_height_px,
+                },
+                align: TextAlign::Left,
+                attr: TextAttr::GenerationNum,
+            }));
+        }
+
+        // Individual / spouse name
+        let name = format_name(indi, prefs);
+        let name_w = name.chars().count() as f64 * char_width_px;
+        primitives.push(Primitive::Text(TextPrimitive {
+            content: name,
+            bbox: Rect {
+                x: x_name,
+                y: top_y,
+                w: name_w,
+                h: line_height_px,
+            },
+            align: TextAlign::Left,
+            attr: if geo.is_spouse {
+                TextAttr::SpouseName
+            } else {
+                TextAttr::IndividualName
+            },
+        }));
+
+        // Birth data
+        if prefs.show.birth {
+            if let Some(e) = &indi.birth {
+                if let Some(s) =
+                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+                {
+                    let w = s.chars().count() as f64 * char_width_px;
+                    primitives.push(Primitive::Text(TextPrimitive {
+                        content: s,
+                        bbox: Rect {
+                            x: x_birth_px,
+                            y: top_y,
+                            w,
+                            h: line_height_px,
+                        },
+                        align: TextAlign::Left,
+                        attr: TextAttr::BirthData,
+                    }));
+                }
+            }
+        }
+
+        // Death data
+        if prefs.show.death {
+            if let Some(e) = &indi.death {
+                if let Some(s) =
+                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+                {
+                    let w = s.chars().count() as f64 * char_width_px;
+                    primitives.push(Primitive::Text(TextPrimitive {
+                        content: s,
+                        bbox: Rect {
+                            x: x_death_px,
+                            y: top_y,
+                            w,
+                            h: line_height_px,
+                        },
+                        align: TextAlign::Left,
+                        attr: TextAttr::DeathData,
+                    }));
+                }
+            }
+        }
+
+        // Marriage data (spouse only)
+        if prefs.show.marriage && geo.is_spouse {
+            if let Some(e) = find_marriage_in_genrep(id, genrep) {
+                if let Some(s) =
+                    format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
+                {
+                    let w = s.chars().count() as f64 * char_width_px;
+                    primitives.push(Primitive::Text(TextPrimitive {
+                        content: s,
+                        bbox: Rect {
+                            x: x_marriage_px,
+                            y: top_y,
+                            w,
+                            h: line_height_px,
+                        },
+                        align: TextAlign::Left,
+                        attr: TextAttr::MarriageData,
+                    }));
+                }
+            }
+        }
+
+        // Individual ID
+        if prefs.show.id {
+            let id_str = format!("@{id}@");
+            let id_w = id_str.chars().count() as f64 * char_width_px;
+            primitives.push(Primitive::Text(TextPrimitive {
+                content: id_str,
+                bbox: Rect {
+                    x: x_name,
+                    y: top_y,
+                    w: id_w,
+                    h: line_height_px,
+                },
+                align: TextAlign::Left,
+                attr: TextAttr::IndividualId,
+            }));
+        }
+
+        // ── Connector primitives (ancestors mode) ─────────────────────────────
+        // x aligned with the first character of the parent's name (parent is geo.generation + 1)
+        let x_conn = (geo.indent as f64 + 1.0) * indent_px + gen_prefix_px(geo.generation + 1);
+
+        if !geo.connectors_above.is_empty() {
+            let first = *geo.connectors_above.iter().min().unwrap();
+            if first > 0 {
+                let father_line = first - 1;
+                let parent_y = (father_line as f64 + 0.5) * line_height_px;
+                let child_y = geo.line as f64 * line_height_px;
+                primitives.push(Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point {
+                        x: x_conn,
+                        y: parent_y,
+                    }],
+                    child_points: vec![Point {
+                        x: x_conn,
+                        y: child_y,
+                    }],
+                }));
+            }
+        }
+
+        if !geo.connectors_below.is_empty() {
+            let last = *geo.connectors_below.iter().max().unwrap();
+            let mother_line = last + 1;
+            let parent_y = (geo.line as f64 + 1.0) * line_height_px;
+            let child_y = (mother_line as f64 + 0.5) * line_height_px;
+            primitives.push(Primitive::Connector(ConnectorPrimitive {
+                parent_points: vec![Point {
+                    x: x_conn,
+                    y: parent_y,
+                }],
+                child_points: vec![Point {
+                    x: x_conn,
+                    y: child_y,
+                }],
+            }));
+        }
+    }
+
+    let max_y_px = (max_line + 1) as f64 * line_height_px;
+
+    Scene {
+        primitives,
+        canvas_bounds: Rect {
+            x: 0.0,
+            y: 0.0,
+            w: max_x_px,
+            h: max_y_px,
+        },
+    }
+}
+
+/// Find the first in-scope family marriage event for an individual in the genrep.
+fn find_marriage_in_genrep<'a>(
+    id: &str,
+    genrep: &'a Genrep<SimpleGeo>,
+) -> Option<&'a crate::parser::genrep::Event> {
+    let indi = genrep.individuals.get(id)?;
+    for fam_id in &indi.fams {
+        if let Some(fam) = genrep.families.get(fam_id) {
+            if fam.in_scope {
+                return fam.marriage.as_ref();
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
