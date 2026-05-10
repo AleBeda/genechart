@@ -1,59 +1,12 @@
 //! Plain-text output backend.
 
 use crate::backend::Renderer;
+use crate::format::{format_event, format_name};
 use crate::layout::LayoutOutput;
 use crate::layout::simple::SimpleGeo;
-use crate::parser::genrep::{GedDate, Genrep, Individual};
+use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use std::collections::{BTreeSet, HashMap};
-
-pub(crate) fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
-    let mut vars: HashMap<String, String> = HashMap::new();
-    vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
-    vars.insert("lastname".into(), indi.surname.clone().unwrap_or_default());
-    vars.insert(
-        "sex".into(),
-        match indi.sex {
-            Some('M') => "♂".into(),
-            Some('F') => "♀".into(),
-            _ => String::new(),
-        },
-    );
-    strfmt::strfmt(&prefs.format.individual, &vars)
-        .unwrap_or_else(|_| {
-            format!(
-                "{} {}",
-                indi.given.as_deref().unwrap_or(""),
-                indi.surname.as_deref().unwrap_or("")
-            )
-        })
-        .trim()
-        .to_string()
-}
-
-pub(crate) fn format_event(
-    template: &str,
-    date: Option<&GedDate>,
-    place: Option<&str>,
-) -> Option<String> {
-    if date.is_none() && place.is_none() {
-        return None;
-    }
-    let mut vars: HashMap<String, String> = HashMap::new();
-    vars.insert(
-        "date".into(),
-        date.map(|d| d.raw.clone()).unwrap_or_default(),
-    );
-    vars.insert("location".into(), place.unwrap_or("").to_string());
-
-    let s = strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string());
-
-    let s = s.trim_end_matches([',', ' ']).to_string();
-    if s.is_empty() {
-        return None;
-    }
-    Some(s)
-}
 
 pub(crate) fn find_marriage<'a>(
     indi: &Individual<SimpleGeo>,

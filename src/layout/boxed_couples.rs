@@ -814,6 +814,679 @@ impl Layout for BoxedCouplesLayout {
     }
 }
 
+// ── Scene IR emission ─────────────────────────────────────────────────────────
+
+/// Parse the size (last whitespace-delimited token) from a font preference string.
+///
+/// Example: `"Georgia 14"` → `14.0`.  Falls back to `fallback` when parsing
+/// fails or the string is empty.
+fn parse_font_size(s: &str, fallback: f64) -> f64 {
+    s.trim()
+        .rsplit_once(' ')
+        .and_then(|(_, last)| last.parse::<f64>().ok())
+        .unwrap_or(fallback)
+}
+
+/// Returns the ID of the other member of a family given one member's ID.
+fn spouse_id_from_family_bc<G>(
+    ind_id: &str,
+    fam: &crate::parser::genrep::Family<G>,
+) -> Option<String> {
+    if fam.husband_id.as_deref() == Some(ind_id) {
+        fam.wife_id.clone()
+    } else {
+        fam.husband_id.clone()
+    }
+}
+
+/// Emit a `Scene` from a fully-placed `boxed_couples` layout.
+///
+/// Translates all layout-space coordinates into display space (y=0 at top,
+/// y increases downward) and assembles `Primitive`s in the order:
+/// boxes, text, connectors.
+pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::scene::Scene {
+    use crate::format::{format_event, format_name};
+    use crate::scene::{
+        BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
+        TextPrimitive,
+    };
+    use std::collections::HashSet;
+
+    // ── 4a: load highlights ──────────────────────────────────────────────────
+    let highlighted_ids: HashSet<String> = if !prefs.files.highlights.is_empty() {
+        match std::fs::read_to_string(&prefs.files.highlights) {
+            Ok(content) => content
+                .lines()
+                .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+                .filter_map(|l| l.split_whitespace().next().map(|s| s.to_string()))
+                .collect(),
+            Err(e) => {
+                eprintln!(
+                    "warning: cannot read highlights file {:?}: {e}",
+                    prefs.files.highlights
+                );
+                HashSet::new()
+            }
+        }
+    } else {
+        HashSet::new()
+    };
+
+    // ── 4b: collect placed individuals ──────────────────────────────────────
+    let placed: Vec<(&str, &IndividualGeo)> = genrep
+        .individuals
+        .iter()
+        .filter(|(_, ind)| ind.in_scope)
+        .filter_map(|(id, ind)| {
+            if let Some(BoxedCouplesGeo::Individual(ref g)) = ind.geo {
+                Some((id.as_str(), g))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if placed.is_empty() {
+        return Scene {
+            primitives: vec![],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 100.0,
+            },
+        };
+    }
+
+    // ── 4c: display-space transforms ────────────────────────────────────────
+    let canvas_min_x = placed
+        .iter()
+        .map(|(_, g)| g.x - g.width / 2.0)
+        .fold(f64::INFINITY, f64::min);
+    let to_display_x = |lx: f64| lx - canvas_min_x;
+
+    let root_pos_bottom =
+        prefs.layout.root_pos.is_empty() || prefs.layout.root_pos.starts_with("bot");
+
+    let to_display_y: Box<dyn Fn(f64) -> f64> = if root_pos_bottom {
+        let cmin = placed
+            .iter()
+            .map(|(_, g)| g.y - g.height / 2.0)
+            .fold(f64::INFINITY, f64::min);
+        Box::new(move |ly: f64| ly - cmin)
+    } else {
+        let cmax = placed
+            .iter()
+            .map(|(_, g)| g.y + g.height / 2.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        Box::new(move |ly: f64| cmax - ly)
+    };
+
+    // ── 4d: font sizes ──────────────────────────────────────────────────────
+    let font_size = parse_font_size(&prefs.output.style.fonts.names, 13.0);
+    let date_font_size_raw = parse_font_size(&prefs.output.style.fonts.dates, font_size);
+    let date_font_size = if date_font_size_raw <= 0.0 {
+        font_size
+    } else {
+        date_font_size_raw
+    };
+    let _id_font_size = parse_font_size(&prefs.output.style.fonts.id, 8.0);
+
+    let bc = &prefs.layout.boxed_couples;
+    let spacing = &prefs.output.style.spacing.boxed_couples;
+
+    let mut boxes: Vec<Primitive> = Vec::new();
+    let mut texts: Vec<Primitive> = Vec::new();
+
+    // ── 4e: per-individual primitives ───────────────────────────────────────
+    for (ind_id, geo) in &placed {
+        // Box primitive
+        let box_display_top = f64::min(
+            to_display_y(geo.y + geo.height / 2.0),
+            to_display_y(geo.y - geo.height / 2.0),
+        );
+        let box_bbox = Rect {
+            x: to_display_x(geo.x - geo.width / 2.0),
+            y: box_display_top,
+            w: geo.width,
+            h: geo.height,
+        };
+        let is_highlighted = highlighted_ids.contains(*ind_id);
+        boxes.push(Primitive::Box(BoxPrimitive {
+            bbox: box_bbox,
+            is_highlighted,
+        }));
+
+        let ind = &genrep.individuals[*ind_id];
+
+        // Layout sections
+        let center_display_y = to_display_y(geo.y);
+        let region_height = (geo.height - bc.spouse_sep_height) / 2.0;
+        let top_region_display = center_display_y - bc.spouse_sep_height / 2.0 - region_height;
+        let bottom_region_display = center_display_y + bc.spouse_sep_height / 2.0;
+        let sp_section_top = if root_pos_bottom {
+            top_region_display
+        } else {
+            bottom_region_display
+        };
+        let ind_section_top = if root_pos_bottom {
+            bottom_region_display
+        } else {
+            top_region_display
+        };
+        let marr_y = center_display_y + date_font_size / 2.0;
+
+        let sorted_fam_ids = sort_families_by_date(ind, genrep);
+        let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> =
+            sorted_fam_ids
+                .iter()
+                .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
+                .filter(|(_, f)| f.in_scope)
+                .collect();
+        let is_two_spouse = geo.width > bc.box_width + 1.0;
+
+        if is_two_spouse {
+            let left_cx = to_display_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
+            let right_cx =
+                to_display_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
+            let ind_cx = to_display_x(geo.x);
+            let box_display_left = to_display_x(geo.x - geo.width / 2.0);
+
+            // Individual name (centered in wide box)
+            let name_baseline = ind_section_top + spacing.name_above + font_size;
+            let name_bbox = Rect {
+                x: box_display_left,
+                y: name_baseline - font_size,
+                w: geo.width,
+                h: font_size,
+            };
+            // Override: center on ind_cx (use full width bbox but centered on ind_cx)
+            let name_bbox = Rect {
+                x: ind_cx - geo.width / 2.0,
+                ..name_bbox
+            };
+            texts.push(Primitive::Text(TextPrimitive {
+                content: format_name(ind, prefs),
+                bbox: name_bbox,
+                align: TextAlign::Center,
+                attr: TextAttr::IndividualName,
+            }));
+
+            if prefs.show.id {
+                let ind_id_text = ind
+                    .id
+                    .trim_start_matches('@')
+                    .trim_end_matches('@')
+                    .to_string();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: ind_id_text,
+                    bbox: Rect {
+                        x: box_display_left + 2.0,
+                        y: name_baseline - font_size,
+                        w: geo.width,
+                        h: font_size,
+                    },
+                    align: TextAlign::Left,
+                    attr: TextAttr::IndividualId,
+                }));
+            }
+
+            let mut y_pos = name_baseline;
+            if prefs.show.birth {
+                if let Some(ref birth) = ind.birth {
+                    if let Some(s) = format_event(
+                        &prefs.format.birth,
+                        birth.date.as_ref(),
+                        birth.place.as_deref(),
+                    ) {
+                        y_pos += spacing.date_above + date_font_size;
+                        texts.push(Primitive::Text(TextPrimitive {
+                            content: s,
+                            bbox: Rect {
+                                x: ind_cx - geo.width / 2.0,
+                                y: y_pos - date_font_size,
+                                w: geo.width,
+                                h: date_font_size,
+                            },
+                            align: TextAlign::Center,
+                            attr: TextAttr::BirthData,
+                        }));
+                    }
+                }
+            }
+            if prefs.show.death {
+                if let Some(ref death) = ind.death {
+                    if let Some(s) = format_event(
+                        &prefs.format.death,
+                        death.date.as_ref(),
+                        death.place.as_deref(),
+                    ) {
+                        y_pos += spacing.date_above + date_font_size;
+                        texts.push(Primitive::Text(TextPrimitive {
+                            content: s,
+                            bbox: Rect {
+                                x: ind_cx - geo.width / 2.0,
+                                y: y_pos - date_font_size,
+                                w: geo.width,
+                                h: date_font_size,
+                            },
+                            align: TextAlign::Center,
+                            attr: TextAttr::DeathData,
+                        }));
+                    }
+                }
+            }
+
+            // First spouse in left section
+            if let Some((fam1_id, fam1)) = spouses.first() {
+                if let Some(sp1_id) = spouse_id_from_family_bc(ind_id, fam1) {
+                    if let Some(sp1) = genrep.individuals.get(&sp1_id) {
+                        let id_x = to_display_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
+                        emit_spouse_primitives(
+                            &mut texts,
+                            left_cx,
+                            id_x,
+                            marr_y,
+                            sp_section_top,
+                            sp1,
+                            fam1,
+                            fam1_id,
+                            prefs,
+                            bc.box_width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                        );
+                    }
+                }
+            }
+
+            // Second spouse in right section
+            if let Some((fam2_id, fam2)) = spouses.get(1) {
+                if let Some(sp2_id) = spouse_id_from_family_bc(ind_id, fam2) {
+                    if let Some(sp2) = genrep.individuals.get(&sp2_id) {
+                        let id_x =
+                            to_display_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
+                        emit_spouse_primitives(
+                            &mut texts,
+                            right_cx,
+                            id_x,
+                            marr_y,
+                            sp_section_top,
+                            sp2,
+                            fam2,
+                            fam2_id,
+                            prefs,
+                            bc.box_width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                        );
+                    }
+                }
+            }
+        } else {
+            // Single-spouse or no-spouse box
+            let section_cx = to_display_x(geo.x);
+            let box_display_left = to_display_x(geo.x - geo.width / 2.0);
+            let name_baseline = ind_section_top + spacing.name_above + font_size;
+
+            texts.push(Primitive::Text(TextPrimitive {
+                content: format_name(ind, prefs),
+                bbox: Rect {
+                    x: section_cx - geo.width / 2.0,
+                    y: name_baseline - font_size,
+                    w: geo.width,
+                    h: font_size,
+                },
+                align: TextAlign::Center,
+                attr: TextAttr::IndividualName,
+            }));
+
+            if prefs.show.id {
+                let ind_id_text = ind
+                    .id
+                    .trim_start_matches('@')
+                    .trim_end_matches('@')
+                    .to_string();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: ind_id_text,
+                    bbox: Rect {
+                        x: box_display_left + 2.0,
+                        y: name_baseline - font_size,
+                        w: geo.width,
+                        h: font_size,
+                    },
+                    align: TextAlign::Left,
+                    attr: TextAttr::IndividualId,
+                }));
+            }
+
+            let mut y_pos = name_baseline;
+            if prefs.show.birth {
+                if let Some(ref birth) = ind.birth {
+                    if let Some(s) = format_event(
+                        &prefs.format.birth,
+                        birth.date.as_ref(),
+                        birth.place.as_deref(),
+                    ) {
+                        y_pos += spacing.date_above + date_font_size;
+                        texts.push(Primitive::Text(TextPrimitive {
+                            content: s,
+                            bbox: Rect {
+                                x: section_cx - geo.width / 2.0,
+                                y: y_pos - date_font_size,
+                                w: geo.width,
+                                h: date_font_size,
+                            },
+                            align: TextAlign::Center,
+                            attr: TextAttr::BirthData,
+                        }));
+                    }
+                }
+            }
+            if prefs.show.death {
+                if let Some(ref death) = ind.death {
+                    if let Some(s) = format_event(
+                        &prefs.format.death,
+                        death.date.as_ref(),
+                        death.place.as_deref(),
+                    ) {
+                        y_pos += spacing.date_above + date_font_size;
+                        texts.push(Primitive::Text(TextPrimitive {
+                            content: s,
+                            bbox: Rect {
+                                x: section_cx - geo.width / 2.0,
+                                y: y_pos - date_font_size,
+                                w: geo.width,
+                                h: date_font_size,
+                            },
+                            align: TextAlign::Center,
+                            attr: TextAttr::DeathData,
+                        }));
+                    }
+                }
+            }
+
+            if let Some((fam_id, fam)) = spouses.first() {
+                if let Some(sp_id) = spouse_id_from_family_bc(ind_id, fam) {
+                    if let Some(sp) = genrep.individuals.get(&sp_id) {
+                        emit_spouse_primitives(
+                            &mut texts,
+                            section_cx,
+                            box_display_left + 2.0,
+                            marr_y,
+                            sp_section_top,
+                            sp,
+                            fam,
+                            fam_id,
+                            prefs,
+                            geo.width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ── 4f: connector primitives ─────────────────────────────────────────────
+    let mut connectors: Vec<Primitive> = Vec::new();
+
+    for (fam_id, fam) in &genrep.families {
+        if !fam.in_scope {
+            continue;
+        }
+        let fam_geo = match &fam.geo {
+            Some(BoxedCouplesGeo::Family(g)) => g,
+            _ => continue,
+        };
+
+        // Find parent (prefer husband, fall back to wife)
+        let is_placed_individual = |id: &str| {
+            matches!(
+                genrep.individuals.get(id).and_then(|i| i.geo.as_ref()),
+                Some(BoxedCouplesGeo::Individual(_))
+            )
+        };
+        let parent_id = fam
+            .husband_id
+            .as_deref()
+            .filter(|id| is_placed_individual(id))
+            .or_else(|| fam.wife_id.as_deref().filter(|id| is_placed_individual(id)));
+        let parent_id = match parent_id {
+            Some(p) => p,
+            None => continue,
+        };
+
+        let parent_ind = &genrep.individuals[parent_id];
+        let parent_geo = match parent_ind.geo.as_ref() {
+            Some(BoxedCouplesGeo::Individual(g)) => g,
+            _ => continue,
+        };
+
+        // Determine which conn_out_x to use based on family index
+        let sorted_fams = sort_families_by_date(parent_ind, genrep);
+        let fam_index = sorted_fams.iter().position(|f| f == fam_id).unwrap_or(0);
+        let conn_out_x = if fam_index == 0 || !fam_geo.has_spouse2 {
+            fam_geo.conn_out1_x
+        } else {
+            fam_geo.conn_out2_x
+        };
+
+        // Parent exit point: the child-facing edge of the parent box
+        let parent_point = Point {
+            x: to_display_x(conn_out_x),
+            y: to_display_y(parent_geo.y - parent_geo.height / 2.0),
+        };
+
+        // Child entry points
+        let child_points: Vec<Point> = fam
+            .children_ids
+            .iter()
+            .filter_map(|cid| {
+                let child = genrep.individuals.get(cid)?;
+                if let Some(BoxedCouplesGeo::Individual(cg)) = child.geo.as_ref() {
+                    Some(Point {
+                        x: to_display_x(cg.conn_in_x),
+                        y: to_display_y(cg.y + cg.height / 2.0),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if child_points.is_empty() {
+            continue;
+        }
+
+        connectors.push(Primitive::Connector(ConnectorPrimitive {
+            parent_points: vec![parent_point],
+            child_points,
+        }));
+    }
+
+    // ── 4g: assemble scene ──────────────────────────────────────────────────
+    let content_w = placed
+        .iter()
+        .map(|(_, g)| to_display_x(g.x + g.width / 2.0))
+        .fold(0.0_f64, f64::max);
+    let content_h = placed
+        .iter()
+        .map(|(_, g)| {
+            f64::max(
+                to_display_y(g.y + g.height / 2.0),
+                to_display_y(g.y - g.height / 2.0),
+            )
+        })
+        .fold(0.0_f64, f64::max);
+
+    let canvas_bounds = Rect {
+        x: 0.0,
+        y: 0.0,
+        w: content_w,
+        h: content_h,
+    };
+
+    let mut primitives = boxes;
+    primitives.extend(texts);
+    primitives.extend(connectors);
+
+    Scene {
+        primitives,
+        canvas_bounds,
+    }
+}
+
+/// Emit text primitives for one spouse section of a boxed-couples box.
+#[allow(clippy::too_many_arguments)]
+fn emit_spouse_primitives(
+    texts: &mut Vec<crate::scene::Primitive>,
+    cx: f64,
+    id_x: f64,
+    marr_y: f64,
+    sp_section_top: f64,
+    sp: &crate::parser::genrep::Individual<BoxedCouplesGeo>,
+    fam: &crate::parser::genrep::Family<BoxedCouplesGeo>,
+    fam_id: &String,
+    prefs: &Prefs,
+    section_width: f64,
+    font_size: f64,
+    date_font_size: f64,
+    spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
+) {
+    use crate::format::{format_event, format_name};
+    use crate::scene::{Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+
+    // Marriage data (centered)
+    if prefs.show.marriage {
+        if let Some(marr) = &fam.marriage {
+            if let Some(s) = format_event(
+                &prefs.format.marriage,
+                marr.date.as_ref(),
+                marr.place.as_deref(),
+            ) {
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: s,
+                    bbox: Rect {
+                        x: cx - section_width / 2.0,
+                        y: marr_y - date_font_size,
+                        w: section_width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attr: TextAttr::MarriageData,
+                }));
+            }
+        }
+    }
+
+    // Family ID
+    if prefs.show.id {
+        let fam_id_text = fam_id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
+        texts.push(Primitive::Text(TextPrimitive {
+            content: fam_id_text,
+            bbox: Rect {
+                x: id_x,
+                y: marr_y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Left,
+            attr: TextAttr::IndividualId,
+        }));
+    }
+
+    // Spouse name
+    let sp_name_baseline = sp_section_top + spacing.name_above + font_size;
+    texts.push(Primitive::Text(TextPrimitive {
+        content: format_name(sp, prefs),
+        bbox: Rect {
+            x: cx - section_width / 2.0,
+            y: sp_name_baseline - font_size,
+            w: section_width,
+            h: font_size,
+        },
+        align: TextAlign::Center,
+        attr: TextAttr::SpouseName,
+    }));
+
+    // Spouse ID
+    if prefs.show.id {
+        let sp_id_text = sp
+            .id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
+        texts.push(Primitive::Text(TextPrimitive {
+            content: sp_id_text,
+            bbox: Rect {
+                x: id_x,
+                y: sp_name_baseline - font_size,
+                w: section_width,
+                h: font_size,
+            },
+            align: TextAlign::Left,
+            attr: TextAttr::IndividualId,
+        }));
+    }
+
+    // Spouse birth
+    let mut y = sp_name_baseline;
+    if prefs.show.birth {
+        if let Some(ref birth) = sp.birth {
+            if let Some(s) = format_event(
+                &prefs.format.birth,
+                birth.date.as_ref(),
+                birth.place.as_deref(),
+            ) {
+                y += spacing.date_above + date_font_size;
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: s,
+                    bbox: Rect {
+                        x: cx - section_width / 2.0,
+                        y: y - date_font_size,
+                        w: section_width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attr: TextAttr::BirthData,
+                }));
+            }
+        }
+    }
+
+    // Spouse death
+    if prefs.show.death {
+        if let Some(ref death) = sp.death {
+            if let Some(s) = format_event(
+                &prefs.format.death,
+                death.date.as_ref(),
+                death.place.as_deref(),
+            ) {
+                y += spacing.date_above + date_font_size;
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: s,
+                    bbox: Rect {
+                        x: cx - section_width / 2.0,
+                        y: y - date_font_size,
+                        w: section_width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attr: TextAttr::DeathData,
+                }));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1431,7 +2104,6 @@ mod tests {
 
     #[test]
     fn test_last_sibling_children_placed() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1455,12 +2127,7 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
 
         let i6 = bc
             .individuals
@@ -1474,7 +2141,6 @@ mod tests {
 
     #[test]
     fn test_global_right_tight_packing() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1511,12 +2177,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,
@@ -1549,7 +2211,6 @@ mod tests {
 
     #[test]
     fn test_compact_left_packed_siblings() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1586,12 +2247,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,
@@ -1620,7 +2277,6 @@ mod tests {
 
     #[test]
     fn test_compact_no_subtree_overlap() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1661,12 +2317,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,
@@ -1689,7 +2341,6 @@ mod tests {
 
     #[test]
     fn test_compact_no_second_cousin_overlap() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1744,12 +2395,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(4));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,
@@ -1777,7 +2424,6 @@ mod tests {
     /// Children of F11 (1850) should appear before children of F10 (1900).
     #[test]
     fn test_spouses_sorted_by_marriage_date() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1804,12 +2450,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         // I5 (child of earlier marriage 1850) should appear before I4 (child of later marriage 1900).
         // In the boxed_couples layout, children are placed left-to-right by order.
@@ -1847,7 +2489,6 @@ mod tests {
     /// to close the gap before I5, breaking the connector invariant.
     #[test]
     fn test_two_spouse_compact_isolates_groups() {
-        use crate::layout::{LayoutOutput, run_layout};
         use crate::parser::{compute_scope, parse_str};
         use crate::preferences::Prefs;
 
@@ -1884,12 +2525,8 @@ mod tests {
 
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
-        let layout = run_layout(&genrep, &prefs).unwrap();
-
-        let bc = match layout {
-            LayoutOutput::BoxedCouples(ref g) => g,
-            _ => panic!("expected BoxedCouples layout"),
-        };
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let bc = &bc;
 
         let get_x = |id: &str| match &bc.individuals[id].geo {
             Some(BoxedCouplesGeo::Individual(g)) => g.x,

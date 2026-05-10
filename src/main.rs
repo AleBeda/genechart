@@ -1,8 +1,10 @@
 mod backend;
 mod cli;
+mod format;
 mod layout;
 mod parser;
 mod preferences;
+mod scene;
 mod trace;
 mod util;
 

@@ -1,5 +1,6 @@
 use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
+use crate::scene::Scene;
 use anyhow::Result;
 
 pub mod boxed_couples;
@@ -14,7 +15,7 @@ pub trait Layout {
 
 pub enum LayoutOutput {
     Simple(Genrep<simple::SimpleGeo>),
-    BoxedCouples(Genrep<boxed_couples::BoxedCouplesGeo>),
+    BoxedCouples(Scene),
     Fan(Genrep<fan::FanGeo>),
 }
 
@@ -26,7 +27,8 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
         }
         "boxed_couples" => {
             let result = boxed_couples::BoxedCouplesLayout.compute(genrep, prefs)?;
-            Ok(LayoutOutput::BoxedCouples(result))
+            let scene = boxed_couples::emit_scene(&result, prefs);
+            Ok(LayoutOutput::BoxedCouples(scene))
         }
         "fan" => {
             let result = fan::FanLayout.compute(genrep, prefs)?;
