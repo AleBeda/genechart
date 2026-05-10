@@ -17,7 +17,11 @@ pub struct FanGeo {
     pub angle_span: f64,
     pub radius_inner: f64,
     pub radius_outer: f64,
+    // x, y are text midpoint offsets; retained for tests but no longer used in emit_scene
+    // (emit_scene recomputes from geometry to avoid dependency on the stored values).
+    #[allow(dead_code)]
     pub x: f64,
+    #[allow(dead_code)]
     pub y: f64,
 }
 
@@ -183,6 +187,85 @@ fn place_ancestors(
 fn to_xy(radius: f64, angle_deg: f64) -> (f64, f64) {
     let rad = angle_deg * PI / 180.0;
     (radius * rad.cos(), radius * rad.sin())
+}
+
+pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene {
+    use crate::format::format_name;
+    use crate::scene::{Primitive, Rect, Scene, TextAttr, WedgePrimitive};
+    use std::collections::HashSet;
+
+    // C2a — compute max_radius
+    let max_radius = genrep
+        .individuals
+        .values()
+        .filter_map(|i| i.geo.as_ref())
+        .map(|g| g.radius_outer)
+        .fold(0.0_f64, f64::max);
+
+    // Fan center in display space (render_scene adds MARGIN and chart_top_offset)
+    let cx = max_radius;
+    let cy = max_radius;
+
+    // C2b — highlights
+    let highlighted_ids: HashSet<String> = if !prefs.files.highlights.is_empty() {
+        match std::fs::read_to_string(&prefs.files.highlights) {
+            Ok(content) => content
+                .lines()
+                .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+                .filter_map(|l| l.split_whitespace().next().map(|s| s.to_string()))
+                .collect(),
+            Err(e) => {
+                eprintln!(
+                    "warning: cannot read highlights file {:?}: {e}",
+                    prefs.files.highlights
+                );
+                HashSet::new()
+            }
+        }
+    } else {
+        HashSet::new()
+    };
+
+    // C2c — sort individuals by radius_inner ascending, then emit wedges
+    let mut indis: Vec<_> = genrep
+        .individuals
+        .values()
+        .filter(|i| i.in_scope)
+        .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
+        .collect();
+    indis.sort_by(|(_, a), (_, b)| {
+        a.radius_inner
+            .partial_cmp(&b.radius_inner)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut primitives: Vec<Primitive> = Vec::with_capacity(indis.len());
+    for (indi, geo) in &indis {
+        primitives.push(Primitive::Wedge(WedgePrimitive {
+            cx,
+            cy,
+            angle_center: geo.angle_center,
+            angle_span: geo.angle_span,
+            radius_inner: geo.radius_inner,
+            radius_outer: geo.radius_outer,
+            label: Some(format_name(indi, prefs)),
+            label_attr: TextAttr::IndividualName,
+            is_highlighted: highlighted_ids.contains(&indi.id),
+        }));
+    }
+
+    // C2d — canvas bounds: full diameter wide, half-circle height
+    let canvas_bounds = Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 2.0 * max_radius,
+        h: max_radius,
+    };
+
+    Scene {
+        primitives,
+        canvas_bounds,
+    }
 }
 
 #[cfg(test)]

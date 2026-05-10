@@ -16,7 +16,7 @@ pub trait Layout {
 pub enum LayoutOutput {
     Simple(Scene),
     BoxedCouples(Scene),
-    Fan(Genrep<fan::FanGeo>),
+    Fan(Scene),
 }
 
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
@@ -32,7 +32,7 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
         }
         "fan" => {
             let result = fan::FanLayout.compute(genrep, prefs)?;
-            Ok(LayoutOutput::Fan(result))
+            Ok(LayoutOutput::Fan(fan::emit_scene(&result, prefs)))
         }
         other => {
             eprintln!("warning: unknown layout type {other:?}, falling back to 'simple'");

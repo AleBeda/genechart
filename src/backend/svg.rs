@@ -2,10 +2,7 @@
 
 use crate::backend::Renderer;
 use crate::backend::font_metrics;
-use crate::format::format_name;
 use crate::layout::LayoutOutput;
-use crate::layout::fan::FanGeo;
-use crate::parser::genrep::Genrep;
 use crate::preferences::Prefs;
 use crate::scene::{Scene, TextAlign, TextAttr};
 use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
@@ -293,18 +290,25 @@ fn expand_title_template(template: &str, prefs: &Prefs) -> String {
 // SVG arc path for one wedge of the fan.
 // Angles follow the math convention (0°=right, 90°=top, 180°=left).
 // SVG y is flipped: svg_y = cy - math_y.
-fn wedge_path(cx: f64, cy: f64, geo: &FanGeo) -> String {
-    let a0 = (geo.angle_center - geo.angle_span / 2.0).to_radians();
-    let a1 = (geo.angle_center + geo.angle_span / 2.0).to_radians();
-    let ri = geo.radius_inner;
-    let ro = geo.radius_outer;
+fn wedge_path(
+    cx: f64,
+    cy: f64,
+    angle_center: f64,
+    angle_span: f64,
+    radius_inner: f64,
+    radius_outer: f64,
+) -> String {
+    let a0 = (angle_center - angle_span / 2.0).to_radians();
+    let a1 = (angle_center + angle_span / 2.0).to_radians();
+    let ri = radius_inner;
+    let ro = radius_outer;
 
     let ox0 = cx + ro * a0.cos();
     let oy0 = cy - ro * a0.sin();
     let ox1 = cx + ro * a1.cos();
     let oy1 = cy - ro * a1.sin();
 
-    let laf = if geo.angle_span >= 180.0 { 1 } else { 0 };
+    let laf = if angle_span >= 180.0 { 1 } else { 0 };
 
     if ri < 1.0 {
         format!(
@@ -323,112 +327,6 @@ fn wedge_path(cx: f64, cy: f64, geo: &FanGeo) -> String {
                  A {ri:.1} {ri:.1} 0 {laf} 1 {ix0:.1} {iy0:.1} Z"
         )
     }
-}
-
-fn render_fan(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> String {
-    let max_radius = genrep
-        .individuals
-        .values()
-        .filter_map(|i| i.geo.as_ref())
-        .map(|g| g.radius_outer)
-        .fold(0.0_f64, f64::max);
-
-    if max_radius < 1.0 {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-                <svg xmlns=\"http://www.w3.org/2000/svg\" \
-                width=\"100\" height=\"100\"></svg>\n"
-            .into();
-    }
-
-    let (font_family, font_size) = parsed_font(&prefs.output.style.fonts.names);
-
-    // Title / copyright
-    let title_text = expand_title_template(&prefs.output.text.title, prefs);
-    let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
-    let title_line_h = if title_text.is_empty() {
-        0.0
-    } else {
-        title_font_size * (LINE_HEIGHT / FONT_SIZE)
-    };
-
-    let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
-    let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
-    let copy_line_h = if copy_text.is_empty() {
-        0.0
-    } else {
-        copy_font_size * (LINE_HEIGHT / FONT_SIZE)
-    };
-
-    let content_w = 2.0 * (max_radius + MARGIN);
-    let fan_h = max_radius + 2.0 * MARGIN;
-    let content_h = title_line_h + fan_h + copy_line_h;
-    // Fan center y is shifted down by the title height
-    let cx = content_w / 2.0;
-    let cy = title_line_h + fan_h - MARGIN;
-
-    let canvas_w = format!("{content_w:.0}");
-    let canvas_h = format!("{content_h:.0}");
-    let viewbox = format!("0 0 {content_w:.1} {content_h:.1}");
-
-    let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
-
-    // ── Title ─────────────────────────────────────────────────────────────────
-    if !title_text.is_empty() {
-        let y = title_font_size; // baseline at top
-        out.push_str(&svg_text(
-            MARGIN,
-            y,
-            &title_text,
-            &title_font_family,
-            title_font_size,
-        ));
-    }
-
-    // ── Copyright ─────────────────────────────────────────────────────────────
-    if !copy_text.is_empty() {
-        let y = title_line_h + fan_h + copy_font_size - MARGIN;
-        out.push_str(&svg_text(
-            MARGIN,
-            y,
-            &copy_text,
-            &copy_font_family,
-            copy_font_size,
-        ));
-    }
-
-    let mut indis: Vec<_> = genrep
-        .individuals
-        .values()
-        .filter_map(|i| i.geo.as_ref().map(|g| (i, g)))
-        .collect();
-    indis.sort_by(|(_, a), (_, b)| {
-        a.radius_inner
-            .partial_cmp(&b.radius_inner)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    for (indi, geo) in &indis {
-        let path = wedge_path(cx, cy, geo);
-        out.push_str(&format!(
-            "  <path d=\"{path}\" fill=\"white\" stroke=\"black\" stroke-width=\"0.5\"/>\n"
-        ));
-
-        let label = format_name(indi, prefs);
-        let tx = cx + geo.x;
-        let ty = cy - geo.y;
-        let rotate = 90.0 - geo.angle_center;
-        out.push_str(&format!(
-            "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \
-             font-family=\"{font_family}\" font-size=\"{font_size}\" \
-             text-anchor=\"middle\" dominant-baseline=\"middle\" \
-             transform=\"rotate({rotate:.1},{tx:.1},{ty:.1})\" \
-             xml:space=\"preserve\">{}</text>\n",
-            xml_escape(&label)
-        ));
-    }
-
-    out.push_str("</svg>\n");
-    out
 }
 
 // ── Scene renderer ────────────────────────────────────────────────────────────
@@ -765,8 +663,37 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     ));
                 }
             }
-            crate::scene::Primitive::Wedge(_) => {
-                // Fan layout not yet migrated to Scene
+            crate::scene::Primitive::Wedge(w) => {
+                let cx_svg = to_svg_x(w.cx);
+                let cy_svg = to_svg_y(w.cy);
+                let path = wedge_path(
+                    cx_svg,
+                    cy_svg,
+                    w.angle_center,
+                    w.angle_span,
+                    w.radius_inner,
+                    w.radius_outer,
+                );
+                out.push_str(&format!(
+                    "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\"/>\n"
+                ));
+                if let Some(ref label_text) = w.label {
+                    let (font_family, font_size) = font_for_attr(&w.label_attr, prefs);
+                    let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
+                    let angle_rad = w.angle_center.to_radians();
+                    let tx = cx_svg + mid_r * angle_rad.cos();
+                    let ty = cy_svg - mid_r * angle_rad.sin(); // y-up math → y-down SVG
+                    let rotation = 90.0 - w.angle_center;
+                    let color = color_for_attr(&w.label_attr, prefs);
+                    out.push_str(&format!(
+                        "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \
+                         font-family=\"{font_family}\" font-size=\"{font_size}\" \
+                         fill=\"{color}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
+                         transform=\"rotate({rotation:.1},{tx:.1},{ty:.1})\" \
+                         xml:space=\"preserve\">{}</text>\n",
+                        xml_escape(label_text)
+                    ));
+                }
             }
         }
     }
@@ -796,7 +723,7 @@ pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> 
     match output {
         LayoutOutput::Simple(scene) => Ok(render_scene(scene, prefs)),
         LayoutOutput::BoxedCouples(scene) => Ok(render_scene(scene, prefs)),
-        LayoutOutput::Fan(genrep) => Ok(render_fan(genrep, prefs)),
+        LayoutOutput::Fan(scene) => Ok(render_scene(scene, prefs)),
     }
 }
 

@@ -98,7 +98,7 @@ pub struct ConnectorPrimitive {
     pub child_points: Vec<Point>,
 }
 
-/// A wedge primitive (fan layout — not yet migrated).
+/// A wedge primitive (fan layout).
 #[derive(Debug, Clone)]
 pub struct WedgePrimitive {
     pub cx: f64,
@@ -107,6 +107,9 @@ pub struct WedgePrimitive {
     pub angle_span: f64,
     pub radius_inner: f64,
     pub radius_outer: f64,
+    pub label: Option<String>,
+    pub label_attr: TextAttr,
+    pub is_highlighted: bool,
 }
 
 /// A single renderable element.

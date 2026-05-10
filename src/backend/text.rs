@@ -105,8 +105,12 @@ impl Renderer for TextRenderer {
         writer: &mut dyn std::io::Write,
     ) -> anyhow::Result<()> {
         let scene = match output {
-            LayoutOutput::Simple(s) => s,
-            _ => anyhow::bail!("TextRenderer only supports Simple layout output"),
+            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) => s,
+            LayoutOutput::Fan(_) => {
+                anyhow::bail!(
+                    "fan layout does not support text output; use --svg or --pdf"
+                )
+            }
         };
 
         // Title
