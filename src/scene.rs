@@ -1,4 +1,7 @@
 //! Intermediate representation (IR) for the layout→backend pipeline.
+//! Forward-looking variants and fields (Wedge, GenerationNum, Right, etc.) are
+//! defined here for completeness but not yet wired up.
+#![allow(dead_code)]
 //!
 //! The layout layer emits a `Scene` containing a list of `Primitive`s.
 //! The backend layer renders those primitives to SVG (or other formats)
