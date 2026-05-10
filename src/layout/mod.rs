@@ -19,6 +19,28 @@ pub enum LayoutOutput {
     Fan(Scene),
 }
 
+impl LayoutOutput {
+    /// Consume the output and return the contained `Scene`.
+    #[allow(dead_code)]
+    pub fn into_scene(self) -> Scene {
+        match self {
+            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) | LayoutOutput::Fan(s) => s,
+        }
+    }
+
+    /// Borrow the contained `Scene`.
+    pub fn scene(&self) -> &Scene {
+        match self {
+            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) | LayoutOutput::Fan(s) => s,
+        }
+    }
+
+    /// Returns `true` if this is a `Fan` layout output (which does not support text rendering).
+    pub fn is_fan(&self) -> bool {
+        matches!(self, LayoutOutput::Fan(_))
+    }
+}
+
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
     match prefs.layout.layout_type.to_lowercase().as_str() {
         "simple" => {

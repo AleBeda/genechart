@@ -104,14 +104,10 @@ impl Renderer for TextRenderer {
         prefs: &Prefs,
         writer: &mut dyn std::io::Write,
     ) -> anyhow::Result<()> {
-        let scene = match output {
-            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) => s,
-            LayoutOutput::Fan(_) => {
-                anyhow::bail!(
-                    "fan layout does not support text output; use --svg or --pdf"
-                )
-            }
-        };
+        if output.is_fan() {
+            anyhow::bail!("fan layout does not support text output; use --svg or --pdf");
+        }
+        let scene = output.scene();
 
         // Title
         if !prefs.output.text.title.is_empty() {

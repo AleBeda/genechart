@@ -720,11 +720,7 @@ impl Renderer for SvgRenderer {
 }
 
 pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> {
-    match output {
-        LayoutOutput::Simple(scene) => Ok(render_scene(scene, prefs)),
-        LayoutOutput::BoxedCouples(scene) => Ok(render_scene(scene, prefs)),
-        LayoutOutput::Fan(scene) => Ok(render_scene(scene, prefs)),
-    }
+    Ok(render_scene(output.scene(), prefs))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
