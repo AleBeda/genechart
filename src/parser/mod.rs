@@ -563,7 +563,7 @@ fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) 
         }
         indi_scope.insert(id.clone());
 
-        if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
+        if generations.is_none_or(|g| depth < g.saturating_sub(1)) {
             let fams: Vec<String> = genrep
                 .individuals
                 .get(&id)
@@ -612,7 +612,7 @@ fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
         }
         indi_scope.insert(id.clone());
 
-        if generations.map_or(true, |g| depth < g.saturating_sub(1)) {
+        if generations.is_none_or(|g| depth < g.saturating_sub(1)) {
             let famcs: Vec<String> = genrep
                 .individuals
                 .get(&id)

@@ -48,7 +48,7 @@ pub(crate) fn format_event(
 
     let s = strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string());
 
-    let s = s.trim_end_matches(|c| matches!(c, ',' | ' ')).to_string();
+    let s = s.trim_end_matches([',', ' ']).to_string();
     if s.is_empty() {
         return None;
     }
@@ -152,10 +152,10 @@ fn write_at_col(s: &mut String, col: usize, text: &str, dot_leaders: bool) {
         let gap = col - cur;
         if dot_leaders && gap >= 4 {
             s.push(' ');
-            s.extend(std::iter::repeat('.').take(gap - 2));
+            s.extend(std::iter::repeat_n('.', gap - 2));
             s.push(' ');
         } else {
-            s.extend(std::iter::repeat(' ').take(gap));
+            s.extend(std::iter::repeat_n(' ', gap));
         }
     } else {
         s.push_str("  ");
@@ -165,7 +165,7 @@ fn write_at_col(s: &mut String, col: usize, text: &str, dot_leaders: bool) {
 
 fn pad_line_to(s: &mut String, min_len: usize) {
     if s.len() < min_len {
-        s.extend(std::iter::repeat(' ').take(min_len - s.len()));
+        s.extend(std::iter::repeat_n(' ', min_len - s.len()));
     }
 }
 
@@ -326,15 +326,6 @@ impl Renderer for TextRenderer {
 
         Ok(())
     }
-}
-
-pub fn render_to_file(
-    output: &LayoutOutput,
-    prefs: &Prefs,
-    path: &std::path::Path,
-) -> anyhow::Result<()> {
-    let mut f = std::fs::File::create(path)?;
-    TextRenderer.render(output, prefs, &mut f)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -92,7 +92,7 @@ fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
                 fam.husband_id.clone()
             }
         })
-        .filter(|sp| genrep.get_individual(sp).map_or(false, |i| i.in_scope))
+        .filter(|sp| genrep.get_individual(sp).is_some_and(|i| i.in_scope))
         .collect()
 }
 
@@ -110,7 +110,7 @@ fn children_with_spouse(ind_id: &str, spouse_id: &str, genrep: &Genrep) -> Vec<S
                 || fam.wife_id.as_deref() == Some(spouse_id)
         })
         .flat_map(|fam| fam.children_ids.iter().cloned())
-        .filter(|cid| genrep.get_individual(cid).map_or(false, |c| c.in_scope))
+        .filter(|cid| genrep.get_individual(cid).is_some_and(|c| c.in_scope))
         .collect()
 }
 
@@ -380,6 +380,7 @@ fn compact_siblings(
     for i in (0..children.len() - 1).rev() {
         // Compute merged right envelope for the entire block to the left of the gap.
         let mut block_right_env = Vec::new();
+        #[allow(clippy::needless_range_loop)]
         for j in 0..=i {
             let child_right_env = get_right_envelope(&children[j], genrep, out);
             block_right_env = merge_max(block_right_env, child_right_env);
@@ -407,6 +408,7 @@ fn compact_siblings(
             .max(0.0);
 
         if safe_shift > 1e-6 {
+            #[allow(clippy::needless_range_loop)]
             for j in 0..=i {
                 shift_subtree(
                     &children[j],
@@ -497,6 +499,7 @@ fn compact_pass(
 /// After all descendants are placed, [`compact_pass`] closes sibling gaps in a top-down sweep.
 /// The two-spouse case is identical but concatenates both spouses' children
 /// and adjusts the midpoint calculation for the wide-box connector offsets.
+#[allow(clippy::too_many_arguments)]
 fn place_descendants(
     genrep: &Genrep,
     ind_id: &str,
@@ -672,6 +675,7 @@ fn place_descendants(
 /// Stub for ancestor-direction layout; currently delegates to [`place_descendants`].
 ///
 /// A true ancestors traversal would walk `famc` links and place parents above the child.
+#[allow(clippy::too_many_arguments)]
 fn place_ancestors(
     genrep: &Genrep,
     ind_id: &str,
@@ -789,6 +793,7 @@ impl Layout for BoxedCouplesLayout {
         for ind_id in placed_ids {
             let spouses = spouses_of(&ind_id, genrep);
             for spouse_id in spouses {
+                #[allow(clippy::map_entry)]
                 if !individuals.contains_key(&spouse_id) {
                     if let Some(spouse) = genrep.get_individual(&spouse_id) {
                         individuals.insert(spouse_id, copy_individual(spouse, None));

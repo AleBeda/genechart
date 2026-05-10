@@ -17,6 +17,7 @@ impl Tracer {
     }
 
     /// A no-op tracer (used in tests and when `--trace` is absent).
+    #[allow(dead_code)] // (not currently used, but may be useful in tests and benchmarks)
     pub fn disabled() -> Self {
         Self {
             components: HashSet::new(),

@@ -82,6 +82,7 @@ impl Layout for FanLayout {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn place_ancestors(
     genrep: &Genrep,
     id: &str,

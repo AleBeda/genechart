@@ -469,27 +469,6 @@ fn toml_value_str(val: &Value) -> String {
     }
 }
 
-/// Recursively overlay non-null keys from `overlay` onto `base`.
-fn merge_toml(base: &mut Value, overlay: Value) {
-    match overlay {
-        Value::Table(overlay_map) => {
-            if let Value::Table(base_map) = base {
-                for (key, val) in overlay_map {
-                    match base_map.get_mut(&key) {
-                        Some(base_val) => merge_toml(base_val, val),
-                        None => {
-                            base_map.insert(key, val);
-                        }
-                    }
-                }
-            } else {
-                *base = Value::Table(overlay_map);
-            }
-        }
-        other => *base = other,
-    }
-}
-
 /// Like `merge_toml`, but emits PREF KEY-VALUE / PREF OVERRIDE KEY-VALUE
 /// trace lines as each leaf is processed.
 ///

@@ -50,6 +50,7 @@ fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> Stri
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn svg_rect(
     x: f64,
     y: f64,
@@ -218,6 +219,7 @@ fn render_mixed_text(
 /// centered using accurate font metrics for the Latin segments. Symbol segments use
 /// SYMBOL_FONT_FAMILY and weight "normal"; non-symbol segments use `primary_family`
 /// and `weight`.
+#[allow(clippy::too_many_arguments)]
 fn render_mixed_text_mid_w(
     out: &mut String,
     cx: f64,
@@ -235,7 +237,7 @@ fn render_mixed_text_mid_w(
     // Split text into (slice, is_symbol) segments at U+2000 boundary.
     let mut segments: Vec<(&str, bool)> = Vec::new();
     let mut seg_start = 0usize;
-    let mut in_symbol = text.chars().next().map_or(false, |c| (c as u32) >= 0x2000);
+    let mut in_symbol = text.chars().next().is_some_and(|c| (c as u32) >= 0x2000);
     for (byte_pos, c) in text.char_indices() {
         let is_sym = (c as u32) >= 0x2000;
         if is_sym != in_symbol {
@@ -339,6 +341,7 @@ fn render_simple(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> String {
     entries.sort_by_key(|(_, g)| g.line);
 
     if entries.is_empty() {
+        #[allow(clippy::useless_format)] // For consistency with other 
         return format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
              <svg xmlns=\"http://www.w3.org/2000/svg\" \
@@ -1048,7 +1051,7 @@ fn render_boxed_couples(
                 &format_name(ind, prefs),
                 &font_family,
                 font_size,
-                &descendant_weight,
+                descendant_weight,
                 cw,
             );
 
@@ -1131,7 +1134,7 @@ fn render_boxed_couples(
                             &id_font_family,
                             id_font_size,
                             &id_color,
-                            &spouse_weight,
+                            spouse_weight,
                             cw,
                             date_cw,
                         );
@@ -1162,7 +1165,7 @@ fn render_boxed_couples(
                             &id_font_family,
                             id_font_size,
                             &id_color,
-                            &spouse_weight,
+                            spouse_weight,
                             cw,
                             date_cw,
                         );
@@ -1180,7 +1183,7 @@ fn render_boxed_couples(
                 &format_name(ind, prefs),
                 &font_family,
                 font_size,
-                &descendant_weight,
+                descendant_weight,
                 cw,
             );
 
@@ -1261,7 +1264,7 @@ fn render_boxed_couples(
                             &id_font_family,
                             id_font_size,
                             &id_color,
-                            &spouse_weight,
+                            spouse_weight,
                             cw,
                             date_cw,
                         );
