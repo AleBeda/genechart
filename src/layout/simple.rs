@@ -422,6 +422,24 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
 
+        // Individual ID — emitted first so the text backend writes it at col 0
+        // before any other content fills the line.
+        if prefs.show.id {
+            let id_str = format!("{id}");
+            let id_w = id_str.chars().count() as f64 * char_width_px;
+            primitives.push(Primitive::Text(TextPrimitive {
+                content: id_str,
+                bbox: Rect {
+                    x: 0.0,
+                    y: top_y,
+                    w: id_w,
+                    h: line_height_px,
+                },
+                align: TextAlign::Left,
+                attr: TextAttr::IndividualId,
+            }));
+        }
+
         // Generation number (non-spouse only)
         if prefs.show.generation_num && !geo.is_spouse {
             let prefix = gen_prefix_str(geo.generation);
@@ -521,23 +539,6 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     }));
                 }
             }
-        }
-
-        // Individual ID — placed in the reserved left column (x = 0)
-        if prefs.show.id {
-            let id_str = format!("{id}");
-            let id_w = id_str.chars().count() as f64 * char_width_px;
-            primitives.push(Primitive::Text(TextPrimitive {
-                content: id_str,
-                bbox: Rect {
-                    x: 0.0,
-                    y: top_y,
-                    w: id_w,
-                    h: line_height_px,
-                },
-                align: TextAlign::Left,
-                attr: TextAttr::IndividualId,
-            }));
         }
 
         // ── Connector primitives (ancestors mode) ─────────────────────────────
