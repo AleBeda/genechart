@@ -493,11 +493,29 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
 // ── scope computation ────────────────────────────────────────────────────────
 
 /// Set `in_scope = true` on individuals and families based on direction and depth.
+///
+/// Equivalent to `compute_scope_opts(genrep, root_id, direction, generations, false)`.
+#[allow(dead_code)]
 pub fn compute_scope(
     genrep: &mut Genrep,
     root_id: Option<&str>,
     direction: &str,
     generations: Option<u32>,
+) {
+    compute_scope_opts(genrep, root_id, direction, generations, false);
+}
+
+/// Like [`compute_scope`] but with an explicit `last_gen_spouses` flag.
+///
+/// When `last_gen_spouses` is `true` and a generation limit is set, spouses of
+/// individuals in the deepest visible generation are included in scope even
+/// though their children are not.
+pub fn compute_scope_opts(
+    genrep: &mut Genrep,
+    root_id: Option<&str>,
+    direction: &str,
+    generations: Option<u32>,
+    last_gen_spouses: bool,
 ) {
     let dir = direction.trim().to_ascii_lowercase();
     if matches_direction(&dir, "forest") {
@@ -516,7 +534,7 @@ pub fn compute_scope(
     };
 
     if matches_direction(&dir, "descendants") {
-        scope_descendants(genrep, &root, generations);
+        scope_descendants(genrep, &root, generations, last_gen_spouses);
     } else if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
         scope_ancestors(genrep, &root, generations);
     } else {
@@ -550,7 +568,12 @@ fn resolve_root(genrep: &Genrep, root_id: Option<&str>) -> Option<String> {
     }
 }
 
-fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
+fn scope_descendants(
+    genrep: &mut Genrep,
+    root: &str,
+    generations: Option<u32>,
+    last_gen_spouses: bool,
+) {
     let mut indi_scope: HashSet<String> = HashSet::new();
     let mut fam_scope: HashSet<String> = HashSet::new();
 
@@ -563,7 +586,15 @@ fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) 
         }
         indi_scope.insert(id.clone());
 
-        if generations.is_none_or(|g| depth < g.saturating_sub(1)) {
+        // Whether this individual is in the last visible generation.
+        let at_last_gen = generations.is_some_and(|g| depth >= g.saturating_sub(1));
+        // Add children only when not at the last generation.
+        let add_children = !at_last_gen;
+        // Add spouses when not at the last generation, or when the caller opts
+        // in to showing last-generation spouses.
+        let add_spouses = !at_last_gen || last_gen_spouses;
+
+        if add_children || add_spouses {
             let fams: Vec<String> = genrep
                 .individuals
                 .get(&id)
@@ -584,12 +615,16 @@ fn scope_descendants(genrep: &mut Genrep, root: &str, generations: Option<u32>) 
                 };
 
                 fam_scope.insert(fam_id);
-                if let Some(sp) = spouse {
-                    indi_scope.insert(sp);
+                if add_spouses {
+                    if let Some(sp) = spouse {
+                        indi_scope.insert(sp);
+                    }
                 }
-                for child_id in children {
-                    if !indi_scope.contains(&child_id) {
-                        queue.push_back((child_id, depth + 1));
+                if add_children {
+                    for child_id in children {
+                        if !indi_scope.contains(&child_id) {
+                            queue.push_back((child_id, depth + 1));
+                        }
                     }
                 }
             }

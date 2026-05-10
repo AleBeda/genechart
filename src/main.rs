@@ -156,7 +156,13 @@ fn run() -> anyhow::Result<()> {
     // 9. Compute scope
     let root_id = (!prefs.scope.root.is_empty()).then_some(prefs.scope.root.as_str());
     let gens = (prefs.scope.generations > 0).then_some(prefs.scope.generations);
-    parser::compute_scope(&mut genrep, root_id, &prefs.scope.direction, gens);
+    parser::compute_scope_opts(
+        &mut genrep,
+        root_id,
+        &prefs.scope.direction,
+        gens,
+        prefs.show.last_gen_spouses,
+    );
 
     // 10. Run layout
     let layout_output = layout::run_layout(&genrep, &prefs)?;
