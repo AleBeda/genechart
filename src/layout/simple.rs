@@ -305,6 +305,15 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }
     };
 
+    // When IDs are shown they occupy a fixed left column: 5 chars for "I9999"
+    // plus 1 char gap, so 6 × char_width_px.  All other content is shifted
+    // right by this amount; the ID itself sits at x = 0.
+    let id_col_px: f64 = if prefs.show.id {
+        6.0 * char_width_px
+    } else {
+        0.0
+    };
+
     // ── Collect and sort in-scope individuals ─────────────────────────────────
     let mut entries: Vec<(
         &str,
@@ -336,7 +345,8 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
     let max_name_end_px: f64 = entries
         .iter()
         .map(|(_, indi, geo)| {
-            geo.indent as f64 * indent_px
+            id_col_px
+                + geo.indent as f64 * indent_px
                 + gen_prefix_px(geo.generation)
                 + format_name(*indi, prefs).chars().count() as f64 * char_width_px
         })
@@ -409,7 +419,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 
     for (id, indi, geo) in &entries {
         let top_y = geo.line as f64 * line_height_px;
-        let x_name = geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
+        let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
 
         // Generation number (non-spouse only)
@@ -418,7 +428,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             primitives.push(Primitive::Text(TextPrimitive {
                 content: prefix,
                 bbox: Rect {
-                    x: geo.indent as f64 * indent_px,
+                    x: id_col_px + geo.indent as f64 * indent_px,
                     y: top_y,
                     w: gpx,
                     h: line_height_px,
@@ -513,14 +523,14 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             }
         }
 
-        // Individual ID
+        // Individual ID — placed in the reserved left column (x = 0)
         if prefs.show.id {
-            let id_str = format!("@{id}@");
+            let id_str = format!("{id}");
             let id_w = id_str.chars().count() as f64 * char_width_px;
             primitives.push(Primitive::Text(TextPrimitive {
                 content: id_str,
                 bbox: Rect {
-                    x: x_name,
+                    x: 0.0,
                     y: top_y,
                     w: id_w,
                     h: line_height_px,
@@ -532,7 +542,8 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 
         // ── Connector primitives (ancestors mode) ─────────────────────────────
         // x aligned with the first character of the parent's name (parent is geo.generation + 1)
-        let x_conn = (geo.indent as f64 + 1.0) * indent_px + gen_prefix_px(geo.generation + 1);
+        let x_conn =
+            id_col_px + (geo.indent as f64 + 1.0) * indent_px + gen_prefix_px(geo.generation + 1);
 
         if !geo.connectors_above.is_empty() {
             let first = *geo.connectors_above.iter().min().unwrap();
