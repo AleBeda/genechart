@@ -91,8 +91,10 @@ id = 0xE00
 
 [output.style.text.highlights]
 color = 0x00D
-background_color = 0xFFC
-fallback = "uppercase" # All caps if backend doesn't support colors (currently the only supported value)
+background_color = 0xFF6
+fallback = "->" # Used when backend does not support colors
+                # When "uppercase", capitalize text;
+                # otherwise, use the string as-is to the left of the person's name (e.g. "-> John Doe")
 
 [output.style.fonts]
 names = "Georgia 14"
