@@ -582,6 +582,32 @@ fn de_f64<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
     d.deserialize_any(V)
 }
 
+// ── Highlights file reader ──────────────────────────────────────────────────
+
+use std::collections::HashSet;
+
+/// Read a highlights file and return the set of IDs to highlight.
+///
+/// Parses each line: skips blanks and lines starting with `#`, takes the first
+/// whitespace-delimited token as the ID.  Returns an empty set on error,
+/// emitting a warning to stderr.
+pub fn load_highlights(path: &Path) -> HashSet<String> {
+    if path.display().to_string().is_empty() {
+        return HashSet::new();
+    }
+    match std::fs::read_to_string(path) {
+        Ok(content) => content
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+            .filter_map(|l| l.split_whitespace().next().map(|s| s.to_string()))
+            .collect(),
+        Err(e) => {
+            eprintln!("warning: cannot read highlights file {:?}: {e}", path);
+            HashSet::new()
+        }
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

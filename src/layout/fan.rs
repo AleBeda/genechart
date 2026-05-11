@@ -192,8 +192,6 @@ fn to_xy(radius: f64, angle_deg: f64) -> (f64, f64) {
 pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene {
     use crate::format::format_name;
     use crate::scene::{Primitive, Rect, Scene, TextAttr, WedgePrimitive};
-    use std::collections::HashSet;
-
     // C2a — compute max_radius
     let max_radius = genrep
         .individuals
@@ -207,26 +205,8 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
     let cy = max_radius;
 
     // C2b — highlights
-    let highlighted_ids: HashSet<String> = if !prefs.files.highlights.is_empty() {
-        match std::fs::read_to_string(&prefs.files.highlights) {
-            Ok(content) => content
-                .lines()
-                .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
-                .filter_map(|l| l.split_whitespace().next().map(|s| s.to_string()))
-                .collect(),
-            Err(e) => {
-                eprintln!(
-                    "warning: cannot read highlights file {:?}: {e}",
-                    prefs.files.highlights
-                );
-                HashSet::new()
-            }
-        }
-    } else {
-        HashSet::new()
-    };
-
-    // C2c — sort individuals by radius_inner ascending, then emit wedges
+    let highlighted_ids =
+        crate::preferences::load_highlights(std::path::Path::new(&prefs.files.highlights));
     let mut indis: Vec<_> = genrep
         .individuals
         .values()
