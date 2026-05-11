@@ -25,12 +25,24 @@ fn xml_escape(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-fn svg_text(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
+fn svg_text_full(
+    x: f64,
+    y: f64,
+    text: &str,
+    family: &str,
+    size: f64,
+    weight: &str,
+    color: &str,
+) -> String {
     format!(
         "  <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-         font-size=\"{size}\" xml:space=\"preserve\">{}</text>\n",
+         font-size=\"{size}\" font-weight=\"{weight}\" fill=\"{color}\" xml:space=\"preserve\">{}</text>\n",
         xml_escape(text)
     )
+}
+
+fn svg_text(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
+    svg_text_full(x, y, text, family, size, "normal", "black")
 }
 
 fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> String {
@@ -57,28 +69,12 @@ fn svg_rect(
     )
 }
 
-fn svg_text_colored(x: f64, y: f64, text: &str, family: &str, size: f64, color: &str) -> String {
-    format!(
-        "     <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-        font-size=\"{size}\" fill=\"{color}\">{}</text>\n",
-        xml_escape(text)
-    )
-}
-
 fn font_weight_from_pref(pref: &str) -> &str {
     match pref.trim().to_lowercase().as_str() {
         "bold" | "bolder" => "bold",
         "light" | "lighter" => "lighter",
         _ => "normal",
     }
-}
-
-fn svg_text_w(x: f64, y: f64, text: &str, family: &str, size: f64, weight: &str) -> String {
-    format!(
-        "  <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-         font-size=\"{size}\" font-weight=\"{weight}\" xml:space=\"preserve\">{}</text>\n",
-        xml_escape(text)
-    )
 }
 
 // ── Preference helpers ────────────────────────────────────────────────────────
@@ -143,6 +139,7 @@ fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color:
 ///
 /// This prevents a symbol character like ⚭ from sharing a `<text>` element with
 /// Latin characters — svg2pdf 0.13 corrupts cross-font text runs in the PDF.
+#[allow(clippy::too_many_arguments)]
 fn render_mixed_text(
     out: &mut String,
     x: f64,
@@ -151,10 +148,31 @@ fn render_mixed_text(
     primary_family: &str,
     font_size: f64,
     cw: f64,
+    color: &str,
+    bg: Option<&str>,
 ) {
     if text.is_empty() {
-        out.push_str(&svg_text(x, y, text, primary_family, font_size));
+        out.push_str(&svg_text_full(
+            x,
+            y,
+            text,
+            primary_family,
+            font_size,
+            "normal",
+            color,
+        ));
         return;
+    }
+
+    let start_x = x;
+    let total_w = text.chars().count() as f64 * cw;
+    if let Some(bg_color) = bg {
+        let bg_y = y - font_size * 0.3;
+        let bg_h = font_size * 1.2;
+        out.push_str(&format!(
+            "  <rect x=\"{sx:.1}\" y=\"{bg_y:.1}\" width=\"{tw:.1}\" height=\"{bg_h:.1}\" fill=\"{bg_c}\"/>\n",
+            sx = start_x - 2.0, tw = total_w + 4.0, bg_c = bg_color
+          ));
     }
 
     let mut cur_x = x;
@@ -170,7 +188,9 @@ fn render_mixed_text(
             } else {
                 primary_family
             };
-            out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
+            out.push_str(&svg_text_full(
+                cur_x, y, seg, fam, font_size, "normal", color,
+            ));
             cur_x += seg.chars().count() as f64 * cw;
             seg_start = byte_pos;
             in_symbol = is_sym;
@@ -184,7 +204,9 @@ fn render_mixed_text(
         } else {
             primary_family
         };
-        out.push_str(&svg_text(cur_x, y, seg, fam, font_size));
+        out.push_str(&svg_text_full(
+            cur_x, y, seg, fam, font_size, "normal", color,
+        ));
     }
 }
 
@@ -203,6 +225,8 @@ fn render_mixed_text_mid_w(
     font_size: f64,
     weight: &str,
     cw: f64,
+    color: &str,
+    bg: Option<&str>,
 ) {
     if text.is_empty() {
         return;
@@ -248,6 +272,16 @@ fn render_mixed_text_mid_w(
     let total_width: f64 = seg_widths.iter().sum();
     let mut cur_x = cx - total_width / 2.0;
 
+    if let Some(bg_color) = bg {
+        let bg_x = cx - total_width / 2.0 - 2.0;
+        let bg_y = y - font_size * 0.3;
+        let bg_h = font_size * 1.2;
+        out.push_str(&format!(
+            "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+            bx = bg_x, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
+        ));
+    }
+
     for ((seg, is_sym), &w) in segments.iter().zip(seg_widths.iter()) {
         let fam = if *is_sym {
             SYMBOL_FONT_FAMILY
@@ -255,7 +289,7 @@ fn render_mixed_text_mid_w(
             primary_family
         };
         let wt = if *is_sym { "normal" } else { weight };
-        out.push_str(&svg_text_w(cur_x, y, seg, fam, font_size, wt));
+        out.push_str(&svg_text_full(cur_x, y, seg, fam, font_size, wt, color));
         cur_x += w;
     }
 }
@@ -544,6 +578,13 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                 let (font_family, font_size) = font_for_attr(&t.attrs, prefs);
                 let weight = weight_for_attr(&t.attrs, prefs);
                 let color = color_for_attr(&t.attrs, prefs);
+                let bg_color: Option<String> = if is_highlighted(&t.attrs) {
+                    Some(hex_color(
+                        prefs.output.style.text.highlights.background_color,
+                    ))
+                } else {
+                    None
+                };
                 // baseline = bbox.y + bbox.h converted to SVG
                 let baseline_svg = to_svg_y(t.bbox.y + t.bbox.h);
                 let cw = font_size * CHAR_WIDTH_RATIO;
@@ -559,7 +600,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     if let Some(&name_end) = name_end_x.get(&row) {
                         let x1 = to_svg_x(name_end);
                         let x2 = to_svg_x(t.bbox.x);
-                        dot_leader(&mut out, x1, x2, baseline_svg, font_size, "black");
+                        dot_leader(&mut out, x1, x2, baseline_svg, font_size, &color);
                     }
                 }
 
@@ -575,17 +616,28 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                             font_size,
                             weight,
                             cw,
+                            &color,
+                            bg_color.as_deref(),
                         );
                     }
                     TextAlign::Left => {
                         let x = to_svg_x(t.bbox.x);
                         if t.attrs.contains(&TextAttr::IndividualId) {
-                            out.push_str(&svg_text_colored(
+                            if let Some(bg_c) = &bg_color {
+                                let bg_y = baseline_svg - font_size * 0.3;
+                                let bg_h = font_size * 1.2;
+                                out.push_str(&format!(
+                                    "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+                                    bx = x - 2.0, by = bg_y, w = t.bbox.w * CHAR_WIDTH_RATIO + 4.0, h = bg_h, c = bg_c
+                                ));
+                            }
+                            out.push_str(&svg_text_full(
                                 x,
                                 baseline_svg,
                                 &t.content,
                                 &font_family,
                                 font_size,
+                                "normal",
                                 &color,
                             ));
                         } else if matches!(
@@ -600,24 +652,44 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                                 &font_family,
                                 font_size,
                                 cw,
+                                &color,
+                                bg_color.as_deref(),
                             );
                         } else {
-                            out.push_str(&svg_text_w(
+                            if let Some(bg_c) = &bg_color {
+                                let bg_y = baseline_svg - font_size * 0.3;
+                                let bg_h = font_size * 1.2;
+                                out.push_str(&format!(
+                                    "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+                                    bx = to_svg_x(t.bbox.x) - 2.0, by = bg_y, w = t.bbox.w + 4.0, h = bg_h, c = bg_c
+                                ));
+                            }
+                            out.push_str(&svg_text_full(
                                 x,
                                 baseline_svg,
                                 &t.content,
                                 &font_family,
                                 font_size,
                                 weight,
+                                &color,
                             ));
                         }
                     }
                     TextAlign::Right => {
                         let x = to_svg_x(t.bbox.x + t.bbox.w);
+                        if let Some(bg_c) = &bg_color {
+                            let bg_x = to_svg_x(t.bbox.x) - 2.0;
+                            let bg_w = t.bbox.w + 4.0;
+                            let bg_y = baseline_svg - font_size * 0.3;
+                            let bg_h = font_size * 1.2;
+                            out.push_str(&format!(
+                                "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+                                bx = bg_x, by = bg_y, w = bg_w, h = bg_h, c = bg_c
+                            ));
+                        }
                         out.push_str(&format!(
-                            "  <text x=\"{x:.1}\" y=\"{baseline_svg:.1}\" \
-                            font-family=\"{font_family}\" font-size=\"{font_size}\" \
-                            text-anchor=\"end\">{}</text>\n",
+                            "  <text x=\"{x:.1}\" y=\"{baseline_svg:.1}\" font-family=\"{font_family}\" \
+                             font-size=\"{font_size}\" text-anchor=\"end\" fill=\"{color}\">{}</text>\n",
                             xml_escape(&t.content)
                         ));
                     }
@@ -1169,7 +1241,7 @@ mod tests {
         let prefs = bc_prefs();
         // Default show.id is false
         let out = render_to_string(&bc_layout(), &prefs).unwrap();
-        // When show.id is false, no svg_text_colored calls are made for IDs
+        // When show.id is false, no ID text elements are rendered
         // so there should be no fill attribute on text elements that contain IDs
         let id_text_lines = out
             .lines()
