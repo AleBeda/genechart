@@ -38,15 +38,15 @@ pub struct Rect {
 
 /// Semantic attribute of a `TextPrimitive`, used by the backend to choose font,
 /// color, and weight from preferences without knowing genealogical context.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TextAttr {
     /// The name of the chart's root / descendant individual.
     IndividualName,
     /// The name of a spouse.
     SpouseName,
-    /// A birth or baptism event line.
+    /// A birth event line.
     BirthData,
-    /// A death or burial event line.
+    /// A death event line.
     DeathData,
     /// A marriage event line.
     MarriageData,
@@ -54,6 +54,8 @@ pub enum TextAttr {
     IndividualId,
     /// A generation-number prefix.
     GenerationNum,
+    /// Highlighted individual or family
+    Highlighted,
 }
 
 /// Horizontal alignment of text within its bounding box.
@@ -71,19 +73,21 @@ pub enum TextAlign {
 ///
 /// `bbox.y + bbox.h` is the *baseline* of the text (SVG convention).
 /// `bbox.h` is the font size.
+/// The `attrs` list carries semantic attributes (IndividualName, BirthData, …)
+/// and optionally `Highlighted`. The backend applies all attributes; order is
+/// irrelevant. The layout layer guarantees non-conflicting attributes.
 #[derive(Debug, Clone)]
 pub struct TextPrimitive {
     pub content: String,
     pub bbox: Rect,
     pub align: TextAlign,
-    pub attr: TextAttr,
+    pub attrs: Vec<TextAttr>,
 }
 
 /// A box (rectangle) primitive.
 #[derive(Debug, Clone)]
 pub struct BoxPrimitive {
     pub bbox: Rect,
-    pub is_highlighted: bool,
 }
 
 /// A connector primitive: vertical lines from parents, a horizontal bar, and
@@ -108,8 +112,7 @@ pub struct WedgePrimitive {
     pub radius_inner: f64,
     pub radius_outer: f64,
     pub label: Option<String>,
-    pub label_attr: TextAttr,
-    pub is_highlighted: bool,
+    pub label_attrs: Vec<TextAttr>,
 }
 
 /// A single renderable element.

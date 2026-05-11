@@ -331,14 +331,27 @@ fn wedge_path(
 
 // ── Scene renderer ────────────────────────────────────────────────────────────
 
+/// Check if any attr in the slice is `Highlighted`.
+fn is_highlighted(attrs: &[TextAttr]) -> bool {
+    attrs.contains(&TextAttr::Highlighted)
+}
+
+/// First non-Highlighted semantic attribute, or `IndividualName` as fallback.
+fn semantic_attr(attrs: &[TextAttr]) -> &TextAttr {
+    attrs
+        .iter()
+        .find(|a| !matches!(a, TextAttr::Highlighted))
+        .unwrap_or(&TextAttr::IndividualName)
+}
+
 /// Build the font family string with symbol fallbacks (for ♂/♀ and other symbols).
 fn with_symbol_fallback(base: &str) -> String {
     format!("{base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif")
 }
 
-/// Resolve (font_family, font_size) from a `TextAttr` and preferences.
-fn font_for_attr(attr: &TextAttr, prefs: &Prefs) -> (String, f64) {
-    match attr {
+/// Resolve (font_family, font_size) from a `[TextAttr]` slice and preferences.
+fn font_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> (String, f64) {
+    match semantic_attr(attrs) {
         TextAttr::IndividualName | TextAttr::SpouseName | TextAttr::GenerationNum => {
             let (fam, sz) = parsed_font(&prefs.output.style.fonts.names);
             let sz = if sz <= 0.0 { FONT_SIZE } else { sz };
@@ -364,20 +377,24 @@ fn font_for_attr(attr: &TextAttr, prefs: &Prefs) -> (String, f64) {
             };
             (fam, sz)
         }
+        _ => (with_symbol_fallback("monospace"), FONT_SIZE),
     }
 }
 
-/// Resolve CSS color for a `TextAttr`.
-fn color_for_attr(attr: &TextAttr, prefs: &Prefs) -> String {
-    match attr {
+/// Resolve CSS color for a `[TextAttr]` slice.
+fn color_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> String {
+    if is_highlighted(attrs) {
+        return hex_color(prefs.output.style.text.highlights.color);
+    }
+    match semantic_attr(attrs) {
         TextAttr::IndividualId => hex_color(prefs.output.style.text.id),
         _ => "black".to_string(),
     }
 }
 
-/// Resolve font-weight string for a `TextAttr`.
-fn weight_for_attr<'a>(attr: &TextAttr, prefs: &'a Prefs) -> &'a str {
-    match attr {
+/// Resolve font-weight string for a `[TextAttr]` slice.
+fn weight_for_attr<'a>(attrs: &[TextAttr], prefs: &'a Prefs) -> &'a str {
+    match semantic_attr(attrs) {
         TextAttr::IndividualName => font_weight_from_pref(&prefs.output.style.fonts.descendant),
         TextAttr::SpouseName => font_weight_from_pref(&prefs.output.style.fonts.spouse),
         _ => "normal",
@@ -485,10 +502,10 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
         .iter()
         .filter_map(|p| {
             if let crate::scene::Primitive::Text(t) = p {
-                if matches!(
-                    t.attr,
-                    TextAttr::IndividualName | TextAttr::SpouseName | TextAttr::GenerationNum
-                ) {
+                if t.attrs.contains(&TextAttr::IndividualName)
+                    || t.attrs.contains(&TextAttr::SpouseName)
+                    || t.attrs.contains(&TextAttr::GenerationNum)
+                {
                     let row = t.bbox.y.round() as i64;
                     Some((row, t.bbox.x + t.bbox.w))
                 } else {
@@ -524,9 +541,9 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                 ));
             }
             crate::scene::Primitive::Text(t) => {
-                let (font_family, font_size) = font_for_attr(&t.attr, prefs);
-                let weight = weight_for_attr(&t.attr, prefs);
-                let color = color_for_attr(&t.attr, prefs);
+                let (font_family, font_size) = font_for_attr(&t.attrs, prefs);
+                let weight = weight_for_attr(&t.attrs, prefs);
+                let color = color_for_attr(&t.attrs, prefs);
                 // baseline = bbox.y + bbox.h converted to SVG
                 let baseline_svg = to_svg_y(t.bbox.y + t.bbox.h);
                 let cw = font_size * CHAR_WIDTH_RATIO;
@@ -534,7 +551,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                 // Emit dot leader before event data if enabled
                 if prefs.output.style.dot_leaders
                     && matches!(
-                        t.attr,
+                        semantic_attr(&t.attrs),
                         TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
                     )
                 {
@@ -562,7 +579,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     }
                     TextAlign::Left => {
                         let x = to_svg_x(t.bbox.x);
-                        if matches!(t.attr, TextAttr::IndividualId) {
+                        if t.attrs.contains(&TextAttr::IndividualId) {
                             out.push_str(&svg_text_colored(
                                 x,
                                 baseline_svg,
@@ -572,7 +589,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                                 &color,
                             ));
                         } else if matches!(
-                            t.attr,
+                            semantic_attr(&t.attrs),
                             TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
                         ) {
                             render_mixed_text(
@@ -678,13 +695,13 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\"/>\n"
                 ));
                 if let Some(ref label_text) = w.label {
-                    let (font_family, font_size) = font_for_attr(&w.label_attr, prefs);
+                    let (font_family, font_size) = font_for_attr(&w.label_attrs, prefs);
                     let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
                     let angle_rad = w.angle_center.to_radians();
                     let tx = cx_svg + mid_r * angle_rad.cos();
                     let ty = cy_svg - mid_r * angle_rad.sin(); // y-up math → y-down SVG
                     let rotation = 90.0 - w.angle_center;
-                    let color = color_for_attr(&w.label_attr, prefs);
+                    let color = color_for_attr(&w.label_attrs, prefs);
                     out.push_str(&format!(
                         "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \
                          font-family=\"{font_family}\" font-size=\"{font_size}\" \

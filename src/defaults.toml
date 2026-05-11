@@ -89,6 +89,11 @@ names = 0x000
 dates = 0x000
 id = 0xE00
 
+[output.style.text.highlights]
+color = 0x00D
+background_color = 0xFFC
+fallback = "uppercase" # All caps if backend doesn't support colors (currently the only supported value)
+
 [output.style.fonts]
 names = "Georgia 14"
 dates = "Arial 10"

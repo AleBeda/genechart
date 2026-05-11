@@ -314,6 +314,26 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         0.0
     };
 
+    // ── Load highlights ──────────────────────────────────────────────────────
+    let highlighted_ids: HashSet<String> = if !prefs.files.highlights.is_empty() {
+        match std::fs::read_to_string(&prefs.files.highlights) {
+            Ok(content) => content
+                .lines()
+                .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+                .filter_map(|l| l.split_whitespace().next().map(|s| s.to_string()))
+                .collect(),
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to read highlights file '{}': {e}",
+                    prefs.files.highlights
+                );
+                HashSet::new()
+            }
+        }
+    } else {
+        HashSet::new()
+    };
+
     // ── Collect and sort in-scope individuals ─────────────────────────────────
     let mut entries: Vec<(
         &str,
@@ -421,6 +441,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         let top_y = geo.line as f64 * line_height_px;
         let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
+        let is_highlighted = highlighted_ids.contains(*id);
 
         // Individual ID — emitted first so the text backend writes it at col 0
         // before any other content fills the line.
@@ -436,7 +457,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     h: line_height_px,
                 },
                 align: TextAlign::Left,
-                attr: TextAttr::IndividualId,
+                attrs: vec![TextAttr::IndividualId],
             }));
         }
 
@@ -452,13 +473,21 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     h: line_height_px,
                 },
                 align: TextAlign::Left,
-                attr: TextAttr::GenerationNum,
+                attrs: vec![TextAttr::GenerationNum],
             }));
         }
 
         // Individual / spouse name
         let name = format_name(indi, prefs);
         let name_w = name.chars().count() as f64 * char_width_px;
+        let mut name_attrs = vec![if geo.is_spouse {
+            TextAttr::SpouseName
+        } else {
+            TextAttr::IndividualName
+        }];
+        if is_highlighted {
+            name_attrs.push(TextAttr::Highlighted);
+        }
         primitives.push(Primitive::Text(TextPrimitive {
             content: name,
             bbox: Rect {
@@ -468,11 +497,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                 h: line_height_px,
             },
             align: TextAlign::Left,
-            attr: if geo.is_spouse {
-                TextAttr::SpouseName
-            } else {
-                TextAttr::IndividualName
-            },
+            attrs: name_attrs,
         }));
 
         // Birth data
@@ -491,7 +516,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                             h: line_height_px,
                         },
                         align: TextAlign::Left,
-                        attr: TextAttr::BirthData,
+                        attrs: vec![TextAttr::BirthData],
                     }));
                 }
             }
@@ -513,7 +538,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                             h: line_height_px,
                         },
                         align: TextAlign::Left,
-                        attr: TextAttr::DeathData,
+                        attrs: vec![TextAttr::DeathData],
                     }));
                 }
             }
@@ -535,7 +560,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                             h: line_height_px,
                         },
                         align: TextAlign::Left,
-                        attr: TextAttr::MarriageData,
+                        attrs: vec![TextAttr::MarriageData],
                     }));
                 }
             }

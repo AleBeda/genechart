@@ -60,10 +60,21 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs) -> String {
                 let col = (t.bbox.x / char_width_px).round() as usize;
                 let use_dot_leaders = dot_leaders
                     && matches!(
-                        t.attr,
+                        t.attrs
+                            .iter()
+                            .find(|a| !matches!(a, TextAttr::Highlighted))
+                            .unwrap_or(&TextAttr::IndividualName),
                         TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
                     );
-                write_at_col(&mut lines[line_idx], col, &t.content, use_dot_leaders);
+                let is_highlighted = t.attrs.contains(&TextAttr::Highlighted);
+                let content = if is_highlighted
+                    && prefs.output.style.text.highlights.fallback == "uppercase"
+                {
+                    t.content.to_uppercase()
+                } else {
+                    t.content.clone()
+                };
+                write_at_col(&mut lines[line_idx], col, &content, use_dot_leaders);
             }
             Primitive::Connector(c) => {
                 if c.parent_points.is_empty() || c.child_points.is_empty() {

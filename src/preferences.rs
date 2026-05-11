@@ -227,6 +227,28 @@ pub struct TextStylePrefs {
     pub dates: i64,
     #[serde(default)]
     pub id: i64,
+    #[serde(default)]
+    pub highlights: HighlightsPrefs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HighlightsPrefs {
+    #[serde(default)]
+    pub color: i64,
+    #[serde(default)]
+    pub background_color: i64,
+    #[serde(default)]
+    pub fallback: String,
+}
+
+impl Default for HighlightsPrefs {
+    fn default() -> Self {
+        Self {
+            color: 0x00D,
+            background_color: 0xFFC,
+            fallback: "uppercase".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

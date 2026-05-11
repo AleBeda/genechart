@@ -986,10 +986,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             h: geo.height,
         };
         let is_highlighted = highlighted_ids.contains(*ind_id);
-        boxes.push(Primitive::Box(BoxPrimitive {
-            bbox: box_bbox,
-            is_highlighted,
-        }));
+        boxes.push(Primitive::Box(BoxPrimitive { bbox: box_bbox }));
 
         let ind = &genrep.individuals[*ind_id];
 
@@ -1043,7 +1040,11 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 content: format_name(ind, prefs),
                 bbox: name_bbox,
                 align: TextAlign::Center,
-                attr: TextAttr::IndividualName,
+                attrs: if is_highlighted {
+                    vec![TextAttr::IndividualName, TextAttr::Highlighted]
+                } else {
+                    vec![TextAttr::IndividualName]
+                },
             }));
 
             if prefs.show.id {
@@ -1061,7 +1062,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         h: font_size,
                     },
                     align: TextAlign::Left,
-                    attr: TextAttr::IndividualId,
+                    attrs: vec![TextAttr::IndividualId],
                 }));
             }
 
@@ -1083,7 +1084,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                                 h: date_font_size,
                             },
                             align: TextAlign::Center,
-                            attr: TextAttr::BirthData,
+                            attrs: vec![TextAttr::BirthData],
                         }));
                     }
                 }
@@ -1105,7 +1106,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                                 h: date_font_size,
                             },
                             align: TextAlign::Center,
-                            attr: TextAttr::DeathData,
+                            attrs: vec![TextAttr::DeathData],
                         }));
                     }
                 }
@@ -1130,6 +1131,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             font_size,
                             date_font_size,
                             spacing,
+                            highlighted_ids.contains(sp1_id.as_str()),
                         );
                     }
                 }
@@ -1155,6 +1157,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             font_size,
                             date_font_size,
                             spacing,
+                            highlighted_ids.contains(sp2_id.as_str()),
                         );
                     }
                 }
@@ -1174,7 +1177,11 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     h: font_size,
                 },
                 align: TextAlign::Center,
-                attr: TextAttr::IndividualName,
+                attrs: if is_highlighted {
+                    vec![TextAttr::IndividualName, TextAttr::Highlighted]
+                } else {
+                    vec![TextAttr::IndividualName]
+                },
             }));
 
             if prefs.show.id {
@@ -1192,7 +1199,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         h: font_size,
                     },
                     align: TextAlign::Left,
-                    attr: TextAttr::IndividualId,
+                    attrs: vec![TextAttr::IndividualId],
                 }));
             }
 
@@ -1214,7 +1221,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                                 h: date_font_size,
                             },
                             align: TextAlign::Center,
-                            attr: TextAttr::BirthData,
+                            attrs: vec![TextAttr::BirthData],
                         }));
                     }
                 }
@@ -1236,7 +1243,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                                 h: date_font_size,
                             },
                             align: TextAlign::Center,
-                            attr: TextAttr::DeathData,
+                            attrs: vec![TextAttr::DeathData],
                         }));
                     }
                 }
@@ -1259,6 +1266,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             font_size,
                             date_font_size,
                             spacing,
+                            highlighted_ids.contains(sp_id.as_str()),
                         );
                     }
                 }
@@ -1391,6 +1399,7 @@ fn emit_spouse_primitives(
     font_size: f64,
     date_font_size: f64,
     spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
+    is_highlighted: bool,
 ) {
     use crate::format::{format_event, format_name};
     use crate::scene::{Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
@@ -1412,7 +1421,7 @@ fn emit_spouse_primitives(
                         h: date_font_size,
                     },
                     align: TextAlign::Center,
-                    attr: TextAttr::MarriageData,
+                    attrs: vec![TextAttr::MarriageData],
                 }));
             }
         }
@@ -1433,7 +1442,7 @@ fn emit_spouse_primitives(
                 h: date_font_size,
             },
             align: TextAlign::Left,
-            attr: TextAttr::IndividualId,
+            attrs: vec![TextAttr::IndividualId],
         }));
     }
 
@@ -1448,7 +1457,11 @@ fn emit_spouse_primitives(
             h: font_size,
         },
         align: TextAlign::Center,
-        attr: TextAttr::SpouseName,
+        attrs: if is_highlighted {
+            vec![TextAttr::SpouseName, TextAttr::Highlighted]
+        } else {
+            vec![TextAttr::SpouseName]
+        },
     }));
 
     // Spouse ID
@@ -1467,7 +1480,7 @@ fn emit_spouse_primitives(
                 h: font_size,
             },
             align: TextAlign::Left,
-            attr: TextAttr::IndividualId,
+            attrs: vec![TextAttr::IndividualId],
         }));
     }
 
@@ -1490,7 +1503,7 @@ fn emit_spouse_primitives(
                         h: date_font_size,
                     },
                     align: TextAlign::Center,
-                    attr: TextAttr::BirthData,
+                    attrs: vec![TextAttr::BirthData],
                 }));
             }
         }
@@ -1514,7 +1527,7 @@ fn emit_spouse_primitives(
                         h: date_font_size,
                     },
                     align: TextAlign::Center,
-                    attr: TextAttr::DeathData,
+                    attrs: vec![TextAttr::DeathData],
                 }));
             }
         }

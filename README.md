@@ -258,7 +258,7 @@ I5 Jane Doe # married 1843
 I12 Paul Smith # emigrated 1900
 ```
 
-Highlighted individuals are visually distinguished in SVG/PDF output (rendered in a different text color, configurable via `output.style.text.id`).
+Highlighted individuals are visually distinguished in SVG/PDF output. They are rendered in a different text color, configurable via `output.style.text.highlights.color`, and with a different background color, configurable via `output.style.text.highlights.background_color`. Backends that don't support colors (e.g. text) render the highlighted individuals in an alternate way, configurable via `output.style.text.highlights.fallback`.
 
 ## Building
 

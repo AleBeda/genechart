@@ -249,8 +249,11 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
             radius_inner: geo.radius_inner,
             radius_outer: geo.radius_outer,
             label: Some(format_name(indi, prefs)),
-            label_attr: TextAttr::IndividualName,
-            is_highlighted: highlighted_ids.contains(&indi.id),
+            label_attrs: if highlighted_ids.contains(&indi.id) {
+                vec![TextAttr::IndividualName, TextAttr::Highlighted]
+            } else {
+                vec![TextAttr::IndividualName]
+            },
         }));
     }
 
