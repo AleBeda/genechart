@@ -134,91 +134,17 @@ fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color:
     }
 }
 
-/// Render `text` at (x, y), splitting runs of Unicode symbol characters
-/// (codepoint ≥ U+2000) into separate `<text>` elements with SYMBOL_FONT_FAMILY.
+/// Render text with symbol/non-symbol segmentation. When `split` is false,
+/// renders the entire text as a single `<text>` element (used for names with
+/// sex symbols to avoid positioning gaps). When `split` is true, separates
+/// Unicode symbol runs (codepoint >= U+2000) into distinct elements with
+/// SYMBOL_FONT_FAMILY. Uses exact font metrics for Latin segments.
 ///
-/// This prevents a symbol character like ⚭ from sharing a `<text>` element with
-/// Latin characters — svg2pdf 0.13 corrupts cross-font text runs in the PDF.
+/// `anchor_x` means: left edge for Left, center for Center, right edge for Right.
 #[allow(clippy::too_many_arguments)]
 fn render_mixed_text(
     out: &mut String,
-    x: f64,
-    y: f64,
-    text: &str,
-    primary_family: &str,
-    font_size: f64,
-    cw: f64,
-    color: &str,
-    bg: Option<&str>,
-) {
-    if text.is_empty() {
-        out.push_str(&svg_text_full(
-            x,
-            y,
-            text,
-            primary_family,
-            font_size,
-            "normal",
-            color,
-        ));
-        return;
-    }
-
-    let start_x = x;
-    let total_w = text.chars().count() as f64 * cw;
-    if let Some(bg_color) = bg {
-        let bg_y = y - font_size * 0.9;
-        let bg_h = font_size * 1.2;
-        out.push_str(&format!(
-            "  <rect x=\"{sx:.1}\" y=\"{bg_y:.1}\" width=\"{tw:.1}\" height=\"{bg_h:.1}\" fill=\"{bg_c}\"/>\n",
-            sx = start_x - 2.0, tw = total_w + 4.0, bg_c = bg_color
-          ));
-    }
-
-    let mut cur_x = x;
-    let mut seg_start = 0usize;
-    let mut in_symbol = (text.chars().next().map_or(0, |c| c as u32)) >= 0x2000;
-
-    for (byte_pos, c) in text.char_indices() {
-        let is_sym = (c as u32) >= 0x2000;
-        if is_sym != in_symbol {
-            let seg = &text[seg_start..byte_pos];
-            let fam = if in_symbol {
-                SYMBOL_FONT_FAMILY
-            } else {
-                primary_family
-            };
-            out.push_str(&svg_text_full(
-                cur_x, y, seg, fam, font_size, "normal", color,
-            ));
-            cur_x += seg.chars().count() as f64 * cw;
-            seg_start = byte_pos;
-            in_symbol = is_sym;
-        }
-    }
-    // flush final segment
-    let seg = &text[seg_start..];
-    if !seg.is_empty() {
-        let fam = if in_symbol {
-            SYMBOL_FONT_FAMILY
-        } else {
-            primary_family
-        };
-        out.push_str(&svg_text_full(
-            cur_x, y, seg, fam, font_size, "normal", color,
-        ));
-    }
-}
-
-/// Render centered mixed-font text at (cx, y), splitting Unicode symbol runs
-/// (codepoint ≥ U+2000) into separate left-aligned `<text>` elements, collectively
-/// centered using accurate font metrics for the Latin segments. Symbol segments use
-/// SYMBOL_FONT_FAMILY and weight "normal"; non-symbol segments use `primary_family`
-/// and `weight`.
-#[allow(clippy::too_many_arguments)]
-fn render_mixed_text_mid_w(
-    out: &mut String,
-    cx: f64,
+    anchor_x: f64,
     y: f64,
     text: &str,
     primary_family: &str,
@@ -227,8 +153,38 @@ fn render_mixed_text_mid_w(
     cw: f64,
     color: &str,
     bg: Option<&str>,
+    align: &TextAlign,
+    split: bool,
 ) {
     if text.is_empty() {
+        return;
+    }
+
+    if !split {
+        // No splitting — render as a single <text> element.
+        let total_width = text.chars().count() as f64 * cw;
+        let start_x = match align {
+            TextAlign::Left => anchor_x,
+            TextAlign::Center => anchor_x - total_width / 2.0,
+            TextAlign::Right => anchor_x - total_width,
+        };
+        if let Some(bg_color) = bg {
+            let bg_y = y - font_size * 0.9;
+            let bg_h = font_size * 1.2;
+            out.push_str(&format!(
+                "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+                bx = start_x - 2.0, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
+            ));
+        }
+        out.push_str(&svg_text_full(
+            start_x,
+            y,
+            text,
+            primary_family,
+            font_size,
+            weight,
+            color,
+        ));
         return;
     }
 
@@ -255,7 +211,7 @@ fn render_mixed_text_mid_w(
         .trim_matches('\'')
         .trim_matches('"');
 
-    // Measure each segment: exact metrics for Latin, char-count estimate for symbols.
+    // Measure: exact metrics for Latin, char-count estimate for symbols.
     let is_bold = weight == "bold";
     let seg_widths: Vec<f64> = segments
         .iter()
@@ -270,18 +226,22 @@ fn render_mixed_text_mid_w(
         .collect();
 
     let total_width: f64 = seg_widths.iter().sum();
-    let mut cur_x = cx - total_width / 2.0;
+    let start_x = match align {
+        TextAlign::Left => anchor_x,
+        TextAlign::Center => anchor_x - total_width / 2.0,
+        TextAlign::Right => anchor_x - total_width,
+    };
 
     if let Some(bg_color) = bg {
-        let bg_x = cx - total_width / 2.0 - 2.0;
         let bg_y = y - font_size * 0.9;
         let bg_h = font_size * 1.2;
         out.push_str(&format!(
             "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
-            bx = bg_x, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
+            bx = start_x - 2.0, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
         ));
     }
 
+    let mut cur_x = start_x;
     for ((seg, is_sym), &w) in segments.iter().zip(seg_widths.iter()) {
         let fam = if *is_sym {
             SYMBOL_FONT_FAMILY
@@ -604,96 +564,32 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     }
                 }
 
-                match t.align {
-                    TextAlign::Center => {
-                        let cx = to_svg_x(t.bbox.x + t.bbox.w / 2.0);
-                        render_mixed_text_mid_w(
-                            &mut out,
-                            cx,
-                            baseline_svg,
-                            &t.content,
-                            &font_family,
-                            font_size,
-                            weight,
-                            cw,
-                            &color,
-                            bg_color.as_deref(),
-                        );
-                    }
-                    TextAlign::Left => {
-                        let x = to_svg_x(t.bbox.x);
-                        if t.attrs.contains(&TextAttr::IndividualId) {
-                            if let Some(bg_c) = &bg_color {
-                                let bg_y = baseline_svg - font_size * 0.9;
-                                let bg_h = font_size * 1.2;
-                                out.push_str(&format!(
-                                    "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
-                                    bx = x - 2.0, by = bg_y, w = t.bbox.w * CHAR_WIDTH_RATIO + 4.0, h = bg_h, c = bg_c
-                                ));
-                            }
-                            out.push_str(&svg_text_full(
-                                x,
-                                baseline_svg,
-                                &t.content,
-                                &font_family,
-                                font_size,
-                                "normal",
-                                &color,
-                            ));
-                        } else if matches!(
-                            semantic_attr(&t.attrs),
-                            TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
-                        ) {
-                            render_mixed_text(
-                                &mut out,
-                                x,
-                                baseline_svg,
-                                &t.content,
-                                &font_family,
-                                font_size,
-                                cw,
-                                &color,
-                                bg_color.as_deref(),
-                            );
-                        } else {
-                            if let Some(bg_c) = &bg_color {
-                                let bg_y = baseline_svg - font_size * 0.9;
-                                let bg_h = font_size * 1.2;
-                                out.push_str(&format!(
-                                    "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
-                                    bx = to_svg_x(t.bbox.x) - 2.0, by = bg_y, w = t.bbox.w + 4.0, h = bg_h, c = bg_c
-                                ));
-                            }
-                            out.push_str(&svg_text_full(
-                                x,
-                                baseline_svg,
-                                &t.content,
-                                &font_family,
-                                font_size,
-                                weight,
-                                &color,
-                            ));
-                        }
-                    }
-                    TextAlign::Right => {
-                        let x = to_svg_x(t.bbox.x + t.bbox.w);
-                        if let Some(bg_c) = &bg_color {
-                            let bg_x = to_svg_x(t.bbox.x) - 2.0;
-                            let bg_w = t.bbox.w + 4.0;
-                            let bg_y = baseline_svg - font_size * 0.9;
-                            let bg_h = font_size * 1.2;
-                            out.push_str(&format!(
-                                "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
-                                bx = bg_x, by = bg_y, w = bg_w, h = bg_h, c = bg_c
-                            ));
-                        }
-                        out.push_str(&format!(
-                            "  <text x=\"{x:.1}\" y=\"{baseline_svg:.1}\" font-family=\"{font_family}\" \
-                             font-size=\"{font_size}\" text-anchor=\"end\" fill=\"{color}\">{}</text>\n",
-                            xml_escape(&t.content)
-                        ));
-                    }
-                }
+                let anchor_x = match t.align {
+                    TextAlign::Left => to_svg_x(t.bbox.x),
+                    TextAlign::Center => to_svg_x(t.bbox.x + t.bbox.w / 2.0),
+                    TextAlign::Right => to_svg_x(t.bbox.x + t.bbox.w),
+                };
+
+                // Split symbols for event data; keep sex symbols with names.
+                let split = !matches!(
+                    semantic_attr(&t.attrs),
+                    TextAttr::IndividualName | TextAttr::SpouseName
+                );
+
+                render_mixed_text(
+                    &mut out,
+                    anchor_x,
+                    baseline_svg,
+                    &t.content,
+                    &font_family,
+                    font_size,
+                    weight,
+                    cw,
+                    &color,
+                    bg_color.as_deref(),
+                    &t.align,
+                    split,
+                );
             }
             crate::scene::Primitive::Connector(c) => {
                 if c.child_points.is_empty() {
@@ -860,6 +756,7 @@ mod tests {
         prefs.scope.root = "I1".into();
         prefs.scope.direction = "descendants".into();
         prefs.layout.layout_type = "simple".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
         prefs
     }
 
