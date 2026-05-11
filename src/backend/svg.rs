@@ -167,7 +167,7 @@ fn render_mixed_text(
     let start_x = x;
     let total_w = text.chars().count() as f64 * cw;
     if let Some(bg_color) = bg {
-        let bg_y = y - font_size * 0.3;
+        let bg_y = y - font_size * 0.9;
         let bg_h = font_size * 1.2;
         out.push_str(&format!(
             "  <rect x=\"{sx:.1}\" y=\"{bg_y:.1}\" width=\"{tw:.1}\" height=\"{bg_h:.1}\" fill=\"{bg_c}\"/>\n",
@@ -274,7 +274,7 @@ fn render_mixed_text_mid_w(
 
     if let Some(bg_color) = bg {
         let bg_x = cx - total_width / 2.0 - 2.0;
-        let bg_y = y - font_size * 0.3;
+        let bg_y = y - font_size * 0.9;
         let bg_h = font_size * 1.2;
         out.push_str(&format!(
             "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
@@ -624,7 +624,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                         let x = to_svg_x(t.bbox.x);
                         if t.attrs.contains(&TextAttr::IndividualId) {
                             if let Some(bg_c) = &bg_color {
-                                let bg_y = baseline_svg - font_size * 0.3;
+                                let bg_y = baseline_svg - font_size * 0.9;
                                 let bg_h = font_size * 1.2;
                                 out.push_str(&format!(
                                     "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
@@ -657,7 +657,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                             );
                         } else {
                             if let Some(bg_c) = &bg_color {
-                                let bg_y = baseline_svg - font_size * 0.3;
+                                let bg_y = baseline_svg - font_size * 0.9;
                                 let bg_h = font_size * 1.2;
                                 out.push_str(&format!(
                                     "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
@@ -680,7 +680,7 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                         if let Some(bg_c) = &bg_color {
                             let bg_x = to_svg_x(t.bbox.x) - 2.0;
                             let bg_w = t.bbox.w + 4.0;
-                            let bg_y = baseline_svg - font_size * 0.3;
+                            let bg_y = baseline_svg - font_size * 0.9;
                             let bg_h = font_size * 1.2;
                             out.push_str(&format!(
                                 "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
