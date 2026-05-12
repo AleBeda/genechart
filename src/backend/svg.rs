@@ -154,37 +154,8 @@ fn render_mixed_text(
     color: &str,
     bg: Option<&str>,
     align: &TextAlign,
-    split: bool,
 ) {
     if text.is_empty() {
-        return;
-    }
-
-    if !split {
-        // No splitting — render as a single <text> element.
-        let total_width = text.chars().count() as f64 * cw;
-        let start_x = match align {
-            TextAlign::Left => anchor_x,
-            TextAlign::Center => anchor_x - total_width / 2.0,
-            TextAlign::Right => anchor_x - total_width,
-        };
-        if let Some(bg_color) = bg {
-            let bg_y = y - font_size * 0.9;
-            let bg_h = font_size * 1.2;
-            out.push_str(&format!(
-                "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
-                bx = start_x - 2.0, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
-            ));
-        }
-        out.push_str(&svg_text_full(
-            start_x,
-            y,
-            text,
-            primary_family,
-            font_size,
-            weight,
-            color,
-        ));
         return;
     }
 
@@ -570,12 +541,6 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     TextAlign::Right => to_svg_x(t.bbox.x + t.bbox.w),
                 };
 
-                // Split symbols for event data; keep sex symbols with names.
-                let split = !matches!(
-                    semantic_attr(&t.attrs),
-                    TextAttr::IndividualName | TextAttr::SpouseName
-                );
-
                 render_mixed_text(
                     &mut out,
                     anchor_x,
@@ -588,7 +553,6 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                     &color,
                     bg_color.as_deref(),
                     &t.align,
-                    split,
                 );
             }
             crate::scene::Primitive::Connector(c) => {
@@ -972,21 +936,19 @@ mod tests {
     }
 
     #[test]
-    fn test_svg_sex_symbol_in_name_element() {
-        // Sex symbols (♂/♀) must share the same <text> element as the person's name.
-        // Splitting them into separate elements (as render_mixed_text does for event
-        // strings) creates a visible positioning gap due to character-width estimation.
+    fn test_svg_sex_symbol_in_separate_element() {
+        // Sex symbols (♂/♀) in names should be split into their own <text> element
+        // with the symbol font family, so that PDF backends (svg2pdf) render them
+        // correctly without corrupting the primary font for the name text.
         let mut prefs = simple_prefs();
         prefs.format.individual = "{firstname} {lastname} {sex}".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        let has_combined = out.lines().any(|l| {
-            l.contains("<text ")
-                && (l.contains("♂") || l.contains("♀"))
-                && (l.contains("John") || l.contains("Jane") || l.contains("Paul"))
-        });
+        let symbol_in_apple = out
+            .lines()
+            .any(|l| l.contains("Apple Symbols") && (l.contains("♂") || l.contains("♀")));
         assert!(
-            has_combined,
-            "name and sex symbol should be in the same <text> element: {}",
+            symbol_in_apple,
+            "sex symbols should be in a text element using the symbol font: {}",
             &out[..out.len().min(500)]
         );
     }
