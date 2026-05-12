@@ -71,12 +71,7 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
         match prim {
             Primitive::Text(t) => {
                 let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
-                let col = (t.bbox.x / char_width_px).round() as usize
-                    + if fallback_shift > 0 && highlighted_lines.contains(&line_idx) {
-                        fallback_shift
-                    } else {
-                        0
-                    };
+                let col = (t.bbox.x / char_width_px).round() as usize + fallback_shift;
                 let use_dot_leaders = dot_leaders
                     && matches!(
                         t.attrs
@@ -115,13 +110,19 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
         }
     }
 
-    // Prepend fallback marker to highlighted lines.
+    // Replace leading spaces with fallback marker on highlighted lines.
     if fallback_shift > 0 {
         let fallback_str = &prefs.output.style.text.highlights.fallback;
+        let marker_len = fallback_str.len();
         for &line_idx in &highlighted_lines {
             if line_idx < lines.len() {
-                let current = lines[line_idx].clone();
-                lines[line_idx] = format!("{fallback_str}{current}");
+                let current = &lines[line_idx];
+                if current.len() >= marker_len {
+                    let rest = &current.as_str()[marker_len..];
+                    lines[line_idx] = format!("{fallback_str}{rest}");
+                } else {
+                    lines[line_idx] = fallback_str.to_string();
+                }
             }
         }
     }
@@ -165,7 +166,9 @@ impl Renderer for TextRenderer {
         }
 
         // Body
-        let fallback_shift = if prefs.output.style.text.highlights.fallback != "uppercase" {
+        let fallback_shift = if !prefs.files.highlights.is_empty()
+            && prefs.output.style.text.highlights.fallback != "uppercase"
+        {
             prefs.output.style.text.highlights.fallback.len() + 1
         } else {
             0
@@ -465,39 +468,71 @@ mod tests {
         use crate::scene::{Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive};
 
         let scene = Scene {
-            primitives: vec![Primitive::Text(TextPrimitive {
-                content: "John Doe".to_string(),
-                bbox: Rect {
-                    x: 6.0,
-                    y: 0.0,
-                    w: 12.0,
-                    h: 16.0,
-                },
-                align: TextAlign::Left,
-                attrs: vec![TextAttr::IndividualName, TextAttr::Highlighted],
-            })],
+            primitives: vec![
+                Primitive::Text(TextPrimitive {
+                    content: "John Doe".to_string(),
+                    bbox: Rect {
+                        x: 6.0,
+                        y: 0.0,
+                        w: 12.0,
+                        h: 16.0,
+                    },
+                    align: TextAlign::Left,
+                    attrs: vec![TextAttr::IndividualName, TextAttr::Highlighted],
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Jane Doe".to_string(),
+                    bbox: Rect {
+                        x: 6.0,
+                        y: 16.0,
+                        w: 12.0,
+                        h: 16.0,
+                    },
+                    align: TextAlign::Left,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+            ],
             canvas_bounds: Rect {
                 x: 0.0,
                 y: 0.0,
                 w: 200.0,
-                h: 16.0,
+                h: 32.0,
             },
         };
         let mut prefs = Prefs::default();
+        prefs.files.highlights = "/path/to/highlights.txt".into();
         prefs.output.style.text.highlights.fallback = "->".into();
-        // shift = len("->") + 1 = 3; "John Doe" at col 6 → shifted to col 9
-        // fallback "->" prepended at col 0
+        // shift = len("->") + 1 = 3; both names at col 6 → shifted to col 9
+        // fallback "->" prepended only on highlighted line
         let mut buf = Vec::<u8>::new();
         TextRenderer
             .render(&LayoutOutput::Simple(scene), &prefs, &mut buf)
             .unwrap();
         let output = String::from_utf8(buf).unwrap();
-        let line = output.lines().find(|l| l.contains("John Doe")).unwrap();
-        assert!(line.starts_with("->"));
+        let lines: Vec<&str> = output.lines().collect();
+        let hl_line = lines[0];
+        let normal_line = lines[1];
+        // Highlighted line: fallback prepended, content shifted
+        assert!(hl_line.starts_with("->"));
         assert!(
-            line.find("John").unwrap() >= 3,
+            hl_line.find("John").unwrap() >= 3,
             "John should be shifted right; line: {:?}",
-            line
+            hl_line
+        );
+        // Non-highlighted line: content shifted, no fallback marker
+        assert!(!normal_line.starts_with("->"));
+        assert!(
+            normal_line.find("Jane").unwrap() >= 3,
+            "Jane should be shifted right too; line: {:?}",
+            normal_line
+        );
+        // Both names must be at the same column (aligned)
+        assert_eq!(
+            hl_line.find("John").unwrap(),
+            normal_line.find("Jane").unwrap(),
+            "highlighted and normal lines must be aligned;\n  hl: {:?}\n  normal: {:?}",
+            hl_line,
+            normal_line
         );
     }
 }
