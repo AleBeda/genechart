@@ -72,6 +72,7 @@ title = "{gedcom}"
 copyright = "© 2026 Alex Bedarida"
 
 [output.style]
+# Row-rule underlines (simple layout, svg/pdf only).
 dot_leaders = true
 
 [output.style.boxes]

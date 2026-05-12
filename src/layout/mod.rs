@@ -39,6 +39,10 @@ impl LayoutOutput {
     pub fn is_fan(&self) -> bool {
         matches!(self, LayoutOutput::Fan(_))
     }
+
+    pub fn is_simple(&self) -> bool {
+        matches!(self, LayoutOutput::Simple(_))
+    }
 }
 
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {

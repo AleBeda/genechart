@@ -4,14 +4,12 @@ use crate::backend::Renderer;
 use crate::backend::font_metrics;
 use crate::layout::LayoutOutput;
 use crate::preferences::Prefs;
-use crate::scene::{Scene, TextAlign, TextAttr};
+use crate::scene::{TextAlign, TextAttr};
 use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
 use anyhow::Result;
 
 // SVG-specific rendering constants
 const MARGIN: f64 = 20.0;
-// Fixed pixel gap between text and the start/end of a dot leader.
-const DOT_LEADER_GAP: f64 = 3.0;
 /// Font-family used for symbol characters rendered in their own <text> element.
 /// Lists only symbol fonts so usvg doesn't try the primary Latin font first.
 const SYMBOL_FONT_FAMILY: &str = "'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif";
@@ -117,21 +115,6 @@ pub(crate) fn hex_color(val: i64) -> String {
     let g = (val >> 4) & 0xF;
     let b = val & 0xF;
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
-}
-
-/// Draw a dotted leader line from `x1` to `x2` at text baseline `y`.
-/// Only emits the element when there is meaningful space (> font_size px).
-fn dot_leader(out: &mut String, x1: f64, x2: f64, y: f64, font_size: f64, color: &str) {
-    let x1 = x1 + DOT_LEADER_GAP;
-    let x2 = x2 - DOT_LEADER_GAP;
-    if x2 > x1 + font_size {
-        out.push_str(&format!(
-            "  <line x1=\"{x1:.1}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
-             stroke=\"{color}\" stroke-width=\"{:.2}\" \
-             stroke-dasharray=\"1,3\" stroke-linecap=\"round\"/>\n",
-            font_size * 0.07
-        ));
-    }
 }
 
 /// Render text with symbol/non-symbol segmentation. When `split` is false,
@@ -366,7 +349,8 @@ fn weight_for_attr<'a>(attrs: &[TextAttr], prefs: &'a Prefs) -> &'a str {
     }
 }
 
-fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
+fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
+    let scene = output.scene();
     if scene.primitives.is_empty() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                 <svg xmlns=\"http://www.w3.org/2000/svg\" \
@@ -460,34 +444,6 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
         ));
     }
 
-    // Pre-compute name-end x per row (for dot-leader rendering).
-    // Key = bbox.y rounded to i64 (one value per logical text row).
-    let name_end_x: std::collections::HashMap<i64, f64> = scene
-        .primitives
-        .iter()
-        .filter_map(|p| {
-            if let crate::scene::Primitive::Text(t) = p {
-                if t.attrs.contains(&TextAttr::IndividualName)
-                    || t.attrs.contains(&TextAttr::SpouseName)
-                    || t.attrs.contains(&TextAttr::GenerationNum)
-                {
-                    let row = t.bbox.y.round() as i64;
-                    Some((row, t.bbox.x + t.bbox.w))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })
-        .fold(std::collections::HashMap::new(), |mut map, (row, x_end)| {
-            let entry = map.entry(row).or_insert(0.0_f64);
-            if x_end > *entry {
-                *entry = x_end;
-            }
-            map
-        });
-
     // Render primitives
     for prim in &scene.primitives {
         match prim {
@@ -519,21 +475,6 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
                 // baseline = bbox.y + bbox.h converted to SVG
                 let baseline_svg = to_svg_y(t.bbox.y + t.bbox.h);
                 let cw = font_size * CHAR_WIDTH_RATIO;
-
-                // Emit dot leader before event data if enabled
-                if prefs.output.style.dot_leaders
-                    && matches!(
-                        semantic_attr(&t.attrs),
-                        TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData
-                    )
-                {
-                    let row = t.bbox.y.round() as i64;
-                    if let Some(&name_end) = name_end_x.get(&row) {
-                        let x1 = to_svg_x(name_end);
-                        let x2 = to_svg_x(t.bbox.x);
-                        dot_leader(&mut out, x1, x2, baseline_svg, font_size, &color);
-                    }
-                }
 
                 let anchor_x = match t.align {
                     TextAlign::Left => to_svg_x(t.bbox.x),
@@ -647,6 +588,43 @@ fn render_scene(scene: &Scene, prefs: &Prefs) -> String {
         }
     }
 
+    // ── Row-rule underlines (simple layout only, replaces dotted leaders) ──
+    if output.is_simple() && prefs.output.style.dot_leaders {
+        // Collect (row_y, max_x, font_size) per row from Text primitives.
+        // All text on a row in the simple layout shares the same bbox.y and bbox.h.
+        let mut row_info: std::collections::HashMap<i64, (f64, f64, f64)> =
+            std::collections::HashMap::new();
+        for p in &scene.primitives {
+            if let crate::scene::Primitive::Text(t) = p {
+                let row = t.bbox.y.round() as i64;
+                let x_end = t.bbox.x + t.bbox.w;
+                let entry = row_info.entry(row).or_insert((t.bbox.y, 0.0, t.bbox.h));
+                if x_end > entry.1 {
+                    entry.1 = x_end;
+                }
+            }
+        }
+
+        // Emit one solid thin line per row, from left margin to canvas right edge,
+        // positioned 1px below the approximate descender (font_size * 0.16).
+        const UNDERLINE_COLOR: &str = "#CCCCCC";
+        const UNDERLINE_WIDTH: f64 = 0.5;
+        for (&_row, &(row_y, _max_x, font_size)) in &row_info {
+            let baseline_svg = to_svg_y(row_y + font_size);
+            let underline_y = baseline_svg + font_size * 0.16 + 1.0;
+            let line_x1 = to_svg_x(0.0);
+            let line_x2 = to_svg_x(scene.canvas_bounds.w);
+            out.push_str(&format!(
+                "    <line x1=\"{x1:.1}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
+                 stroke=\"{color}\" stroke-width=\"{width}\" class=\"row-rule\"/>\n",
+                x1 = line_x1,
+                y = underline_y,
+                x2 = line_x2,
+                color = UNDERLINE_COLOR,
+                width = UNDERLINE_WIDTH
+            ));
+        }
+    }
     out.push_str("</svg>\n");
     out
 }
@@ -669,7 +647,7 @@ impl Renderer for SvgRenderer {
 }
 
 pub fn render_to_string(output: &LayoutOutput, prefs: &Prefs) -> Result<String> {
-    Ok(render_scene(output.scene(), prefs))
+    Ok(render_scene(output, prefs))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -852,8 +830,8 @@ mod tests {
         prefs.output.style.dot_leaders = true;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(
-            out.contains("stroke-dasharray"),
-            "dot-leader lines expected: {out}"
+            out.contains("class=\"row-rule\""),
+            "row-rule underline lines expected: {out}"
         );
     }
 
@@ -866,8 +844,8 @@ mod tests {
         prefs.output.style.dot_leaders = false;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(
-            !out.contains("stroke-dasharray"),
-            "no dot leaders expected: {out}"
+            !out.contains("class=\"row-rule\""),
+            "no row-rule underlines expected: {out}"
         );
     }
 
@@ -954,7 +932,7 @@ mod tests {
     }
 
     #[test]
-    fn test_svg_dot_leader_gap_is_small() {
+    fn test_svg_underline_spans_full_width() {
         let mut prefs = simple_prefs();
         prefs.format.individual = "{firstname} {lastname}".into();
         prefs.show.birth = true;
@@ -962,11 +940,11 @@ mod tests {
         prefs.output.style.dot_leaders = true;
         prefs.output.style.fonts.names = "monospace 14".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
-        assert!(out.contains("stroke-dasharray"));
-        let has_leader_line = out
-            .lines()
-            .any(|l| l.contains("stroke-dasharray") && l.contains("x1="));
-        assert!(has_leader_line, "no dot leader line found: {out}");
+        assert!(
+            out.lines()
+                .any(|l| l.contains("class=\"row-rule\"") && l.contains("x1=\"20.0\"")),
+            "underline should start at left margin: {out}"
+        );
     }
 
     // ── Title and copyright ──
