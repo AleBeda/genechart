@@ -258,7 +258,7 @@ I5 Jane Doe # married 1843
 I12 Paul Smith # emigrated 1900
 ```
 
-Highlighted individuals are visually distinguished in SVG/PDF output. They are rendered in a different text color, configurable via `output.style.text.highlights.color`, and with a different background color, configurable via `output.style.text.highlights.background_color`. Backends that don't support colors (e.g. text) render the highlighted individuals in an alternate way, configurable via `output.style.text.highlights.fallback`.
+Highlighted individuals are visually distinguished in SVG/PDF output. They are rendered in a different text color, configurable via `output.style.text.highlights.color`, and with a different background color, configurable via `output.style.text.highlights.background_color`. The text backend supports two fallback modes, controlled by `output.style.text.highlights.fallback`: when set to `"uppercase"`, the highlighted individual's name is capitalized; when set to any other value (e.g. `"->"`), that literal string is prepended to the left of the line (even before the ID column, if shown), and all content on that line is shifted right to make room.
 
 ## Building
 

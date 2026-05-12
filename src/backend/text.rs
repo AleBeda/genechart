@@ -44,7 +44,7 @@ fn set_char_at(s: &mut String, byte_pos: usize, ch: char) {
 
 // ── Scene → text-grid rendering ───────────────────────────────────────────────
 
-fn render_scene_text(scene: &Scene, prefs: &Prefs) -> String {
+fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> String {
     let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
     let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
     let char_width_px = font_size * CHAR_WIDTH_RATIO;
@@ -53,11 +53,30 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs) -> String {
 
     let dot_leaders = prefs.output.style.dot_leaders;
 
+    // First pass: identify lines that contain highlighted text.
+    let highlighted_lines: std::collections::HashSet<usize> = {
+        let mut set = std::collections::HashSet::new();
+        for prim in &scene.primitives {
+            if let Primitive::Text(t) = prim {
+                if t.attrs.contains(&TextAttr::Highlighted) {
+                    let li = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+                    set.insert(li);
+                }
+            }
+        }
+        set
+    };
+
     for prim in &scene.primitives {
         match prim {
             Primitive::Text(t) => {
                 let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
-                let col = (t.bbox.x / char_width_px).round() as usize;
+                let col = (t.bbox.x / char_width_px).round() as usize
+                    + if fallback_shift > 0 && highlighted_lines.contains(&line_idx) {
+                        fallback_shift
+                    } else {
+                        0
+                    };
                 let use_dot_leaders = dot_leaders
                     && matches!(
                         t.attrs
@@ -92,6 +111,17 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs) -> String {
             }
             Primitive::Box(_) | Primitive::Wedge(_) => {
                 // Not used in simple layout text output
+            }
+        }
+    }
+
+    // Prepend fallback marker to highlighted lines.
+    if fallback_shift > 0 {
+        let fallback_str = &prefs.output.style.text.highlights.fallback;
+        for &line_idx in &highlighted_lines {
+            if line_idx < lines.len() {
+                let current = lines[line_idx].clone();
+                lines[line_idx] = format!("{fallback_str}{current}");
             }
         }
     }
@@ -135,7 +165,12 @@ impl Renderer for TextRenderer {
         }
 
         // Body
-        let body = render_scene_text(scene, prefs);
+        let fallback_shift = if prefs.output.style.text.highlights.fallback != "uppercase" {
+            prefs.output.style.text.highlights.fallback.len() + 1
+        } else {
+            0
+        };
+        let body = render_scene_text(scene, prefs, fallback_shift);
         writeln!(writer, "{body}")?;
 
         // Copyright
@@ -423,6 +458,46 @@ mod tests {
         assert!(
             text.trim_end().ends_with("© 2026"),
             "copyright should be last line"
+        );
+    }
+    #[test]
+    fn test_fallback_literal_shifts_content() {
+        use crate::scene::{Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive};
+
+        let scene = Scene {
+            primitives: vec![Primitive::Text(TextPrimitive {
+                content: "John Doe".to_string(),
+                bbox: Rect {
+                    x: 6.0,
+                    y: 0.0,
+                    w: 12.0,
+                    h: 16.0,
+                },
+                align: TextAlign::Left,
+                attrs: vec![TextAttr::IndividualName, TextAttr::Highlighted],
+            })],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 200.0,
+                h: 16.0,
+            },
+        };
+        let mut prefs = Prefs::default();
+        prefs.output.style.text.highlights.fallback = "->".into();
+        // shift = len("->") + 1 = 3; "John Doe" at col 6 → shifted to col 9
+        // fallback "->" prepended at col 0
+        let mut buf = Vec::<u8>::new();
+        TextRenderer
+            .render(&LayoutOutput::Simple(scene), &prefs, &mut buf)
+            .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let line = output.lines().find(|l| l.contains("John Doe")).unwrap();
+        assert!(line.starts_with("->"));
+        assert!(
+            line.find("John").unwrap() >= 3,
+            "John should be shifted right; line: {:?}",
+            line
         );
     }
 }
