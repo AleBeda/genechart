@@ -5,7 +5,7 @@ use crate::layout::LayoutOutput;
 use crate::preferences::Prefs;
 use crate::scene::{Primitive, Scene, TextAttr};
 use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 // ── String helpers ────────────────────────────────────────────────────────────
 
@@ -218,19 +218,54 @@ fn clear_row_segment(grid: &mut TextGrid, row: usize, start_col: usize, end_col:
     }
 }
 
+fn bar_char(
+    is_parent: bool,
+    is_child: bool,
+    is_left: bool,
+    is_right: bool,
+    downward: bool,
+) -> char {
+    if is_parent && is_child {
+        if is_left {
+            '\u{251C}' // ├
+        } else if is_right {
+            '\u{2524}' // ┤
+        } else {
+            '\u{253C}' // ┼
+        }
+    } else if is_parent {
+        if is_left {
+            if downward { '\u{2514}' } else { '\u{250C}' } // └ or ┌
+        } else if is_right {
+            if downward { '\u{2518}' } else { '\u{2510}' } // ┘ or ┐
+        } else {
+            if downward { '\u{2534}' } else { '\u{252C}' } // ┴ or ┬
+        }
+    } else {
+        // is_child only
+        if is_left {
+            if downward { '\u{250C}' } else { '\u{2514}' } // ┌ or └
+        } else if is_right {
+            if downward { '\u{2510}' } else { '\u{2518}' } // ┐ or ┘
+        } else {
+            if downward { '\u{252C}' } else { '\u{2534}' } // ┬ or ┴
+        }
+    }
+}
+
 fn draw_connector_on_grid(
     grid: &mut TextGrid,
     conn: &crate::scene::ConnectorPrimitive,
     line_height_px: f64,
     char_width_px: f64,
+    downward: bool,
 ) {
     if conn.parent_points.is_empty() || conn.child_points.is_empty() {
         return;
     }
 
-    let parent_pt = &conn.parent_points[0];
-    let parent_col = display_to_col(parent_pt.x, char_width_px);
-    let parent_row = display_to_row(parent_pt.y, line_height_px);
+    let parent_col = display_to_col(conn.parent_points[0].x, char_width_px);
+    let parent_row = display_to_row(conn.parent_points[0].y, line_height_px);
 
     let child_cols: Vec<usize> = conn
         .child_points
@@ -243,167 +278,93 @@ fn draw_connector_on_grid(
         .map(|c| display_to_row(c.y, line_height_px))
         .collect();
 
-    let first_child_row = child_rows[0];
-
-    // Determine direction
-    let downward = first_child_row > parent_row;
-
-    // Horizontal bar at midpoint
-    let bar_row = if downward {
-        (parent_row + first_child_row) / 2
-    } else {
-        (first_child_row + parent_row) / 2
-    };
-    if bar_row >= grid.rows {
+    // Single child: straight vertical line only, no horizontal bar
+    if child_cols.len() == 1 {
+        let child_row = child_rows[0];
+        let (r_start, r_end) = if downward {
+            (parent_row.saturating_add(1), child_row)
+        } else {
+            (child_row.saturating_add(1), parent_row.saturating_add(1))
+        };
+        for r in r_start..r_end {
+            if r < grid.rows {
+                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
         return;
     }
 
-    // Collect all columns for bar span
+    // Multiple children: bar at midpoint
     let mut all_cols = vec![parent_col];
     all_cols.extend(&child_cols);
     let bar_left = *all_cols.iter().min().unwrap();
     let bar_right = *all_cols.iter().max().unwrap();
 
+    let extreme_child_row = if downward {
+        child_rows.iter().copied().min().unwrap_or(0)
+    } else {
+        child_rows.iter().copied().max().unwrap_or(0)
+    };
+    let bar_row = (parent_row + extreme_child_row) / 2;
+    if bar_row >= grid.rows {
+        return;
+    }
+
+    // Parent vertical
     if downward {
-        // Children below parent
-        // Vertical drop from parent to bar
         for r in (parent_row + 1)..bar_row {
             if r < grid.rows {
                 grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
             }
         }
-
-        // Horizontal bar
-        for c in bar_left..=bar_right {
-            if c < grid.cols {
-                grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
-            }
-        }
-
-        // Vertical drops from bar to each child
-        for (i, &child_col) in child_cols.iter().enumerate() {
-            let child_row = child_rows[i];
-            for r in (bar_row + 1)..child_row {
-                if r < grid.rows {
-                    grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
-                }
-            }
-        }
-
-        // Corner/intersection characters
-        if bar_left < bar_right {
-            // Left end of bar
-            let left_is_child = child_cols.contains(&bar_left);
-            let right_is_child = child_cols.contains(&bar_right);
-            let left_is_parent = parent_col == bar_left;
-            let right_is_parent = parent_col == bar_right;
-
-            if left_is_child && left_is_parent {
-                grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_INTERSECTION); // ┫
-            } else if left_is_child {
-                grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_INTERSECTION); // ┬
-            }
-
-            if right_is_child && right_is_parent {
-                grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_INTERSECTION); // ┴
-            } else if right_is_child {
-                grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_INTERSECTION); // ┬
-            }
-
-            // Parent column intersection
-            if parent_col > bar_left && parent_col < bar_right {
-                let parent_between_children = child_cols.iter().any(|&c| c < parent_col)
-                    && child_cols.iter().any(|&c| c > parent_col);
-                if parent_between_children {
-                    grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_INTERSECTION); // ╪
-                } else {
-                    if parent_col == bar_left {
-                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
-                    } else if parent_col == bar_right {
-                        grid.set(bar_row, parent_col, '\u{2525}', PRIORITY_INTERSECTION); // ┤
-                    } else {
-                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
-                    }
-                }
-            }
-        } else if bar_left == bar_right {
-            // Single column: just a vertical line
-            for r in (parent_row + 1)..first_child_row {
-                if r < grid.rows {
-                    grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
-                }
-            }
-        }
     } else {
-        // Children above parent (upward connectors)
-        // Vertical line from parent up to bar
         for r in (bar_row + 1)..=parent_row {
             if r < grid.rows {
                 grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
             }
         }
+    }
 
-        // Horizontal bar
-        for c in bar_left..=bar_right {
-            if c < grid.cols {
-                grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
-            }
+    // Horizontal bar
+    for c in bar_left..=bar_right {
+        if c < grid.cols {
+            grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
         }
+    }
 
-        // Vertical lines from each child down to bar
-        for (i, &child_col) in child_cols.iter().enumerate() {
-            let child_row = child_rows[i];
-            for r in child_row..bar_row {
+    // Child verticals
+    for (i, &cc) in child_cols.iter().enumerate() {
+        let cr = child_rows[i];
+        if downward {
+            for r in (bar_row + 1)..cr {
                 if r < grid.rows {
-                    grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
                 }
             }
-        }
-
-        // Corner/intersection characters
-        if bar_left < bar_right {
-            // Left end of bar
-            let left_is_child = child_cols.contains(&bar_left);
-            let right_is_child = child_cols.contains(&bar_right);
-            let left_is_parent = parent_col == bar_left;
-            let right_is_parent = parent_col == bar_right;
-
-            if left_is_child && left_is_parent {
-                grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_INTERSECTION); // ┫
-            } else if left_is_child {
-                grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_INTERSECTION); // ┬
-            }
-
-            if right_is_child && right_is_parent {
-                grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_INTERSECTION); // ┴
-            } else if right_is_child {
-                grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_INTERSECTION); // ┬
-            }
-
-            // Parent column intersection
-            if parent_col > bar_left && parent_col < bar_right {
-                let parent_between_children = child_cols.iter().any(|&c| c < parent_col)
-                    && child_cols.iter().any(|&c| c > parent_col);
-                if parent_between_children {
-                    grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_INTERSECTION); // ╪
-                } else {
-                    if parent_col == bar_left {
-                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
-                    } else if parent_col == bar_right {
-                        grid.set(bar_row, parent_col, '\u{2525}', PRIORITY_INTERSECTION); // ┤
-                    } else {
-                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
-                    }
-                }
-            }
-        } else if bar_left == bar_right {
-            // Single column: just a vertical line
-            for r in first_child_row..=parent_row {
+        } else {
+            for r in (cr + 1)..bar_row {
                 if r < grid.rows {
-                    grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
+                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
                 }
             }
         }
+    }
+
+    // Intersection characters at bar row
+    let child_set: HashSet<usize> = child_cols.iter().copied().collect();
+    for c in bar_left..=bar_right {
+        if c >= grid.cols {
+            continue;
+        }
+        let is_parent = c == parent_col;
+        let is_child = child_set.contains(&c);
+        if !is_parent && !is_child {
+            continue;
+        }
+        let is_left = c == bar_left;
+        let is_right = c == bar_right;
+        let ch = bar_char(is_parent, is_child, is_left, is_right, downward);
+        grid.set(bar_row, c, ch, PRIORITY_INTERSECTION);
     }
 }
 
@@ -440,7 +401,7 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
         draw_box(&mut grid, &box_prim.bbox, line_height_px, char_width_px);
     }
 
-    // Pass 2: place text sequentially per box
+    // Pass 2: place text per box, grouping by Y band so same-height texts share a row
     for box_prim in &boxes {
         let bbox = &box_prim.bbox;
         let box_row0 = display_to_row(bbox.y, line_height_px);
@@ -449,7 +410,7 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
         let box_col1 = display_to_col(bbox.x + bbox.w, char_width_px);
 
         // Find text primitives contained within this box
-        let mut texts: Vec<&crate::scene::TextPrimitive> = scene
+        let texts: Vec<&crate::scene::TextPrimitive> = scene
             .primitives
             .iter()
             .filter_map(|p| {
@@ -469,57 +430,85 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
             })
             .collect();
 
-        // Sort by display Y to preserve visual top-to-bottom order
-        texts.sort_by_key(|t| (t.bbox.y / line_height_px).round() as usize);
+        // Group texts by Y band: texts at the same Y (within line_height_px) share a row.
+        // This handles wide boxes where two spouses have the same Y for each data slot.
+        // Group by pixel-exact Y position. Texts at the same Y (within 0.5 px) share a row.
+        // This handles wide boxes where two spouses have the same Y for each data slot,
+        // while keeping same-column texts (which differ by ≥ date_font_size ≈ 10 px) separate.
+        let mut y_groups: BTreeMap<i64, Vec<&crate::scene::TextPrimitive>> = BTreeMap::new();
+        for text in &texts {
+            let key = text.bbox.y.round() as i64;
+            y_groups.entry(key).or_default().push(text);
+        }
 
-        // Assign rows sequentially from box_row0 + 1
+        // Assign text rows sequentially from box_row0 + 1.
+        // MarriageData gets a blank row before and after it.
         let mut current_row = box_row0 + 1;
-        for text in texts {
-            if current_row >= box_row1 && box_row1 > box_row0 {
-                break; // No more room in this box
-            }
-            if current_row >= grid.rows {
+        for (_key, group) in &y_groups {
+            if current_row >= grid.rows || current_row >= box_row1 {
                 break;
             }
 
-            // Build content string, applying transforms
-            let mut content = text.content.clone();
+            let has_marriage = group
+                .iter()
+                .any(|t| t.attrs.contains(&TextAttr::MarriageData));
 
-            // Strip leading "⚭ " from marriage data text
-            if text.attrs.contains(&crate::scene::TextAttr::MarriageData) {
-                if content.starts_with("⚭ ") {
-                    content = content[3..].to_string();
+            if has_marriage {
+                current_row += 1; // blank row before marriage
+                if current_row >= grid.rows {
+                    break;
                 }
             }
 
-            // Apply highlight uppercase
-            if text.attrs.contains(&crate::scene::TextAttr::Highlighted)
-                && prefs.output.style.text.highlights.fallback == "uppercase"
-            {
-                content = content.to_uppercase();
-            }
-
-            // Clear any trailing characters from previous writes on this row
-            clear_row_segment(&mut grid, current_row, box_col0, box_col1);
-
-            // Write text at this row
-            draw_text_on_grid(
+            // Clear interior of this row once, preserving left/right border columns
+            clear_row_segment(
                 &mut grid,
-                text,
-                line_height_px,
-                char_width_px,
-                &content,
                 current_row,
+                box_col0 + 1,
+                box_col1.saturating_sub(1),
             );
 
+            for text in group {
+                let mut content = text.content.clone();
+                if text.attrs.contains(&TextAttr::MarriageData) && content.starts_with("⚭ ") {
+                    content = content[3..].to_string();
+                }
+                if text.attrs.contains(&TextAttr::Highlighted)
+                    && prefs.output.style.text.highlights.fallback == "uppercase"
+                {
+                    content = content.to_uppercase();
+                }
+                draw_text_on_grid(
+                    &mut grid,
+                    text,
+                    line_height_px,
+                    char_width_px,
+                    &content,
+                    current_row,
+                );
+            }
+
             current_row += 1;
+
+            if has_marriage {
+                current_row += 1; // blank row after marriage
+            }
         }
     }
 
     // Pass 3: draw connectors
+    // Direction is derived from root_pos (the single source of truth), not from row positions.
+    let root_pos_bottom = prefs.layout.root_pos.is_empty()
+        || prefs
+            .layout
+            .root_pos
+            .to_ascii_lowercase()
+            .starts_with("bot");
+    // root at bottom → children appear above root in display space → upward connectors
+    let downward = !root_pos_bottom;
     for prim in &scene.primitives {
         if let Primitive::Connector(c) = prim {
-            draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px);
+            draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px, downward);
         }
     }
 
@@ -1404,6 +1393,7 @@ mod tests {
     #[test]
     fn test_bc_text_no_marriage_symbol() {
         // ⚭ should be stripped from marriage data in text backend.
+        // Box must be tall enough to accommodate a blank row before and after marriage data.
         use crate::scene::{
             BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
         };
@@ -1415,7 +1405,7 @@ mod tests {
                         x: 0.0,
                         y: 0.0,
                         w: 200.0, // wide enough for full date without truncation
-                        h: 36.0,
+                        h: 90.0,  // tall enough for blank-before + marriage + blank-after
                     },
                 }),
                 Primitive::Text(TextPrimitive {
@@ -1434,7 +1424,7 @@ mod tests {
                 x: 0.0,
                 y: 0.0,
                 w: 200.0,
-                h: 36.0,
+                h: 90.0,
             },
         };
         let prefs = Prefs::default();
@@ -1455,7 +1445,6 @@ mod tests {
             result
         );
     }
-
     #[test]
     fn test_bc_text_no_trailing_garbage() {
         // Longer text on a row should not leave trailing chars for shorter text.
@@ -1586,22 +1575,24 @@ mod tests {
                 h: 90.0,
             },
         };
-        let prefs = Prefs::default();
+        // root_pos="top" → root at top → children below → downward connectors
+        let mut prefs = Prefs::default();
+        prefs.layout.root_pos = "top".to_string();
         let output = LayoutOutput::BoxedCouples(scene);
 
         let mut buf = Vec::<u8>::new();
         TextRenderer.render(&output, &prefs, &mut buf).unwrap();
         let result = String::from_utf8(buf).unwrap();
 
-        // Should contain vertical lines and a horizontal bar
+        // Single child → straight vertical │, no horizontal bar (task #52 requirement).
         assert!(
             result.contains('\u{2502}'),
             "vertical connector line missing: {:?}",
             result
         );
         assert!(
-            result.contains('\u{2500}'),
-            "horizontal connector bar missing: {:?}",
+            !result.contains('\u{2500}'),
+            "single-child connector should not have horizontal bar: {:?}",
             result
         );
     }
@@ -1667,6 +1658,7 @@ mod tests {
                 h: 108.0,
             },
         };
+        // Default root_pos="" → root at bottom → children above → upward connectors
         let prefs = Prefs::default();
         let output = LayoutOutput::BoxedCouples(scene);
 
@@ -1674,15 +1666,15 @@ mod tests {
         TextRenderer.render(&output, &prefs, &mut buf).unwrap();
         let result = String::from_utf8(buf).unwrap();
 
-        // Should contain vertical lines connecting parent and child
+        // Single child → straight vertical │, no horizontal bar.
         assert!(
             result.contains('\u{2502}'),
             "vertical connector line missing for upward connector: {:?}",
             result
         );
         assert!(
-            result.contains('\u{2500}'),
-            "horizontal connector bar missing for upward connector: {:?}",
+            !result.contains('\u{2500}'),
+            "single-child upward connector should not have horizontal bar: {:?}",
             result
         );
     }
@@ -1760,6 +1752,303 @@ mod tests {
         assert!(
             has_t_junction_down || has_t_junction_up || has_cross,
             "connector intersections should use box-drawing T-junctions or crosses; got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_sides_on_text_rows() {
+        // Box side borders (│) must remain visible on rows that also contain text.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 54.0, // 3 rows: top border, text row, bottom border
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Name".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 54.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        let name_row = lines.iter().position(|l| l.contains("Name")).unwrap_or(0);
+        assert!(
+            name_row > 0,
+            "Name should be below top border; name_row={name_row}; lines: {:?}",
+            lines
+        );
+        // The row containing "Name" must also have the │ side border character.
+        assert!(
+            lines[name_row].contains('\u{2502}'),
+            "Box side border │ should be present on the text row; got: {:?}",
+            lines[name_row]
+        );
+    }
+
+    #[test]
+    fn test_bc_text_wide_box_same_rows() {
+        // In a wide (two-spouse) box, texts at the same Y position but different X
+        // must appear on the same output line.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 120.0,
+                        h: 54.0,
+                    },
+                }),
+                // Left spouse name — same Y as right spouse name
+                Primitive::Text(TextPrimitive {
+                    content: "Alice".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 60.0,
+                        h: 13.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::SpouseName],
+                }),
+                // Right spouse name — same Y, different X column
+                Primitive::Text(TextPrimitive {
+                    content: "Bob".to_string(),
+                    bbox: Rect {
+                        x: 60.0,
+                        y: 0.0,
+                        w: 60.0,
+                        h: 13.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::SpouseName],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 120.0,
+                h: 54.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        let alice_row = lines
+            .iter()
+            .position(|l| l.contains("Alice"))
+            .expect("Alice not found");
+        let bob_row = lines
+            .iter()
+            .position(|l| l.contains("Bob"))
+            .expect("Bob not found");
+        assert_eq!(
+            alice_row, bob_row,
+            "Alice and Bob (same-Y texts in a wide box) must be on the same output row; lines: {:?}",
+            lines
+        );
+    }
+
+    #[test]
+    fn test_bc_text_marriage_blank_lines() {
+        // MarriageData must be preceded and followed by a blank row.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 120.0,
+                        h: 108.0,
+                    },
+                }),
+                // Individual name (different Y from marriage)
+                Primitive::Text(TextPrimitive {
+                    content: "John".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 120.0,
+                        h: 13.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                // Marriage data at a different Y
+                Primitive::Text(TextPrimitive {
+                    content: "⚭ 1843".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 36.0,
+                        w: 120.0,
+                        h: 13.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::MarriageData],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 120.0,
+                h: 108.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        let marr_row = lines
+            .iter()
+            .position(|l| l.contains("1843"))
+            .expect("marriage data not found");
+
+        // The row immediately before marriage data must be blank (only box borders or spaces)
+        let row_before = lines[marr_row - 1];
+        let interior_before = row_before.trim_matches(|c| c == '│' || c == ' ');
+        assert!(
+            interior_before.is_empty(),
+            "row before marriage data should be blank, got: {:?}",
+            row_before
+        );
+
+        // The row immediately after marriage data must also be blank (if it exists inside the box)
+        if marr_row + 1 < lines.len() {
+            let row_after = lines[marr_row + 1];
+            let interior_after = row_after
+                .trim_matches(|c| c == '│' || c == ' ' || c == '└' || c == '┘' || c == '─');
+            assert!(
+                interior_after.is_empty(),
+                "row after marriage data should be blank (or bottom border), got: {:?}",
+                row_after
+            );
+        }
+    }
+
+    #[test]
+    fn test_bc_text_single_child_vertical() {
+        // A single-child connector must draw a straight │ with no horizontal bar.
+        use crate::scene::{ConnectorPrimitive, Point, Primitive, Rect, Scene};
+
+        let scene = Scene {
+            primitives: vec![Primitive::Connector(ConnectorPrimitive {
+                parent_points: vec![Point { x: 40.0, y: 18.0 }],
+                child_points: vec![Point { x: 40.0, y: 72.0 }],
+            })],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 90.0,
+            },
+        };
+        let mut prefs = Prefs::default();
+        prefs.layout.root_pos = "top".to_string();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        assert!(
+            result.contains('\u{2502}'),
+            "single-child connector must draw │: {:?}",
+            result
+        );
+        assert!(
+            !result.contains('\u{2500}'),
+            "single-child connector must NOT draw horizontal bar ─: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_connector_corners() {
+        // Two-children downward connector must use corner characters at bar ends.
+        use crate::scene::{ConnectorPrimitive, Point, Primitive, Rect, Scene};
+
+        // Parent at col corresponding to x=40 (center), children at x=10 and x=70.
+        let scene = Scene {
+            primitives: vec![Primitive::Connector(ConnectorPrimitive {
+                parent_points: vec![Point { x: 40.0, y: 18.0 }],
+                child_points: vec![Point { x: 10.0, y: 72.0 }, Point { x: 70.0, y: 72.0 }],
+            })],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 90.0,
+            },
+        };
+        // root_pos="top" → root at top → children below → downward connectors
+        let mut prefs = Prefs::default();
+        prefs.layout.root_pos = "top".to_string();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // Bar endpoints must be ┌ (left child) and ┐ (right child); parent gets ┴ in interior.
+        assert!(
+            result.contains('\u{250C}'), // ┌
+            "left-end child corner ┌ missing: {:?}",
+            result
+        );
+        assert!(
+            result.contains('\u{2510}'), // ┐
+            "right-end child corner ┐ missing: {:?}",
+            result
+        );
+        assert!(
+            result.contains('\u{2534}'), // ┴
+            "parent interior ┴ missing: {:?}",
             result
         );
     }
