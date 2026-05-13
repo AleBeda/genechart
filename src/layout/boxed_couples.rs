@@ -1050,48 +1050,46 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
 
             let mut y_pos = name_baseline;
             if prefs.show.birth {
-                if let Some(ref birth) = ind.birth {
-                    if let Some(s) = format_event(
-                        &prefs.format.birth,
-                        birth.date.as_ref(),
-                        birth.place.as_deref(),
-                    ) {
-                        y_pos += spacing.date_above + date_font_size;
-                        texts.push(Primitive::Text(TextPrimitive {
-                            content: s,
-                            bbox: Rect {
-                                x: ind_cx - geo.width / 2.0,
-                                y: y_pos - date_font_size,
-                                w: geo.width,
-                                h: date_font_size,
-                            },
-                            align: TextAlign::Center,
-                            attrs: vec![TextAttr::BirthData],
-                        }));
-                    }
-                }
+                y_pos += spacing.date_above + date_font_size;
+                let birth_content = ind
+                    .birth
+                    .as_ref()
+                    .and_then(|b| {
+                        format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref())
+                    })
+                    .unwrap_or_default();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: birth_content,
+                    bbox: Rect {
+                        x: ind_cx - geo.width / 2.0,
+                        y: y_pos - date_font_size,
+                        w: geo.width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::BirthData],
+                }));
             }
             if prefs.show.death {
-                if let Some(ref death) = ind.death {
-                    if let Some(s) = format_event(
-                        &prefs.format.death,
-                        death.date.as_ref(),
-                        death.place.as_deref(),
-                    ) {
-                        y_pos += spacing.date_above + date_font_size;
-                        texts.push(Primitive::Text(TextPrimitive {
-                            content: s,
-                            bbox: Rect {
-                                x: ind_cx - geo.width / 2.0,
-                                y: y_pos - date_font_size,
-                                w: geo.width,
-                                h: date_font_size,
-                            },
-                            align: TextAlign::Center,
-                            attrs: vec![TextAttr::DeathData],
-                        }));
-                    }
-                }
+                y_pos += spacing.date_above + date_font_size;
+                let death_content = ind
+                    .death
+                    .as_ref()
+                    .and_then(|d| {
+                        format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref())
+                    })
+                    .unwrap_or_default();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: death_content,
+                    bbox: Rect {
+                        x: ind_cx - geo.width / 2.0,
+                        y: y_pos - date_font_size,
+                        w: geo.width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::DeathData],
+                }));
             }
 
             // First spouse in left section
@@ -1187,48 +1185,46 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
 
             let mut y_pos = name_baseline;
             if prefs.show.birth {
-                if let Some(ref birth) = ind.birth {
-                    if let Some(s) = format_event(
-                        &prefs.format.birth,
-                        birth.date.as_ref(),
-                        birth.place.as_deref(),
-                    ) {
-                        y_pos += spacing.date_above + date_font_size;
-                        texts.push(Primitive::Text(TextPrimitive {
-                            content: s,
-                            bbox: Rect {
-                                x: section_cx - geo.width / 2.0,
-                                y: y_pos - date_font_size,
-                                w: geo.width,
-                                h: date_font_size,
-                            },
-                            align: TextAlign::Center,
-                            attrs: vec![TextAttr::BirthData],
-                        }));
-                    }
-                }
+                y_pos += spacing.date_above + date_font_size;
+                let birth_content = ind
+                    .birth
+                    .as_ref()
+                    .and_then(|b| {
+                        format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref())
+                    })
+                    .unwrap_or_default();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: birth_content,
+                    bbox: Rect {
+                        x: section_cx - geo.width / 2.0,
+                        y: y_pos - date_font_size,
+                        w: geo.width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::BirthData],
+                }));
             }
             if prefs.show.death {
-                if let Some(ref death) = ind.death {
-                    if let Some(s) = format_event(
-                        &prefs.format.death,
-                        death.date.as_ref(),
-                        death.place.as_deref(),
-                    ) {
-                        y_pos += spacing.date_above + date_font_size;
-                        texts.push(Primitive::Text(TextPrimitive {
-                            content: s,
-                            bbox: Rect {
-                                x: section_cx - geo.width / 2.0,
-                                y: y_pos - date_font_size,
-                                w: geo.width,
-                                h: date_font_size,
-                            },
-                            align: TextAlign::Center,
-                            attrs: vec![TextAttr::DeathData],
-                        }));
-                    }
-                }
+                y_pos += spacing.date_above + date_font_size;
+                let death_content = ind
+                    .death
+                    .as_ref()
+                    .and_then(|d| {
+                        format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref())
+                    })
+                    .unwrap_or_default();
+                texts.push(Primitive::Text(TextPrimitive {
+                    content: death_content,
+                    bbox: Rect {
+                        x: section_cx - geo.width / 2.0,
+                        y: y_pos - date_font_size,
+                        w: geo.width,
+                        h: date_font_size,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::DeathData],
+                }));
             }
 
             if let Some((fam_id, fam)) = spouses.first() {
@@ -1469,50 +1465,44 @@ fn emit_spouse_primitives(
     // Spouse birth
     let mut y = sp_name_baseline;
     if prefs.show.birth {
-        if let Some(ref birth) = sp.birth {
-            if let Some(s) = format_event(
-                &prefs.format.birth,
-                birth.date.as_ref(),
-                birth.place.as_deref(),
-            ) {
-                y += spacing.date_above + date_font_size;
-                texts.push(Primitive::Text(TextPrimitive {
-                    content: s,
-                    bbox: Rect {
-                        x: cx - section_width / 2.0,
-                        y: y - date_font_size,
-                        w: section_width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::BirthData],
-                }));
-            }
-        }
+        y += spacing.date_above + date_font_size;
+        let birth_content = sp
+            .birth
+            .as_ref()
+            .and_then(|b| format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref()))
+            .unwrap_or_default();
+        texts.push(Primitive::Text(TextPrimitive {
+            content: birth_content,
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::BirthData],
+        }));
     }
 
     // Spouse death
     if prefs.show.death {
-        if let Some(ref death) = sp.death {
-            if let Some(s) = format_event(
-                &prefs.format.death,
-                death.date.as_ref(),
-                death.place.as_deref(),
-            ) {
-                y += spacing.date_above + date_font_size;
-                texts.push(Primitive::Text(TextPrimitive {
-                    content: s,
-                    bbox: Rect {
-                        x: cx - section_width / 2.0,
-                        y: y - date_font_size,
-                        w: section_width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::DeathData],
-                }));
-            }
-        }
+        y += spacing.date_above + date_font_size;
+        let death_content = sp
+            .death
+            .as_ref()
+            .and_then(|d| format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref()))
+            .unwrap_or_default();
+        texts.push(Primitive::Text(TextPrimitive {
+            content: death_content,
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::DeathData],
+        }));
     }
 }
 

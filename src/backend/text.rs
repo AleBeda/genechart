@@ -48,6 +48,7 @@ const PRIORITY_CONNECTOR: u8 = 1;
 const PRIORITY_INTERSECTION: u8 = 2;
 const PRIORITY_BOX: u8 = 3;
 const PRIORITY_TEXT: u8 = 4;
+const PRIORITY_T_JUNCTION: u8 = 5; // overwrites box borders at connector endpoints
 
 #[derive(Clone)]
 struct Cell {
@@ -218,6 +219,15 @@ fn clear_row_segment(grid: &mut TextGrid, row: usize, start_col: usize, end_col:
     }
 }
 
+fn endpoint_char(is_parent: bool, downward: bool) -> char {
+    match (is_parent, downward) {
+        (true, true) => '\u{252C}',   // parent exits bottom of box → ┬
+        (true, false) => '\u{2534}',  // parent exits top of box    → ┴
+        (false, true) => '\u{2534}',  // child enters top of box    → ┴
+        (false, false) => '\u{252C}', // child enters bottom of box → ┬
+    }
+}
+
 fn bar_char(
     is_parent: bool,
     is_child: bool,
@@ -280,11 +290,32 @@ fn draw_connector_on_grid(
 
     // Single child: straight vertical line only, no horizontal bar
     if child_cols.len() == 1 {
+        let child_col = child_cols[0];
         let child_row = child_rows[0];
+
+        // T-junctions at the box borders (overwrite with PRIORITY_T_JUNCTION)
+        if parent_row < grid.rows {
+            grid.set(
+                parent_row,
+                parent_col,
+                endpoint_char(true, downward),
+                PRIORITY_T_JUNCTION,
+            );
+        }
+        if child_row < grid.rows {
+            grid.set(
+                child_row,
+                child_col,
+                endpoint_char(false, downward),
+                PRIORITY_T_JUNCTION,
+            );
+        }
+
+        // Vertical between the two endpoint rows (exclusive at both ends)
         let (r_start, r_end) = if downward {
             (parent_row.saturating_add(1), child_row)
         } else {
-            (child_row.saturating_add(1), parent_row.saturating_add(1))
+            (child_row.saturating_add(1), parent_row)
         };
         for r in r_start..r_end {
             if r < grid.rows {
@@ -310,7 +341,17 @@ fn draw_connector_on_grid(
         return;
     }
 
-    // Parent vertical
+    // T-junction at parent box border
+    if parent_row < grid.rows {
+        grid.set(
+            parent_row,
+            parent_col,
+            endpoint_char(true, downward),
+            PRIORITY_T_JUNCTION,
+        );
+    }
+
+    // Parent vertical (between parent endpoint and bar, exclusive at both ends)
     if downward {
         for r in (parent_row + 1)..bar_row {
             if r < grid.rows {
@@ -318,7 +359,7 @@ fn draw_connector_on_grid(
             }
         }
     } else {
-        for r in (bar_row + 1)..=parent_row {
+        for r in (bar_row + 1)..parent_row {
             if r < grid.rows {
                 grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
             }
@@ -332,9 +373,15 @@ fn draw_connector_on_grid(
         }
     }
 
-    // Child verticals
+    // Child verticals + T-junctions at child box borders
     for (i, &cc) in child_cols.iter().enumerate() {
         let cr = child_rows[i];
+
+        // T-junction at child box border
+        if cr < grid.rows {
+            grid.set(cr, cc, endpoint_char(false, downward), PRIORITY_T_JUNCTION);
+        }
+
         if downward {
             for r in (bar_row + 1)..cr {
                 if r < grid.rows {
@@ -367,7 +414,6 @@ fn draw_connector_on_grid(
         grid.set(bar_row, c, ch, PRIORITY_INTERSECTION);
     }
 }
-
 // ── Scene → text-grid rendering ───────────────────────────────────────────────
 
 fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
@@ -2050,6 +2096,135 @@ mod tests {
             result.contains('\u{2534}'), // ┴
             "parent interior ┴ missing: {:?}",
             result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_connector_joins_box_downward() {
+        // Connector must draw ┬ at parent bottom border and ┴ at child top border (downward tree).
+        // line_height_px=18: y=18→row1 (parent bottom), y=54→row3 (child top), y=36→row2 (gap).
+        use crate::scene::{BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene};
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 54.0,
+                        w: 40.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point { x: 40.0, y: 18.0 }],
+                    child_points: vec![Point { x: 40.0, y: 54.0 }],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 90.0,
+            },
+        };
+        let mut prefs = Prefs::default();
+        prefs.layout.root_pos = "top".to_string(); // downward=true
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        // Row 1 = parent bottom border: must contain ┬ (lower side T-junction)
+        assert!(
+            lines[1].contains('\u{252C}'),
+            "parent bottom border should have ┬; got: {:?}",
+            lines[1]
+        );
+        // Row 3 = child top border: must contain ┴ (upper side T-junction)
+        assert!(
+            lines[3].contains('\u{2534}'),
+            "child top border should have ┴; got: {:?}",
+            lines[3]
+        );
+        // Row 2 = gap row: must contain │ (no blank gap between borders)
+        assert!(
+            lines[2].contains('\u{2502}'),
+            "connector row between boxes should have │ (no gap); got: {:?}",
+            lines[2]
+        );
+    }
+
+    #[test]
+    fn test_bc_text_connector_joins_box_upward() {
+        // Connector must draw ┬ at child bottom border and ┴ at parent top border (upward tree).
+        // line_height_px=18: y=18→row1 (child bottom), y=54→row3 (parent top), y=36→row2 (gap).
+        use crate::scene::{BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene};
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 54.0,
+                        w: 40.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point { x: 40.0, y: 54.0 }],
+                    child_points: vec![Point { x: 40.0, y: 18.0 }],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 90.0,
+            },
+        };
+        let prefs = Prefs::default(); // root_pos="" → downward=false (upward)
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        // Row 1 = child bottom border: must contain ┬ (lower side T-junction)
+        assert!(
+            lines[1].contains('\u{252C}'),
+            "child bottom border should have ┬; got: {:?}",
+            lines[1]
+        );
+        // Row 3 = parent top border: must contain ┴ (upper side T-junction)
+        assert!(
+            lines[3].contains('\u{2534}'),
+            "parent top border should have ┴; got: {:?}",
+            lines[3]
+        );
+        // Row 2 = gap row: must contain │
+        assert!(
+            lines[2].contains('\u{2502}'),
+            "connector row between boxes should have │ (no gap); got: {:?}",
+            lines[2]
         );
     }
 }
