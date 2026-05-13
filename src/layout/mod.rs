@@ -43,6 +43,10 @@ impl LayoutOutput {
     pub fn is_simple(&self) -> bool {
         matches!(self, LayoutOutput::Simple(_))
     }
+
+    pub fn is_boxed_couples(&self) -> bool {
+        matches!(self, LayoutOutput::BoxedCouples(_))
+    }
 }
 
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {

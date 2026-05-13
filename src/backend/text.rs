@@ -42,6 +42,268 @@ fn set_char_at(s: &mut String, byte_pos: usize, ch: char) {
     }
 }
 
+// ── Text grid for boxed_couples rendering ─────────────────────────────────────
+
+const PRIORITY_CONNECTOR: u8 = 1;
+const PRIORITY_BOX: u8 = 2;
+const PRIORITY_TEXT: u8 = 3;
+
+#[derive(Clone)]
+struct Cell {
+    ch: char,
+    priority: u8,
+}
+
+struct TextGrid {
+    rows: usize,
+    cols: usize,
+    data: Vec<Vec<Option<Cell>>>,
+}
+
+impl TextGrid {
+    fn new(rows: usize, cols: usize) -> Self {
+        Self {
+            rows,
+            cols,
+            data: vec![vec![None; cols]; rows],
+        }
+    }
+
+    fn set(&mut self, row: usize, col: usize, ch: char, priority: u8) {
+        if row >= self.rows || col >= self.cols {
+            return;
+        }
+        match &self.data[row][col] {
+            Some(cell) if cell.priority >= priority => {}
+            _ => {
+                self.data[row][col] = Some(Cell { ch, priority });
+            }
+        }
+    }
+
+    fn to_rendered_string(self) -> String {
+        let mut lines: Vec<String> = self
+            .data
+            .iter()
+            .map(|row| {
+                let s: String = row
+                    .iter()
+                    .map(|c| c.as_ref().map(|cell| cell.ch).unwrap_or(' '))
+                    .collect();
+                s.trim_end_matches(' ').to_string()
+            })
+            .collect();
+        while lines.last().map_or(false, |l| l.is_empty()) {
+            lines.pop();
+        }
+        lines.join("\n")
+    }
+}
+
+fn display_to_row(display_y: f64, line_height_px: f64) -> usize {
+    (display_y / line_height_px).round() as usize
+}
+
+fn display_to_col(display_x: f64, char_width_px: f64) -> usize {
+    (display_x / char_width_px).round() as usize
+}
+
+fn draw_box(
+    grid: &mut TextGrid,
+    bbox: &crate::scene::Rect,
+    line_height_px: f64,
+    char_width_px: f64,
+) {
+    let row0 = display_to_row(bbox.y, line_height_px);
+    let col0 = display_to_col(bbox.x, char_width_px);
+    let row1 = display_to_row(bbox.y + bbox.h, line_height_px);
+    let col1 = display_to_col(bbox.x + bbox.w, char_width_px);
+
+    let w = col1.saturating_sub(col0);
+    let h = row1.saturating_sub(row0);
+    if w < 2 || h < 2 {
+        return;
+    }
+
+    // Top edge
+    grid.set(row0, col0, '\u{250C}', PRIORITY_BOX); // ┌
+    grid.set(row0, col0 + w - 1, '\u{2510}', PRIORITY_BOX); // ┐
+    for c in col0 + 1..col0 + w - 1 {
+        grid.set(row0, c, '\u{2500}', PRIORITY_BOX); // ─
+    }
+
+    // Middle rows
+    for r in row0 + 1..row0 + h - 1 {
+        grid.set(r, col0, '\u{2502}', PRIORITY_BOX); // │
+        grid.set(r, col0 + w - 1, '\u{2502}', PRIORITY_BOX); // │
+    }
+
+    // Bottom edge
+    grid.set(row0 + h - 1, col0, '\u{2514}', PRIORITY_BOX); // └
+    grid.set(row0 + h - 1, col0 + w - 1, '\u{2518}', PRIORITY_BOX); // ┘
+    for c in col0 + 1..col0 + w - 1 {
+        grid.set(row0 + h - 1, c, '\u{2500}', PRIORITY_BOX); // ─
+    }
+}
+
+fn draw_text_on_grid(
+    grid: &mut TextGrid,
+    text: &crate::scene::TextPrimitive,
+    line_height_px: f64,
+    char_width_px: f64,
+    content: &str,
+) {
+    let row = display_to_row(text.bbox.y, line_height_px);
+    if row >= grid.rows {
+        return;
+    }
+
+    let text_len = content.chars().count();
+    let max_cols = grid.cols.max(1);
+
+    let start_col = match text.align {
+        crate::scene::TextAlign::Left => display_to_col(text.bbox.x, char_width_px),
+        crate::scene::TextAlign::Center => {
+            let center = display_to_col(text.bbox.x + text.bbox.w / 2.0, char_width_px);
+            center.saturating_sub(text_len / 2)
+        }
+        crate::scene::TextAlign::Right => {
+            let right = display_to_col(text.bbox.x + text.bbox.w, char_width_px);
+            right.saturating_sub(text_len)
+        }
+    };
+
+    let chars: Vec<char> = content.chars().collect();
+    let available = if start_col < max_cols {
+        max_cols.saturating_sub(start_col)
+    } else {
+        0
+    };
+
+    let mut end = chars.len();
+    if available < chars.len() {
+        let suffix = "...";
+        if available < suffix.len() {
+            end = available;
+        } else {
+            end = available.saturating_sub(suffix.len());
+        }
+    }
+
+    for (i, &ch) in chars[..end].iter().enumerate() {
+        let col = start_col + i;
+        if col < grid.cols {
+            grid.set(row, col, ch, PRIORITY_TEXT);
+        }
+    }
+    if end < chars.len() {
+        for (i, ch) in "...".chars().enumerate() {
+            let col = start_col + end + i;
+            if col < grid.cols {
+                grid.set(row, col, ch, PRIORITY_TEXT);
+            }
+        }
+    }
+}
+
+fn draw_connector_on_grid(
+    grid: &mut TextGrid,
+    conn: &crate::scene::ConnectorPrimitive,
+    line_height_px: f64,
+    char_width_px: f64,
+) {
+    if conn.parent_points.is_empty() || conn.child_points.is_empty() {
+        return;
+    }
+
+    let parent_pt = &conn.parent_points[0];
+    let parent_col = display_to_col(parent_pt.x, char_width_px);
+    let parent_row = display_to_row(parent_pt.y, line_height_px);
+
+    let child_cols: Vec<usize> = conn
+        .child_points
+        .iter()
+        .map(|c| display_to_col(c.x, char_width_px))
+        .collect();
+    let child_rows: Vec<usize> = conn
+        .child_points
+        .iter()
+        .map(|c| display_to_row(c.y, line_height_px))
+        .collect();
+
+    // Determine direction: children below parent (y increases downward)
+    let first_child_row = child_rows[0];
+    if first_child_row <= parent_row {
+        return;
+    }
+
+    // Horizontal bar at midpoint
+    let bar_row = (parent_row + first_child_row) / 2;
+    if bar_row >= grid.rows {
+        return;
+    }
+
+    // Collect all columns for bar span
+    let mut all_cols = vec![parent_col];
+    all_cols.extend(&child_cols);
+    let bar_left = *all_cols.iter().min().unwrap();
+    let bar_right = *all_cols.iter().max().unwrap();
+
+    // Vertical drop from parent to bar
+    for r in (parent_row + 1)..bar_row {
+        if r < grid.rows {
+            grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+        }
+    }
+
+    // Horizontal bar
+    for c in bar_left..=bar_right {
+        if c < grid.cols {
+            grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
+        }
+    }
+
+    // Vertical drops from bar to each child
+    for (i, &child_col) in child_cols.iter().enumerate() {
+        let child_row = child_rows[i];
+        for r in (bar_row + 1)..child_row {
+            if r < grid.rows {
+                grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
+    }
+
+    // Corner/intersection characters
+    if bar_left < bar_right {
+        // Left end of bar
+        let left_is_child = child_cols.contains(&bar_left);
+        let right_is_child = child_cols.contains(&bar_right);
+
+        if left_is_child {
+            grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_CONNECTOR); // ┬
+        }
+        if right_is_child {
+            grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_CONNECTOR); // ┬
+        }
+
+        // Parent column intersection
+        if parent_col > bar_left && parent_col < bar_right {
+            grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_CONNECTOR); // ╪
+        } else if parent_col == bar_left && left_is_child {
+            grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_CONNECTOR); // ┫
+        } else if parent_col == bar_right && right_is_child {
+            grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_CONNECTOR); // ┴
+        }
+    } else if bar_left == bar_right {
+        // Single column: just a vertical line
+        for r in (parent_row + 1)..first_child_row {
+            if r < grid.rows {
+                grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
+    }
+}
+
 // ── Scene → text-grid rendering ───────────────────────────────────────────────
 
 fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> String {
@@ -135,6 +397,52 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
     lines.join("\n")
 }
 
+// ── Boxed couples → text rendering ────────────────────────────────────────────
+
+fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
+    if scene.primitives.is_empty() {
+        return String::new();
+    }
+
+    let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
+    let char_width_px = font_size * CHAR_WIDTH_RATIO;
+
+    let total_rows = ((scene.canvas_bounds.h / line_height_px).ceil() as usize).max(1);
+    let total_cols = ((scene.canvas_bounds.w / char_width_px).ceil() as usize).max(1);
+    let mut grid = TextGrid::new(total_rows, total_cols);
+
+    // Pass 1: draw box outlines
+    for prim in &scene.primitives {
+        if let Primitive::Box(b) = prim {
+            draw_box(&mut grid, &b.bbox, line_height_px, char_width_px);
+        }
+    }
+
+    // Pass 2: overlay text
+    for prim in &scene.primitives {
+        if let Primitive::Text(t) = prim {
+            let content = if t.attrs.contains(&TextAttr::Highlighted)
+                && prefs.output.style.text.highlights.fallback == "uppercase"
+            {
+                t.content.to_uppercase()
+            } else {
+                t.content.clone()
+            };
+            draw_text_on_grid(&mut grid, t, line_height_px, char_width_px, &content);
+        }
+    }
+
+    // Pass 3: draw connectors
+    for prim in &scene.primitives {
+        if let Primitive::Connector(c) = prim {
+            draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px);
+        }
+    }
+
+    grid.to_rendered_string()
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 pub struct TextRenderer;
@@ -149,7 +457,6 @@ impl Renderer for TextRenderer {
         if output.is_fan() {
             anyhow::bail!("fan layout does not support text output; use --svg or --pdf");
         }
-        let scene = output.scene();
 
         // Title
         if !prefs.output.text.title.is_empty() {
@@ -166,15 +473,21 @@ impl Renderer for TextRenderer {
         }
 
         // Body
-        let fallback_shift = if !prefs.files.highlights.is_empty()
-            && prefs.output.style.text.highlights.fallback != "uppercase"
-        {
-            prefs.output.style.text.highlights.fallback.len() + 1
+        if output.is_boxed_couples() {
+            let body = render_boxed_couples_text(output.scene(), prefs);
+            write!(writer, "{}", body)?;
         } else {
-            0
-        };
-        let body = render_scene_text(scene, prefs, fallback_shift);
-        writeln!(writer, "{body}")?;
+            let scene = output.scene();
+            let fallback_shift = if !prefs.files.highlights.is_empty()
+                && prefs.output.style.text.highlights.fallback != "uppercase"
+            {
+                prefs.output.style.text.highlights.fallback.len() + 1
+            } else {
+                0
+            };
+            let body = render_scene_text(scene, prefs, fallback_shift);
+            writeln!(writer, "{body}")?;
+        }
 
         // Copyright
         if !prefs.output.text.copyright.is_empty() {
@@ -533,6 +846,242 @@ mod tests {
             "highlighted and normal lines must be aligned;\n  hl: {:?}\n  normal: {:?}",
             hl_line,
             normal_line
+        );
+    }
+    #[test]
+    fn test_bc_text_structure() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.generation_num = false;
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        // Should contain box-drawing characters
+
+        // Should contain box-drawing characters
+        assert!(
+            output.contains('\u{250C}'),
+            "missing top-left corner: {:?}",
+            output
+        );
+        assert!(
+            output.contains('\u{2510}'),
+            "missing top-right corner: {:?}",
+            output
+        );
+        assert!(
+            output.contains('\u{2514}'),
+            "missing bottom-left corner: {:?}",
+            output
+        );
+        assert!(
+            output.contains('\u{2518}'),
+            "missing bottom-right corner: {:?}",
+            output
+        );
+        assert!(
+            output.contains('\u{2500}'),
+            "missing horizontal line: {:?}",
+            output
+        );
+        assert!(
+            output.contains('\u{2502}'),
+            "missing vertical line: {:?}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_bc_text_contains_names() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.generation_num = false;
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("John"), "root name missing: {:?}", output);
+        assert!(output.contains("Jane"), "spouse name missing: {:?}", output);
+        assert!(output.contains("Paul"), "child name missing: {:?}", output);
+    }
+
+    #[test]
+    fn test_bc_text_connectors() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.layout.layout_type = "boxed_couples".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.generation_num = false;
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        // Connectors between generations should be visible
+        assert!(
+            output.contains('\u{252C}') || output.contains('\u{2500}'),
+            "connector bar missing: {:?}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_bc_text_empty_scene() {
+        use crate::scene::{Rect, Scene};
+
+        let scene = Scene {
+            primitives: vec![],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 100.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // Empty scene should not produce box characters
+        assert!(
+            !result.contains('\u{250C}'),
+            "empty scene should not have box characters: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_truncation() {
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 30.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Very Long Name That Should Be Truncated".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 40.0,
+                h: 30.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // The long text should be truncated with "..."
+        assert!(
+            result.contains("..."),
+            "long text should be truncated: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_highlight_uppercase() {
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 30.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "john".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 40.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName, TextAttr::Highlighted],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 40.0,
+                h: 30.0,
+            },
+        };
+        // default fallback is "uppercase"
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // Highlighted text should be uppercased when fallback == "uppercase"
+        assert!(
+            result.contains("JOHN"),
+            "highlighted text should be uppercased: {:?}",
+            result
         );
     }
 }

@@ -135,7 +135,7 @@ pub struct SimpleLayoutPrefs {
     pub vert_spacing: u32,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BoxedCouplesPrefs {
     #[serde(default, deserialize_with = "de_f64")]
     pub box_width: f64,
@@ -149,6 +149,19 @@ pub struct BoxedCouplesPrefs {
     pub gap_height: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub box_width_2_spouses: f64,
+}
+
+impl Default for BoxedCouplesPrefs {
+    fn default() -> Self {
+        Self {
+            box_width: 240.0,
+            box_height: 140.0,
+            spouse_sep_height: 30.0,
+            gap_width: 40.0,
+            gap_height: 80.0,
+            box_width_2_spouses: 520.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
