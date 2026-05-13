@@ -45,8 +45,9 @@ fn set_char_at(s: &mut String, byte_pos: usize, ch: char) {
 // ── Text grid for boxed_couples rendering ─────────────────────────────────────
 
 const PRIORITY_CONNECTOR: u8 = 1;
-const PRIORITY_BOX: u8 = 2;
-const PRIORITY_TEXT: u8 = 3;
+const PRIORITY_INTERSECTION: u8 = 2;
+const PRIORITY_BOX: u8 = 3;
+const PRIORITY_TEXT: u8 = 4;
 
 #[derive(Clone)]
 struct Cell {
@@ -149,11 +150,11 @@ fn draw_box(
 fn draw_text_on_grid(
     grid: &mut TextGrid,
     text: &crate::scene::TextPrimitive,
-    line_height_px: f64,
+    _line_height_px: f64,
     char_width_px: f64,
     content: &str,
+    row: usize,
 ) {
-    let row = display_to_row(text.bbox.y, line_height_px);
     if row >= grid.rows {
         return;
     }
@@ -206,6 +207,17 @@ fn draw_text_on_grid(
     }
 }
 
+fn clear_row_segment(grid: &mut TextGrid, row: usize, start_col: usize, end_col: usize) {
+    if row >= grid.rows {
+        return;
+    }
+    for c in start_col..end_col {
+        if c < grid.cols {
+            grid.data[row][c] = None;
+        }
+    }
+}
+
 fn draw_connector_on_grid(
     grid: &mut TextGrid,
     conn: &crate::scene::ConnectorPrimitive,
@@ -231,14 +243,17 @@ fn draw_connector_on_grid(
         .map(|c| display_to_row(c.y, line_height_px))
         .collect();
 
-    // Determine direction: children below parent (y increases downward)
     let first_child_row = child_rows[0];
-    if first_child_row <= parent_row {
-        return;
-    }
+
+    // Determine direction
+    let downward = first_child_row > parent_row;
 
     // Horizontal bar at midpoint
-    let bar_row = (parent_row + first_child_row) / 2;
+    let bar_row = if downward {
+        (parent_row + first_child_row) / 2
+    } else {
+        (first_child_row + parent_row) / 2
+    };
     if bar_row >= grid.rows {
         return;
     }
@@ -249,56 +264,144 @@ fn draw_connector_on_grid(
     let bar_left = *all_cols.iter().min().unwrap();
     let bar_right = *all_cols.iter().max().unwrap();
 
-    // Vertical drop from parent to bar
-    for r in (parent_row + 1)..bar_row {
-        if r < grid.rows {
-            grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
-        }
-    }
-
-    // Horizontal bar
-    for c in bar_left..=bar_right {
-        if c < grid.cols {
-            grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
-        }
-    }
-
-    // Vertical drops from bar to each child
-    for (i, &child_col) in child_cols.iter().enumerate() {
-        let child_row = child_rows[i];
-        for r in (bar_row + 1)..child_row {
+    if downward {
+        // Children below parent
+        // Vertical drop from parent to bar
+        for r in (parent_row + 1)..bar_row {
             if r < grid.rows {
-                grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
             }
         }
-    }
 
-    // Corner/intersection characters
-    if bar_left < bar_right {
-        // Left end of bar
-        let left_is_child = child_cols.contains(&bar_left);
-        let right_is_child = child_cols.contains(&bar_right);
-
-        if left_is_child {
-            grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_CONNECTOR); // ┬
-        }
-        if right_is_child {
-            grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_CONNECTOR); // ┬
+        // Horizontal bar
+        for c in bar_left..=bar_right {
+            if c < grid.cols {
+                grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
+            }
         }
 
-        // Parent column intersection
-        if parent_col > bar_left && parent_col < bar_right {
-            grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_CONNECTOR); // ╪
-        } else if parent_col == bar_left && left_is_child {
-            grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_CONNECTOR); // ┫
-        } else if parent_col == bar_right && right_is_child {
-            grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_CONNECTOR); // ┴
+        // Vertical drops from bar to each child
+        for (i, &child_col) in child_cols.iter().enumerate() {
+            let child_row = child_rows[i];
+            for r in (bar_row + 1)..child_row {
+                if r < grid.rows {
+                    grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
+            }
         }
-    } else if bar_left == bar_right {
-        // Single column: just a vertical line
-        for r in (parent_row + 1)..first_child_row {
+
+        // Corner/intersection characters
+        if bar_left < bar_right {
+            // Left end of bar
+            let left_is_child = child_cols.contains(&bar_left);
+            let right_is_child = child_cols.contains(&bar_right);
+            let left_is_parent = parent_col == bar_left;
+            let right_is_parent = parent_col == bar_right;
+
+            if left_is_child && left_is_parent {
+                grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_INTERSECTION); // ┫
+            } else if left_is_child {
+                grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_INTERSECTION); // ┬
+            }
+
+            if right_is_child && right_is_parent {
+                grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_INTERSECTION); // ┴
+            } else if right_is_child {
+                grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_INTERSECTION); // ┬
+            }
+
+            // Parent column intersection
+            if parent_col > bar_left && parent_col < bar_right {
+                let parent_between_children = child_cols.iter().any(|&c| c < parent_col)
+                    && child_cols.iter().any(|&c| c > parent_col);
+                if parent_between_children {
+                    grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_INTERSECTION); // ╪
+                } else {
+                    if parent_col == bar_left {
+                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
+                    } else if parent_col == bar_right {
+                        grid.set(bar_row, parent_col, '\u{2525}', PRIORITY_INTERSECTION); // ┤
+                    } else {
+                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
+                    }
+                }
+            }
+        } else if bar_left == bar_right {
+            // Single column: just a vertical line
+            for r in (parent_row + 1)..first_child_row {
+                if r < grid.rows {
+                    grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
+            }
+        }
+    } else {
+        // Children above parent (upward connectors)
+        // Vertical line from parent up to bar
+        for r in (bar_row + 1)..=parent_row {
             if r < grid.rows {
-                grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
+                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
+
+        // Horizontal bar
+        for c in bar_left..=bar_right {
+            if c < grid.cols {
+                grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
+            }
+        }
+
+        // Vertical lines from each child down to bar
+        for (i, &child_col) in child_cols.iter().enumerate() {
+            let child_row = child_rows[i];
+            for r in child_row..bar_row {
+                if r < grid.rows {
+                    grid.set(r, child_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
+            }
+        }
+
+        // Corner/intersection characters
+        if bar_left < bar_right {
+            // Left end of bar
+            let left_is_child = child_cols.contains(&bar_left);
+            let right_is_child = child_cols.contains(&bar_right);
+            let left_is_parent = parent_col == bar_left;
+            let right_is_parent = parent_col == bar_right;
+
+            if left_is_child && left_is_parent {
+                grid.set(bar_row, bar_left, '\u{252B}', PRIORITY_INTERSECTION); // ┫
+            } else if left_is_child {
+                grid.set(bar_row, bar_left, '\u{252C}', PRIORITY_INTERSECTION); // ┬
+            }
+
+            if right_is_child && right_is_parent {
+                grid.set(bar_row, bar_right, '\u{2534}', PRIORITY_INTERSECTION); // ┴
+            } else if right_is_child {
+                grid.set(bar_row, bar_right, '\u{252C}', PRIORITY_INTERSECTION); // ┬
+            }
+
+            // Parent column intersection
+            if parent_col > bar_left && parent_col < bar_right {
+                let parent_between_children = child_cols.iter().any(|&c| c < parent_col)
+                    && child_cols.iter().any(|&c| c > parent_col);
+                if parent_between_children {
+                    grid.set(bar_row, parent_col, '\u{252A}', PRIORITY_INTERSECTION); // ╪
+                } else {
+                    if parent_col == bar_left {
+                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
+                    } else if parent_col == bar_right {
+                        grid.set(bar_row, parent_col, '\u{2525}', PRIORITY_INTERSECTION); // ┤
+                    } else {
+                        grid.set(bar_row, parent_col, '\u{2524}', PRIORITY_INTERSECTION); // ├
+                    }
+                }
+            }
+        } else if bar_left == bar_right {
+            // Single column: just a vertical line
+            for r in first_child_row..=parent_row {
+                if r < grid.rows {
+                    grid.set(r, bar_left, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
             }
         }
     }
@@ -306,6 +409,122 @@ fn draw_connector_on_grid(
 
 // ── Scene → text-grid rendering ───────────────────────────────────────────────
 
+fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
+    if scene.primitives.is_empty() {
+        return String::new();
+    }
+
+    let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
+    let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
+    let char_width_px = font_size * CHAR_WIDTH_RATIO;
+
+    let total_rows = ((scene.canvas_bounds.h / line_height_px).ceil() as usize).max(1);
+    let total_cols = ((scene.canvas_bounds.w / char_width_px).ceil() as usize).max(1);
+    let mut grid = TextGrid::new(total_rows, total_cols);
+
+    // Collect boxes in order
+    let boxes: Vec<&crate::scene::BoxPrimitive> = scene
+        .primitives
+        .iter()
+        .filter_map(|p| {
+            if let Primitive::Box(b) = p {
+                Some(b)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Pass 1: draw box outlines
+    for box_prim in &boxes {
+        draw_box(&mut grid, &box_prim.bbox, line_height_px, char_width_px);
+    }
+
+    // Pass 2: place text sequentially per box
+    for box_prim in &boxes {
+        let bbox = &box_prim.bbox;
+        let box_row0 = display_to_row(bbox.y, line_height_px);
+        let box_row1 = display_to_row(bbox.y + bbox.h, line_height_px);
+        let box_col0 = display_to_col(bbox.x, char_width_px);
+        let box_col1 = display_to_col(bbox.x + bbox.w, char_width_px);
+
+        // Find text primitives contained within this box
+        let mut texts: Vec<&crate::scene::TextPrimitive> = scene
+            .primitives
+            .iter()
+            .filter_map(|p| {
+                if let Primitive::Text(t) = p {
+                    if t.bbox.x >= bbox.x
+                        && t.bbox.y >= bbox.y
+                        && (t.bbox.x + t.bbox.w) <= (bbox.x + bbox.w)
+                        && (t.bbox.y + t.bbox.h) <= (bbox.y + bbox.h)
+                    {
+                        Some(t)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort by display Y to preserve visual top-to-bottom order
+        texts.sort_by_key(|t| (t.bbox.y / line_height_px).round() as usize);
+
+        // Assign rows sequentially from box_row0 + 1
+        let mut current_row = box_row0 + 1;
+        for text in texts {
+            if current_row >= box_row1 && box_row1 > box_row0 {
+                break; // No more room in this box
+            }
+            if current_row >= grid.rows {
+                break;
+            }
+
+            // Build content string, applying transforms
+            let mut content = text.content.clone();
+
+            // Strip leading "⚭ " from marriage data text
+            if text.attrs.contains(&crate::scene::TextAttr::MarriageData) {
+                if content.starts_with("⚭ ") {
+                    content = content[3..].to_string();
+                }
+            }
+
+            // Apply highlight uppercase
+            if text.attrs.contains(&crate::scene::TextAttr::Highlighted)
+                && prefs.output.style.text.highlights.fallback == "uppercase"
+            {
+                content = content.to_uppercase();
+            }
+
+            // Clear any trailing characters from previous writes on this row
+            clear_row_segment(&mut grid, current_row, box_col0, box_col1);
+
+            // Write text at this row
+            draw_text_on_grid(
+                &mut grid,
+                text,
+                line_height_px,
+                char_width_px,
+                &content,
+                current_row,
+            );
+
+            current_row += 1;
+        }
+    }
+
+    // Pass 3: draw connectors
+    for prim in &scene.primitives {
+        if let Primitive::Connector(c) = prim {
+            draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px);
+        }
+    }
+
+    grid.to_rendered_string()
+}
 fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> String {
     let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
     let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
@@ -395,52 +614,6 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
     }
 
     lines.join("\n")
-}
-
-// ── Boxed couples → text rendering ────────────────────────────────────────────
-
-fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
-    if scene.primitives.is_empty() {
-        return String::new();
-    }
-
-    let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
-    let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
-    let char_width_px = font_size * CHAR_WIDTH_RATIO;
-
-    let total_rows = ((scene.canvas_bounds.h / line_height_px).ceil() as usize).max(1);
-    let total_cols = ((scene.canvas_bounds.w / char_width_px).ceil() as usize).max(1);
-    let mut grid = TextGrid::new(total_rows, total_cols);
-
-    // Pass 1: draw box outlines
-    for prim in &scene.primitives {
-        if let Primitive::Box(b) = prim {
-            draw_box(&mut grid, &b.bbox, line_height_px, char_width_px);
-        }
-    }
-
-    // Pass 2: overlay text
-    for prim in &scene.primitives {
-        if let Primitive::Text(t) = prim {
-            let content = if t.attrs.contains(&TextAttr::Highlighted)
-                && prefs.output.style.text.highlights.fallback == "uppercase"
-            {
-                t.content.to_uppercase()
-            } else {
-                t.content.clone()
-            };
-            draw_text_on_grid(&mut grid, t, line_height_px, char_width_px, &content);
-        }
-    }
-
-    // Pass 3: draw connectors
-    for prim in &scene.primitives {
-        if let Primitive::Connector(c) = prim {
-            draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px);
-        }
-    }
-
-    grid.to_rendered_string()
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1081,6 +1254,512 @@ mod tests {
         assert!(
             result.contains("JOHN"),
             "highlighted text should be uppercased: {:?}",
+            result
+        );
+    }
+    #[test]
+    fn test_bc_text_no_border_overlap() {
+        // Regression: text should not overlap box top border.
+        // With sequential row assignment, first text row is box_row0 + 1.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        // Box wide enough for "Name" (80px ≈ 10 cols), tall enough for 2+ rows
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 36.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Name".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 36.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        // Row 0 is the top border (┌ ─ ┐).
+        // "Name" should be on row 1 or later, not on the top border row.
+        let name_row = lines.iter().position(|l| l.contains("Name")).unwrap_or(0);
+        assert!(
+            name_row > 0,
+            "Name should be below top border row 0, found on row {name_row}; lines: {:?}",
+            lines
+        );
+    }
+
+    #[test]
+    fn test_bc_text_sequential_rows() {
+        // Birth and death data must appear on separate rows, not overlapping.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 100.0, // wide enough for full dates
+                        h: 72.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Name".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 100.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "* 1 JAN 1800".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 2.0, // pixel-level spacing, rounds to same row as Name
+                        w: 100.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::BirthData],
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "x 1 JAN 1850".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 4.0, // also rounds to same row
+                        w: 100.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::DeathData],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 72.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        // Each piece of text should be on its own row
+        let name_row = lines.iter().position(|l| l.contains("Name")).unwrap_or(0);
+        let birth_row = lines
+            .iter()
+            .position(|l| l.contains("1 JAN 1800"))
+            .unwrap_or(0);
+        let death_row = lines
+            .iter()
+            .position(|l| l.contains("1 JAN 1850"))
+            .unwrap_or(0);
+        assert!(
+            name_row != birth_row,
+            "Name and birth must be on different rows; name_row={name_row}, birth_row={birth_row}; lines: {:?}",
+            lines
+        );
+        assert!(
+            birth_row != death_row,
+            "Birth and death must be on different rows; birth_row={birth_row}, death_row={death_row}; lines: {:?}",
+            lines
+        );
+    }
+
+    #[test]
+    fn test_bc_text_no_marriage_symbol() {
+        // ⚭ should be stripped from marriage data in text backend.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 200.0, // wide enough for full date without truncation
+                        h: 36.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "⚭ 4 APR 1843, London".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 200.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::MarriageData],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 200.0,
+                h: 36.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        assert!(
+            !result.contains("⚭"),
+            "marriage symbol should be stripped from text backend: {:?}",
+            result
+        );
+        assert!(
+            result.contains("4 APR 1843"),
+            "marriage date should still be present: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_no_trailing_garbage() {
+        // Longer text on a row should not leave trailing chars for shorter text.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 100.0,
+                        h: 36.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Very Long Name".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 100.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Short".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 2.0, // would round to same row as the long name
+                        w: 100.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::BirthData],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 36.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        // "Short" should be on its own row (sequential), not overlapping "Very Long Name"
+        let short_row = lines.iter().position(|l| l.contains("Short")).unwrap_or(0);
+        // The row with "Short" should not contain characters from "Very Long Name"
+        // beyond what "Short" writes (excluding box borders and spaces)
+        let short_line = lines[short_row];
+        // After trimming, the line should not have "Name" trailing
+        assert!(
+            !short_line.trim().contains("Name"),
+            "short text row should not have trailing garbage from previous longer text: {:?}",
+            short_line
+        );
+    }
+
+    #[test]
+    fn test_bc_text_connectors_downward() {
+        // Connectors should render with T-junctions for children below parent.
+        use crate::scene::{
+            BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
+            TextPrimitive,
+        };
+
+        // Parent at y=0..18, child at y=72..90 — enough vertical distance
+        // for bar_row to be between parent_row and child_row.
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Parent".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Child".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point { x: 10.0, y: 18.0 }],
+                    child_points: vec![Point { x: 10.0, y: 72.0 }],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 20.0,
+                h: 90.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // Should contain vertical lines and a horizontal bar
+        assert!(
+            result.contains('\u{2502}'),
+            "vertical connector line missing: {:?}",
+            result
+        );
+        assert!(
+            result.contains('\u{2500}'),
+            "horizontal connector bar missing: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_connectors_upward() {
+        // Connectors should render for children above parent (root_pos="bottom").
+        use crate::scene::{
+            BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
+            TextPrimitive,
+        };
+
+        // Child at y=0..18, parent at y=72..90 — enough vertical distance.
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Parent".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Child".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point { x: 10.0, y: 90.0 }],
+                    child_points: vec![Point { x: 10.0, y: 18.0 }],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 20.0,
+                h: 108.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // Should contain vertical lines connecting parent and child
+        assert!(
+            result.contains('\u{2502}'),
+            "vertical connector line missing for upward connector: {:?}",
+            result
+        );
+        assert!(
+            result.contains('\u{2500}'),
+            "horizontal connector bar missing for upward connector: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bc_text_intersection_chars() {
+        // Connector intersections should use proper box-drawing characters.
+        use crate::scene::{
+            BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
+            TextPrimitive,
+        };
+
+        // Parent centered between two children; enough vertical distance.
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Text(TextPrimitive {
+                    content: "Parent".to_string(),
+                    bbox: Rect {
+                        x: 20.0,
+                        y: 0.0,
+                        w: 20.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 40.0,
+                        y: 72.0,
+                        w: 20.0,
+                        h: 18.0,
+                    },
+                }),
+                Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![Point { x: 30.0, y: 18.0 }],
+                    child_points: vec![Point { x: 10.0, y: 72.0 }, Point { x: 50.0, y: 72.0 }],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 60.0,
+                h: 90.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+
+        // With parent between two children, should have:
+        // ┬ at child columns, ┴ or ╪ at parent column
+        let has_t_junction_down = result.contains('\u{252C}'); // ┬
+        let has_t_junction_up = result.contains('\u{2534}'); // ┴
+        let has_cross = result.contains('\u{252A}'); // ╪
+        assert!(
+            has_t_junction_down || has_t_junction_up || has_cross,
+            "connector intersections should use box-drawing T-junctions or crosses; got: {:?}",
             result
         );
     }
