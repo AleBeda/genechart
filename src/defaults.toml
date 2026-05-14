@@ -25,10 +25,10 @@ individual = "{firstname} {lastname} {sex}"
 birth = "* {date:%d %b %Y}, {location}"
 death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"
-date_qualifiers = "compact" # Allowed values: "none", "gedcom", "compact"
+date_qualifiers = "compact" # Valid values: "none", "gedcom", "compact"
 
 [layout]
-type = "simple" # Valid values: "simple", "boxed_couples", "fan"
+type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy"
 root_pos = "bottom" # Valid values: "bot[tom]", "top"
 
 [layout.simple]
