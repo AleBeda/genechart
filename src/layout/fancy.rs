@@ -482,7 +482,18 @@ fn emit_subtree(
                                 }
                             }
 
-                            spouse_name_w = sp_name.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO;
+                            let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
+                            let sp_bold =
+                                matches!(prefs.output.style.fonts.spouse.trim(), "bold" | "bolder");
+                            spouse_name_w = crate::backend::font_metrics::measure_text_w(
+                                &sp_name,
+                                &name_family,
+                                nfs,
+                                sp_bold,
+                            )
+                            .unwrap_or_else(|| {
+                                sp_name.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO
+                            });
                             *max_x = f64::max(*max_x, sp_name_x + spouse_name_w);
                             *max_y = f64::max(*max_y, sg.y + spouse_height(prefs));
 
@@ -579,8 +590,8 @@ fn emit_subtree(
     // ── IndivToSpouse connector ───────────────────────────────────────────────
     if !spouse_ys.is_empty() {
         let xv = geo.x + V_OFFSET;
-        let y_trunk_top = geo.y + ind_height(prefs);
-        let y_trunk_bot = spouse_ys.last().unwrap() + n_lh / 2.0;
+        let y_trunk_top = geo.y + n_lh;
+        let y_trunk_bot = spouse_ys.last().unwrap() + n_lh / 2.0 - ARC_R;
         let sp_conn_x = geo.x + IND_DATA_OFFSET;
 
         let mut d = format!("M {xv:.1} {y_trunk_top:.1} L {xv:.1} {y_trunk_bot:.1}");
