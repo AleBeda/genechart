@@ -1,0 +1,27 @@
+# Preferences for the Kennedy family example.
+# Auto-loaded by genechart alongside kennedy.ged (same basename).
+# Run from the project root: genechart examples/kennedy/kennedy.ged
+
+[scope]
+root = "I1"          # Joseph Kennedy Sr. — start of the famous generation
+generations = 4
+direction = "descendants"
+
+[files]
+highlights = "examples/kennedy/kennedy_highlights.txt"
+
+[output.text]
+title = "The Kennedy Family"
+copyright = ""
+
+[output.style.fonts]
+names = "Georgia 14"
+dates = "Arial 10"
+
+[layout.boxed_couples]
+box_width = 300.0
+box_width_2_spouses = 640.0
+
+[layout.fan]
+ring_height = 120
+outer_ring_height = 250
