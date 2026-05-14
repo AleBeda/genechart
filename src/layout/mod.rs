@@ -6,6 +6,7 @@ use anyhow::Result;
 pub mod boxed_couples;
 pub mod common;
 pub mod fan;
+pub mod fancy;
 pub mod simple;
 
 pub trait Layout {
@@ -17,6 +18,7 @@ pub enum LayoutOutput {
     Simple(Scene),
     BoxedCouples(Scene),
     Fan(Scene),
+    Fancy(Scene),
 }
 
 impl LayoutOutput {
@@ -24,14 +26,20 @@ impl LayoutOutput {
     #[allow(dead_code)]
     pub fn into_scene(self) -> Scene {
         match self {
-            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) | LayoutOutput::Fan(s) => s,
+            LayoutOutput::Simple(s)
+            | LayoutOutput::BoxedCouples(s)
+            | LayoutOutput::Fan(s)
+            | LayoutOutput::Fancy(s) => s,
         }
     }
 
     /// Borrow the contained `Scene`.
     pub fn scene(&self) -> &Scene {
         match self {
-            LayoutOutput::Simple(s) | LayoutOutput::BoxedCouples(s) | LayoutOutput::Fan(s) => s,
+            LayoutOutput::Simple(s)
+            | LayoutOutput::BoxedCouples(s)
+            | LayoutOutput::Fan(s)
+            | LayoutOutput::Fancy(s) => s,
         }
     }
 
@@ -46,6 +54,10 @@ impl LayoutOutput {
 
     pub fn is_boxed_couples(&self) -> bool {
         matches!(self, LayoutOutput::BoxedCouples(_))
+    }
+
+    pub fn is_fancy(&self) -> bool {
+        matches!(self, LayoutOutput::Fancy(_))
     }
 }
 
@@ -64,6 +76,10 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
             let result = fan::FanLayout.compute(genrep, prefs)?;
             Ok(LayoutOutput::Fan(fan::emit_scene(&result, prefs)))
         }
+        "fancy" => {
+            let result = fancy::FancyLayout.compute(genrep, prefs)?;
+            Ok(LayoutOutput::Fancy(fancy::emit_scene(&result, prefs)))
+        }
         other => {
             eprintln!("warning: unknown layout type {other:?}, falling back to 'simple'");
             let result = simple::SimpleLayout.compute(genrep, prefs)?;
@@ -71,7 +87,6 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

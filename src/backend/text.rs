@@ -629,8 +629,11 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
                     }
                 }
             }
-            Primitive::Box(_) | Primitive::Wedge(_) => {
-                // Not used in simple layout text output
+            Primitive::Box(_)
+            | Primitive::Wedge(_)
+            | Primitive::FancyText(_)
+            | Primitive::FancyConn(_) => {
+                // Not used in simple/boxed layout text output
             }
         }
     }
@@ -673,6 +676,9 @@ impl Renderer for TextRenderer {
     ) -> anyhow::Result<()> {
         if output.is_fan() {
             anyhow::bail!("fan layout does not support text output; use --svg or --pdf");
+        }
+        if output.is_fancy() {
+            anyhow::bail!("fancy layout does not support text output; use --svg or --pdf");
         }
 
         // Title

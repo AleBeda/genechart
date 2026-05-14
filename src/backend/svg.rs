@@ -503,6 +503,8 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         ));
     }
 
+    let mut indiv_conns: Vec<&crate::scene::FancyConnector> = Vec::new();
+    let mut spouse_conns: Vec<&crate::scene::FancyConnector> = Vec::new();
     // Render primitives
     for prim in &scene.primitives {
         match prim {
@@ -733,7 +735,63 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     out.push_str("  </g>\n");
                 }
             }
+            crate::scene::Primitive::FancyText(item) => {
+                for line in &item.lines {
+                    let (font_family, font_size) = font_for_attr(&line.attrs, prefs);
+                    let weight = weight_for_attr(&line.attrs, prefs);
+                    let color = color_for_attr(&line.attrs, prefs);
+                    let cw = font_size * CHAR_WIDTH_RATIO;
+                    let x_svg = to_svg_x(line.x);
+                    let y_svg = to_svg_y(line.y + font_size * 0.85);
+                    render_mixed_text(
+                        &mut out,
+                        x_svg,
+                        y_svg,
+                        &line.text,
+                        &font_family,
+                        font_size,
+                        weight,
+                        cw,
+                        &color,
+                        None,
+                        &TextAlign::Left,
+                    );
+                }
+            }
+            crate::scene::Primitive::FancyConn(conn) => {
+                use crate::scene::FancyConnKind;
+                match &conn.kind {
+                    FancyConnKind::IndivToSpouse => indiv_conns.push(conn),
+                    FancyConnKind::SpouseToChildren => spouse_conns.push(conn),
+                }
+            }
         }
+    }
+
+    // ── Fancy layout connector groups ─────────────────────────────────────────
+    if !indiv_conns.is_empty() || !spouse_conns.is_empty() {
+        let offset_x = MARGIN;
+        let offset_y = MARGIN + chart_top_offset;
+        out.push_str(&format!(
+            "  <g id=\"fancy-connectors-1\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
+        ));
+        for c in &indiv_conns {
+            out.push_str(&format!(
+                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
+                c.d, c.stroke, c.stroke_width
+            ));
+        }
+        out.push_str("  </g>\n");
+        out.push_str(&format!(
+            "  <g id=\"fancy-connectors-2\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
+        ));
+        for c in &spouse_conns {
+            out.push_str(&format!(
+                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
+                c.d, c.stroke, c.stroke_width
+            ));
+        }
+        out.push_str("  </g>\n");
     }
 
     // ── Row-rule underlines (simple layout only, replaces dotted leaders) ──

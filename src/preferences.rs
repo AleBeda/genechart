@@ -119,6 +119,8 @@ pub struct LayoutPrefs {
     pub boxed_couples: BoxedCouplesPrefs,
     #[serde(default)]
     pub fan: FanPrefs,
+    #[serde(default)]
+    pub fancy: FancyPrefs,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -131,6 +133,23 @@ pub struct FanPrefs {
     pub outer_ring_height: f64,
     #[serde(default)]
     pub radial_gen: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FancyPrefs {
+    #[serde(default, deserialize_with = "de_f64")]
+    pub gen_width: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub child_gap: f64,
+}
+
+impl Default for FancyPrefs {
+    fn default() -> Self {
+        Self {
+            gen_width: 200.0,
+            child_gap: 10.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

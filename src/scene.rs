@@ -111,7 +111,37 @@ pub struct ConnectorPrimitive {
     pub child_points: Vec<Point>,
 }
 
-/// A wedge primitive (fan layout).
+/// A single text line for the fancy layout (absolute canvas coordinates).
+#[derive(Debug, Clone)]
+pub struct FancyLine {
+    pub x: f64,
+    pub y: f64,
+    pub text: String,
+    pub attrs: Vec<TextAttr>,
+}
+
+/// All text lines for one individual or spouse in the fancy layout.
+#[derive(Debug, Clone)]
+pub struct FancyTextItem {
+    pub lines: Vec<FancyLine>,
+    pub individual_id: String,
+}
+
+/// Connector kind for the fancy layout (used for SVG grouping).
+#[derive(Debug, Clone)]
+pub enum FancyConnKind {
+    IndivToSpouse,
+    SpouseToChildren,
+}
+
+/// A connector in the fancy layout (SVG path, pre-computed in emit_scene).
+#[derive(Debug, Clone)]
+pub struct FancyConnector {
+    pub d: String,
+    pub stroke: String,
+    pub stroke_width: f64,
+    pub kind: FancyConnKind,
+}
 /// A wedge primitive (fan layout).
 #[derive(Debug, Clone)]
 pub struct WedgePrimitive {
@@ -136,6 +166,8 @@ pub enum Primitive {
     Text(TextPrimitive),
     Connector(ConnectorPrimitive),
     Wedge(WedgePrimitive),
+    FancyText(FancyTextItem),
+    FancyConn(FancyConnector),
 }
 
 /// The complete IR emitted by a layout algorithm.
