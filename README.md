@@ -185,10 +185,10 @@ id = false
 
 [format]
 individual = "{firstname} {lastname} {sex}"
-birth = "* {date}, {location}"
-death = "x {date}, {location}"
-marriage = "+ {date}, {location}"
-
+birth = "* {date:%d %b %Y}, {location}"
+death = "× {date:%d %b %Y}, {location}"
+marriage = "⚭ {date:%d %b %Y}, {location}"
+date_qualifiers = "compact"  # "none" | "gedcom" | "compact"
 [layout]
 type = "simple"
 root_pos = "bottom"
@@ -236,8 +236,87 @@ title = "{gedcom}"
 copyright = ""
 ```
 
-Format strings use `{key}` placeholders: `{firstname}`, `{lastname}`, `{sex}`, `{date}`, `{location}`.
+Format strings use `{key}` placeholders: `{firstname}`, `{lastname}`, `{sex}`, `{date}`, `{location}`. See [Date Formatting](#date-formatting) below for date pattern syntax.
 
+## Date Formatting
+
+Dates (birth, death, marriage) have two independent controls:
+
+### Date format pattern
+
+Use `{date:FORMAT}` in a format template, where `FORMAT` is a strftime-like pattern:
+
+| Code | Meaning | Example (`1 JAN 1812`) |
+|------|---------|------------------------|
+| `%d` | Day, zero-padded | `01` |
+| `%e` | Day, no padding | `1` |
+| `%m` | Month number, zero-padded | `01` |
+| `%b` | Abbreviated month name | `Jan` |
+| `%B` | Full month name | `January` |
+| `%Y` | 4-digit year | `1812` |
+| `%y` | 2-digit year | `12` |
+
+Missing components (e.g. a GEDCOM date that has only a year) are silently omitted so `{date:%d %b %Y}` on `"1812"` produces `"1812"`, not `"  1812"`.
+
+Plain `{date}` (without a colon) passes the raw GEDCOM string through — useful with `date_qualifiers = "gedcom"`.
+
+### Date qualifiers (`format.date_qualifiers`)
+
+Controls how GEDCOM date qualifier tokens (ABT, BEF, AFT, BET…AND, FROM…TO) are rendered:
+
+| Value | Behaviour |
+|-------|-----------|
+| `"compact"` *(default)* | Translate to compact symbols (see table below) |
+| `"none"` | Strip all qualifiers; for date ranges, show only the first date |
+| `"gedcom"` | Pass through the raw GEDCOM string unchanged |
+
+Compact symbol mapping:
+
+| GEDCOM qualifier | Compact output |
+|-----------------|----------------|
+| `ABT`, `CAL`, `EST` | `~date` |
+| `BEF` | `<date` |
+| `AFT` | `>date` |
+| `BET … AND …`, `FROM … TO …` | `date1-date2` |
+
+**Corner case — same-range deduplication**: if both dates in a range format to the same string (e.g. `{date:%Y}` applied to `"BET APR 1880 AND JUL 1880"` yields `1880` for both), the qualifier is dropped and the date is shown once.
+
+### Examples
+
+```toml
+[format]
+# Default: full date, compact qualifiers
+birth = "* {date:%d %b %Y}, {location}"
+date_qualifiers = "compact"
+```
+| GEDCOM date | Output |
+|-------------|--------|
+| `1 JAN 1812` | `* 01 Jan 1812` |
+| `ABT 1850` | `* ~1850` |
+| `BEF 1900` | `* <1900` |
+| `AFT 1800` | `* >1800` |
+| `BET APR 1880 AND JUL 1890` | `* Apr 1880-Jul 1890` |
+| `BET APR 1880 AND JUL 1880` | `* Apr 1880` *(deduplication)* |
+
+```toml
+# Year-only, no qualifiers
+birth = "* {date:%Y}, {location}"
+date_qualifiers = "none"
+```
+| GEDCOM date | Output |
+|-------------|--------|
+| `ABT 1850` | `* 1850` |
+| `BET 1880 AND 1890` | `* 1880` *(first date only)* |
+
+```toml
+# Raw GEDCOM pass-through
+birth = "* {date}, {location}"
+date_qualifiers = "gedcom"
+```
+| GEDCOM date | Output |
+|-------------|--------|
+| `ABT 1850` | `* ABT 1850` |
+| `BET APR 1880 AND JUL 1880` | `* BET APR 1880 AND JUL 1880` |
 ## Highlights File
 
 The `files.highlights` preference points to a plain-text file that marks individuals for visual emphasis in the chart. Each line has the format:
