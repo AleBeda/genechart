@@ -571,38 +571,63 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     font_size: f64,
                     color: String,
                 }
-                let candidates: Vec<(Option<&String>, Vec<TextAttr>)> = vec![
-                    (w.label.as_ref(), w.label_attrs.clone()),
-                    (w.birth_line.as_ref(), vec![TextAttr::BirthData]),
-                    (w.death_line.as_ref(), vec![TextAttr::DeathData]),
-                ];
                 let mut lines: Vec<Line> = Vec::new();
                 let mut total_height = 0.0_f64;
-                for (maybe_text, attrs) in &candidates {
-                    let Some(text) = maybe_text else { continue };
-                    let (font_family, font_size) = font_for_attr(attrs, prefs);
-                    let text_width = text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO;
-                    let lh = font_size * 1.2;
-                    if text_width > width_budget + 1e-6 || total_height + lh > height_budget + 1e-6
-                    {
-                        if prefs.diagnostics.warnings {
-                            let name = w.label.as_deref().unwrap_or("?");
-                            eprintln!(
-                                "Warning: fan wedge text dropped for {} ({name}): \"{text}\"",
-                                w.individual_id
-                            );
-                        }
-                        continue;
-                    }
-                    total_height += lh;
-                    lines.push(Line {
-                        text: text.to_string(),
-                        color: color_for_attr(attrs, prefs),
-                        font_family,
-                        font_size,
-                    });
-                }
 
+                // Name has top priority: include it regardless of width,
+                // but only if it fits in the height budget.
+                let name_included = if let Some(text) = w.label.as_ref() {
+                    let (font_family, font_size) = font_for_attr(&w.label_attrs, prefs);
+                    let lh = font_size * 1.2;
+                    if total_height + lh <= height_budget + 1e-6 {
+                        total_height += lh;
+                        lines.push(Line {
+                            text: text.to_string(),
+                            color: color_for_attr(&w.label_attrs, prefs),
+                            font_family,
+                            font_size,
+                        });
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                // Dates are only shown if the name was included and
+                // they fit both the width and the remaining height budget.
+                if name_included {
+                    let date_candidates = [
+                        (w.birth_line.as_ref(), vec![TextAttr::BirthData]),
+                        (w.death_line.as_ref(), vec![TextAttr::DeathData]),
+                    ];
+                    for (maybe_text, attrs) in &date_candidates {
+                        let Some(text) = maybe_text else { continue };
+                        let (font_family, font_size) = font_for_attr(attrs, prefs);
+                        let text_width = text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO;
+                        let lh = font_size * 1.2;
+                        if text_width > width_budget + 1e-6
+                            || total_height + lh > height_budget + 1e-6
+                        {
+                            if prefs.diagnostics.warnings {
+                                let name = w.label.as_deref().unwrap_or("?");
+                                eprintln!(
+                                    "Warning: fan wedge text dropped for {} ({name}): \"{text}\"",
+                                    w.individual_id
+                                );
+                            }
+                            continue;
+                        }
+                        total_height += lh;
+                        lines.push(Line {
+                            text: text.to_string(),
+                            color: color_for_attr(attrs, prefs),
+                            font_family,
+                            font_size,
+                        });
+                    }
+                }
                 if !lines.is_empty() {
                     let rotation = if w.radial_text {
                         let r = 180.0 - w.angle_center;
@@ -611,8 +636,13 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         90.0 - w.angle_center
                     };
                     let angle_rad = w.angle_center.to_radians();
-                    let tx = cx_svg + mid_r * angle_rad.cos();
-                    let ty = cy_svg - mid_r * angle_rad.sin();
+                    let anchor_r = if w.radial_text {
+                        mid_r
+                    } else {
+                        w.radius_inner + ring_height * 0.4
+                    };
+                    let tx = cx_svg + anchor_r * angle_rad.cos();
+                    let ty = cy_svg - anchor_r * angle_rad.sin();
                     let mut y = -total_height / 2.0;
                     out.push_str(&format!(
                         "  <g transform=\"translate({tx:.1},{ty:.1}) rotate({rotation:.1})\">\n"
