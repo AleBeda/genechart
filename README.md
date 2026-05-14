@@ -29,7 +29,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `-r` / `--root <ID>` | Root individual ID (default: first individual in file) |
 | `-g <N>` / `--generations <N>` / `--gen <N>` | Number of generations to show |
 | `--dir <DIRECTION>` | Chart direction: `descendants`, `ancestors` = `pedigree`, `forest` |
-| `--type <TYPE>` | Layout algorithm: `simple`, `fan`, `boxed_couples` |
+| `--type <TYPE>` | Layout algorithm: `simple`, `fan`, `boxed_couples`, `fancy` |
 | `--text` | Output as plain text |
 | `--svg` | Output as SVG |
 | `--pdf` | Output as PDF |
@@ -98,6 +98,16 @@ genechart family.ged -r I1 --type fan -o chart.svg
 
 Configuration: `[layout.fan]` — `ring_height`, `ring_gap`.
 
+### fancy
+
+Cascading descendants layout (SVG/PDF only). Each direct descendant is left-aligned by generation at a fixed horizontal distance, with spouses listed below each individual and children branching to the right via curved connectors. Descendants-only.
+
+```sh
+genechart family.ged -r I1 --type fancy -o chart.svg
+```
+
+Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations), `child_gap` (vertical gap between a person's last spouse and their first child).
+
 ## Output Formats
 
 ### Text
@@ -161,6 +171,8 @@ Preferences are read from (lowest to highest priority):
 5. `--preff <FILE>` — an explicit preferences file
 6. `--pref` command-line overrides
 
+Unknown preference keys in `--pref` are a hard error (the command aborts with a message naming the bad key). Unknown keys in TOML config files produce a warning and are ignored.
+
 ### Full TOML Example
 
 ```toml
@@ -208,6 +220,10 @@ box_width_2_spouses = 520.0
 [layout.fan]
 ring_height = 90
 ring_gap = 10
+
+[layout.fancy]
+gen_width = 300.0
+child_gap = 10.0
 
 [output]
 type = "text"

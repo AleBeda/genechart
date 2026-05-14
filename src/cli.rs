@@ -23,7 +23,7 @@ pub struct Args {
     #[arg(long, value_name = "DIRECTION")]
     pub dir: Option<String>,
 
-    /// Set layout algorithm (simple, fan, boxed_couples)
+    /// Set layout algorithm (simple, fan, boxed_couples, fancy)
     #[arg(long = "type", value_name = "TYPE")]
     pub layout_type: Option<String>,
 
@@ -45,6 +45,7 @@ pub struct Args {
 
     /// TOML-style preference overrides, e.g. 'layout.type = "fan"' (repeatable).
     /// Bare --pref (no value) dumps the merged preferences and exits.
+    /// Unknown preference keys are a hard error; typos in config files produce a warning.
     #[arg(
         long = "pref",
         value_name = "TOML-ASSIGNMENT",
