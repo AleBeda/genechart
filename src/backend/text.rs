@@ -5,7 +5,7 @@ use crate::layout::LayoutOutput;
 use crate::preferences::Prefs;
 use crate::scene::{Primitive, Scene, TextAttr};
 use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, LINE_HEIGHT, parsed_font};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 // ── String helpers ────────────────────────────────────────────────────────────
 
@@ -677,14 +677,7 @@ impl Renderer for TextRenderer {
 
         // Title
         if !prefs.output.text.title.is_empty() {
-            let gedcom_name = std::path::Path::new(&prefs.files.gedcom)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown");
-            let mut vars = HashMap::new();
-            vars.insert("gedcom".to_string(), gedcom_name.to_string());
-            let title = strfmt::strfmt(&prefs.output.text.title, &vars)
-                .unwrap_or_else(|_| prefs.output.text.title.clone());
+            let title = crate::backend::expand_title_template(&prefs.output.text.title, prefs);
             writeln!(writer, "{title}")?;
             writeln!(writer)?;
         }

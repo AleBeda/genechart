@@ -224,17 +224,6 @@ fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
 // x-coordinate and draws connector lines as <line> elements.  This is correct
 // for variable-width (proportional) fonts.
 
-/// Expand `{gedcom}` in a title/copyright template string.
-fn expand_title_template(template: &str, prefs: &Prefs) -> String {
-    let gedcom_name = std::path::Path::new(&prefs.files.gedcom)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown");
-    let mut vars = std::collections::HashMap::new();
-    vars.insert("gedcom".to_string(), gedcom_name.to_string());
-    strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string())
-}
-
 // SVG arc path for one wedge of the fan.
 // Angles follow the math convention (0°=right, 90°=top, 180°=left).
 // SVG y is flipped: svg_y = cy - math_y.
@@ -359,7 +348,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     }
 
     // Title / copyright (same logic as render_boxed_couples)
-    let title_text = expand_title_template(&prefs.output.text.title, prefs);
+    let title_text = super::expand_title_template(&prefs.output.text.title, prefs);
     let (title_font_family, title_font_size) = parsed_font(&prefs.output.style.fonts.title);
     let title_line_h = if title_text.is_empty() {
         0.0
@@ -367,7 +356,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         title_font_size * (LINE_HEIGHT / FONT_SIZE)
     };
 
-    let copy_text = expand_title_template(&prefs.output.text.copyright, prefs);
+    let copy_text = super::expand_title_template(&prefs.output.text.copyright, prefs);
     let (copy_font_family, copy_font_size) = parsed_font(&prefs.output.style.fonts.copyright);
     let copy_line_h = if copy_text.is_empty() {
         0.0

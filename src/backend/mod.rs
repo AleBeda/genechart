@@ -13,3 +13,14 @@ pub trait Renderer {
         writer: &mut dyn std::io::Write,
     ) -> anyhow::Result<()>;
 }
+
+/// Expand `{gedcom}` in a title/copyright template string.
+pub(crate) fn expand_title_template(template: &str, prefs: &crate::preferences::Prefs) -> String {
+    let gedcom_name = std::path::Path::new(&prefs.files.gedcom)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let mut vars = std::collections::HashMap::new();
+    vars.insert("gedcom".to_string(), gedcom_name.to_string());
+    strfmt::strfmt(template, &vars).unwrap_or_else(|_| template.to_string())
+}
