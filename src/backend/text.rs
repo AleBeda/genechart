@@ -765,6 +765,8 @@ mod tests {
         prefs.format.death = "× {date}, {location}".into();
         prefs.show.marriage = true;
         prefs.format.marriage = "⚭ {date}, {location}".into();
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         prefs
     }
 
@@ -1031,6 +1033,9 @@ mod tests {
         let mut prefs = Prefs::default();
         prefs.files.highlights = "/path/to/highlights.txt".into();
         prefs.output.style.text.highlights.fallback = "->".into();
+        prefs.output.style.text.highlights.fallback = "->".into();
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         // shift = len("->") + 1 = 3; both names at col 6 → shifted to col 9
         // fallback "->" prepended only on highlighted line
         let mut buf = Vec::<u8>::new();
@@ -1286,7 +1291,10 @@ mod tests {
             },
         };
         // default fallback is "uppercase"
-        let prefs = Prefs::default();
+        let mut prefs = Prefs::default();
+        prefs.output.style.text.highlights.fallback = "uppercase".into();
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         let output = LayoutOutput::BoxedCouples(scene);
 
         let mut buf = Vec::<u8>::new();
@@ -2146,6 +2154,9 @@ mod tests {
         };
         let mut prefs = Prefs::default();
         prefs.layout.root_pos = "top".to_string(); // downward=true
+        prefs.layout.root_pos = "top".to_string(); // downward=true
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         let output = LayoutOutput::BoxedCouples(scene);
 
         let mut buf = Vec::<u8>::new();
@@ -2210,7 +2221,9 @@ mod tests {
                 h: 90.0,
             },
         };
-        let prefs = Prefs::default(); // root_pos="" → downward=false (upward)
+        let mut prefs = Prefs::default(); // root_pos="bottom" → downward=false (upward)
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         let output = LayoutOutput::BoxedCouples(scene);
 
         let mut buf = Vec::<u8>::new();
@@ -2288,7 +2301,9 @@ mod tests {
                 h: 54.0,
             },
         };
-        let prefs = Prefs::default();
+        let mut prefs = Prefs::default();
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         let output = LayoutOutput::BoxedCouples(scene);
 
         let mut buf = Vec::<u8>::new();

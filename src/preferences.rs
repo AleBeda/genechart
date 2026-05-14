@@ -13,7 +13,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct DiagnosticsPrefs {
     #[serde(default = "default_true")]
     pub errors: bool,
@@ -25,18 +25,7 @@ pub struct DiagnosticsPrefs {
     pub debug: bool,
 }
 
-impl Default for DiagnosticsPrefs {
-    fn default() -> Self {
-        Self {
-            errors: true,
-            warnings: false,
-            info: false,
-            debug: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Prefs {
     pub title: Option<String>,
     #[serde(default)]
@@ -55,6 +44,12 @@ pub struct Prefs {
     pub diagnostics: DiagnosticsPrefs,
 }
 
+impl Default for Prefs {
+    fn default() -> Self {
+        load(None, None, &[], &crate::trace::Tracer::disabled())
+            .expect("embedded defaults.toml must be valid")
+    }
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct FilesPrefs {
     #[serde(default)]
@@ -135,21 +130,12 @@ pub struct FanPrefs {
     pub radial_gen: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct FancyPrefs {
     #[serde(default, deserialize_with = "de_f64")]
     pub gen_width: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub child_gap: f64,
-}
-
-impl Default for FancyPrefs {
-    fn default() -> Self {
-        Self {
-            gen_width: 300.0,
-            child_gap: 10.0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -160,7 +146,7 @@ pub struct SimpleLayoutPrefs {
     pub vert_spacing: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct BoxedCouplesPrefs {
     #[serde(default, deserialize_with = "de_f64")]
     pub box_width: f64,
@@ -174,19 +160,6 @@ pub struct BoxedCouplesPrefs {
     pub gap_height: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub box_width_2_spouses: f64,
-}
-
-impl Default for BoxedCouplesPrefs {
-    fn default() -> Self {
-        Self {
-            box_width: 240.0,
-            box_height: 140.0,
-            spouse_sep_height: 30.0,
-            gap_width: 40.0,
-            gap_height: 80.0,
-            box_width_2_spouses: 520.0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -223,7 +196,7 @@ pub struct CustomPaperPrefs {
     pub height: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PosterPrefs {
     #[serde(default)]
     pub rows: u32,
@@ -235,18 +208,6 @@ pub struct PosterPrefs {
     pub alignment_lines: bool,
     #[serde(default)]
     pub alignment_lines_color: i64,
-}
-
-impl Default for PosterPrefs {
-    fn default() -> Self {
-        Self {
-            rows: 0,
-            columns: 0,
-            overlap_mm: 0.0,
-            alignment_lines: true,
-            alignment_lines_color: 0xF80,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -269,7 +230,7 @@ pub struct TextStylePrefs {
     pub highlights: HighlightsPrefs,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct HighlightsPrefs {
     #[serde(default)]
     pub color: i64,
@@ -279,17 +240,7 @@ pub struct HighlightsPrefs {
     pub fallback: String,
 }
 
-impl Default for HighlightsPrefs {
-    fn default() -> Self {
-        Self {
-            color: 0x00D,
-            background_color: 0xFFC,
-            fallback: "uppercase".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct StylePrefs {
     #[serde(default = "default_true")]
     pub dot_leaders: bool,
@@ -305,20 +256,6 @@ pub struct StylePrefs {
     pub spacing: SpacingPrefs,
     #[serde(default)]
     pub text: TextStylePrefs,
-}
-
-impl Default for StylePrefs {
-    fn default() -> Self {
-        Self {
-            dot_leaders: true,
-            boxes: BoxStylePrefs::default(),
-            connectors: ConnectorStylePrefs::default(),
-            fonts: FontPrefs::default(),
-            alignment: AlignmentPrefs::default(),
-            spacing: SpacingPrefs::default(),
-            text: TextStylePrefs::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

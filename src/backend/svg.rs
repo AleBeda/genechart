@@ -1020,7 +1020,8 @@ mod tests {
 
     #[test]
     fn test_svg_default_font_fallback() {
-        let prefs = simple_prefs();
+        let mut prefs = simple_prefs();
+        prefs.output.style.fonts.names = "".into(); // clear to test monospace fallback
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(out.contains("monospace"), "default font: {out}");
     }
@@ -1097,6 +1098,8 @@ mod tests {
         prefs.show.marriage = true;
         prefs.format.marriage = "⚭ {date}".into();
         prefs.output.style.fonts.names = "Georgia 14".into();
+        prefs.output.style.fonts.names = "Georgia 14".into();
+        prefs.output.style.fonts.dates = "".into(); // let dates fall back to names font so APR is in Georgia
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
 
         // The ⚭ character must be in a text element that does NOT start with Georgia.
@@ -1187,8 +1190,14 @@ mod tests {
     fn test_svg_no_title_when_empty() {
         let mut prefs = simple_prefs();
         prefs.format.individual = "{firstname} {lastname}".into();
-        // default prefs have empty title/copyright
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
+        // No spurious title/copyright text elements; chart body is still present.
         // No spurious title/copyright text elements; chart body is still present.
         assert!(out.contains("John"), "names should still be present: {out}");
         // Should not inject spurious text for empty title/copyright.
