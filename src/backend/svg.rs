@@ -556,30 +556,83 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 out.push_str(&format!(
                     "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\"/>\n"
                 ));
-                if let Some(ref label_text) = w.label {
-                    let (font_family, font_size) = font_for_attr(&w.label_attrs, prefs);
-                    let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
-                    let angle_rad = w.angle_center.to_radians();
-                    let tx = cx_svg + mid_r * angle_rad.cos();
-                    let ty = cy_svg - mid_r * angle_rad.sin(); // y-up math → y-down SVG
+                let ring_height = w.radius_outer - w.radius_inner;
+                let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
+                let arc_length = mid_r * w.angle_span.to_radians();
+                let (width_budget, height_budget) = if w.radial_text {
+                    (ring_height, arc_length)
+                } else {
+                    (arc_length, ring_height)
+                };
+
+                struct Line {
+                    text: String,
+                    font_family: String,
+                    font_size: f64,
+                    color: String,
+                }
+                let candidates: Vec<(Option<&String>, Vec<TextAttr>)> = vec![
+                    (w.label.as_ref(), w.label_attrs.clone()),
+                    (w.birth_line.as_ref(), vec![TextAttr::BirthData]),
+                    (w.death_line.as_ref(), vec![TextAttr::DeathData]),
+                ];
+                let mut lines: Vec<Line> = Vec::new();
+                let mut total_height = 0.0_f64;
+                for (maybe_text, attrs) in &candidates {
+                    let Some(text) = maybe_text else { continue };
+                    let (font_family, font_size) = font_for_attr(attrs, prefs);
+                    let text_width = text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO;
+                    let lh = font_size * 1.2;
+                    if text_width > width_budget + 1e-6 || total_height + lh > height_budget + 1e-6
+                    {
+                        if prefs.diagnostics.warnings {
+                            let name = w.label.as_deref().unwrap_or("?");
+                            eprintln!(
+                                "Warning: fan wedge text dropped for {} ({name}): \"{text}\"",
+                                w.individual_id
+                            );
+                        }
+                        continue;
+                    }
+                    total_height += lh;
+                    lines.push(Line {
+                        text: text.to_string(),
+                        color: color_for_attr(attrs, prefs),
+                        font_family,
+                        font_size,
+                    });
+                }
+
+                if !lines.is_empty() {
                     let rotation = if w.radial_text {
-                        // Align text along the radius, readable range [-90°, 90°].
-                        // Verified: top(90°)→90°, left(135°)→45°, right(45°)→-45°, edges→0°
                         let r = 180.0 - w.angle_center;
                         if r > 90.0 { r - 180.0 } else { r }
                     } else {
-                        // Tangential: perpendicular to radius (current behaviour)
                         90.0 - w.angle_center
                     };
-                    let color = color_for_attr(&w.label_attrs, prefs);
+                    let angle_rad = w.angle_center.to_radians();
+                    let tx = cx_svg + mid_r * angle_rad.cos();
+                    let ty = cy_svg - mid_r * angle_rad.sin();
+                    let mut y = -total_height / 2.0;
                     out.push_str(&format!(
-                        "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \
-                         font-family=\"{font_family}\" font-size=\"{font_size}\" \
-                         fill=\"{color}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
-                         transform=\"rotate({rotation:.1},{tx:.1},{ty:.1})\" \
-                         xml:space=\"preserve\">{}</text>\n",
-                        xml_escape(label_text)
+                        "  <g transform=\"translate({tx:.1},{ty:.1}) rotate({rotation:.1})\">\n"
                     ));
+                    for line in &lines {
+                        let lh = line.font_size * 1.2;
+                        let line_y = y + lh / 2.0;
+                        y += lh;
+                        out.push_str(&format!(
+                            "    <text x=\"0\" y=\"{line_y:.1}\" \
+                             font-family=\"{ff}\" font-size=\"{fs}\" \
+                             fill=\"{col}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
+                             xml:space=\"preserve\">{txt}</text>\n",
+                            ff = line.font_family,
+                            fs = line.font_size,
+                            col = line.color,
+                            txt = xml_escape(&line.text),
+                        ));
+                    }
+                    out.push_str("  </g>\n");
                 }
             }
         }

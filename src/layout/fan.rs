@@ -196,7 +196,7 @@ fn to_xy(radius: f64, angle_deg: f64) -> (f64, f64) {
 }
 
 pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene {
-    use crate::format::format_name;
+    use crate::format::{format_event, format_name};
     use crate::scene::{Primitive, Rect, Scene, TextAttr, WedgePrimitive};
     // C2a — compute max_radius
     let max_radius = genrep
@@ -232,6 +232,30 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
     let mut primitives: Vec<Primitive> = Vec::with_capacity(indis.len());
     for (indi, geo) in &indis {
         let radial_text = geo.angle_span <= inner_span_threshold + 1e-9;
+        let birth_line = if prefs.show.birth {
+            indi.birth.as_ref().and_then(|e| {
+                format_event(
+                    &prefs.format.birth,
+                    e.date.as_ref(),
+                    e.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
+        } else {
+            None
+        };
+        let death_line = if prefs.show.death {
+            indi.death.as_ref().and_then(|e| {
+                format_event(
+                    &prefs.format.death,
+                    e.date.as_ref(),
+                    e.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
+        } else {
+            None
+        };
         primitives.push(Primitive::Wedge(WedgePrimitive {
             cx,
             cy,
@@ -245,6 +269,9 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
                 highlighted_ids.contains(&indi.id),
             ),
             radial_text,
+            individual_id: indi.id.clone(),
+            birth_line,
+            death_line,
         }));
     }
 

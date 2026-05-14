@@ -124,6 +124,9 @@ pub struct WedgePrimitive {
     pub label: Option<String>,
     pub label_attrs: Vec<TextAttr>,
     pub radial_text: bool,
+    pub individual_id: String,
+    pub birth_line: Option<String>,
+    pub death_line: Option<String>,
 }
 
 /// A single renderable element.
