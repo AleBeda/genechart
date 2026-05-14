@@ -1,8 +1,8 @@
 //! Shared utilities for layout algorithms.
 
 use crate::parser::genrep::{Family, Genrep, Individual};
-use crate::preferences::Prefs;
-use std::collections::HashMap;
+use crate::preferences::{Prefs, load_highlights};
+use std::collections::{HashMap, HashSet};
 
 /// Parse a GEDCOM raw date string into a sortable `(year, month, day)` key.
 ///
@@ -161,6 +161,11 @@ where
             )
         })
         .collect()
+}
+
+/// Load the highlight set from preferences.
+pub(crate) fn highlight_set(prefs: &Prefs) -> HashSet<String> {
+    load_highlights(std::path::Path::new(&prefs.files.highlights))
 }
 
 #[cfg(test)]

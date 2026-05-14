@@ -216,8 +216,7 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
     let inner_span_threshold = 180.0 / 2.0f64.powi(prefs.layout.fan.radial_gen as i32);
 
     // C2b — highlights
-    let highlighted_ids =
-        crate::preferences::load_highlights(std::path::Path::new(&prefs.files.highlights));
+    let highlighted_ids = crate::layout::common::highlight_set(prefs);
     let mut indis: Vec<_> = genrep
         .individuals
         .values()
@@ -241,11 +240,10 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
             radius_inner: geo.radius_inner,
             radius_outer: geo.radius_outer,
             label: Some(format_name(indi, prefs)),
-            label_attrs: if highlighted_ids.contains(&indi.id) {
-                vec![TextAttr::IndividualName, TextAttr::Highlighted]
-            } else {
-                vec![TextAttr::IndividualName]
-            },
+            label_attrs: crate::scene::label_attrs(
+                TextAttr::IndividualName,
+                highlighted_ids.contains(&indi.id),
+            ),
             radial_text,
         }));
     }

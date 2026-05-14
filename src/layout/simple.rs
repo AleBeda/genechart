@@ -314,10 +314,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         0.0
     };
 
-    // ── Load highlights ──────────────────────────────────────────────────────
-    let highlighted_ids =
-        crate::preferences::load_highlights(std::path::Path::new(&prefs.files.highlights));
-
+    let highlighted_ids = crate::layout::common::highlight_set(prefs);
     // ── Collect and sort in-scope individuals ─────────────────────────────────
     let mut entries: Vec<(
         &str,
@@ -479,14 +476,14 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // Individual / spouse name
         let name = format_name(indi, prefs);
         let name_w = name.chars().count() as f64 * char_width_px;
-        let mut name_attrs = vec![if geo.is_spouse {
-            TextAttr::SpouseName
-        } else {
-            TextAttr::IndividualName
-        }];
-        if is_highlighted {
-            name_attrs.push(TextAttr::Highlighted);
-        }
+        let name_attrs = crate::scene::label_attrs(
+            if geo.is_spouse {
+                TextAttr::SpouseName
+            } else {
+                TextAttr::IndividualName
+            },
+            is_highlighted,
+        );
         primitives.push(Primitive::Text(TextPrimitive {
             content: name,
             bbox: Rect {

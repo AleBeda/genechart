@@ -885,9 +885,8 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
         TextPrimitive,
     };
     // ── 4a: load highlights ──────────────────────────────────────────────────
-    let highlighted_ids =
-        crate::preferences::load_highlights(std::path::Path::new(&prefs.files.highlights));
-
+    // ── 4a: load highlights ──────────────────────────────────────────────────
+    let highlighted_ids = crate::layout::common::highlight_set(prefs);
     // ── 4b: collect placed individuals ──────────────────────────────────────
     let placed: Vec<(&str, &IndividualGeo)> = genrep
         .individuals
@@ -1022,11 +1021,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 content: format_name(ind, prefs),
                 bbox: name_bbox,
                 align: TextAlign::Center,
-                attrs: if is_highlighted {
-                    vec![TextAttr::IndividualName, TextAttr::Highlighted]
-                } else {
-                    vec![TextAttr::IndividualName]
-                },
+                attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
             }));
 
             if prefs.show.id {
@@ -1167,13 +1162,8 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     h: font_size,
                 },
                 align: TextAlign::Center,
-                attrs: if is_highlighted {
-                    vec![TextAttr::IndividualName, TextAttr::Highlighted]
-                } else {
-                    vec![TextAttr::IndividualName]
-                },
+                attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
             }));
-
             if prefs.show.id {
                 let ind_id_text = ind
                     .id
@@ -1553,11 +1543,7 @@ fn emit_spouse_primitives(
             h: font_size,
         },
         align: TextAlign::Center,
-        attrs: if is_highlighted {
-            vec![TextAttr::SpouseName, TextAttr::Highlighted]
-        } else {
-            vec![TextAttr::SpouseName]
-        },
+        attrs: crate::scene::label_attrs(TextAttr::SpouseName, is_highlighted),
     }));
 
     // Spouse ID

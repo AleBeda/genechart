@@ -58,6 +58,15 @@ pub enum TextAttr {
     Highlighted,
 }
 
+/// Build a `Vec<TextAttr>` with `base` plus `Highlighted` when `highlighted` is true.
+pub fn label_attrs(base: TextAttr, highlighted: bool) -> Vec<TextAttr> {
+    if highlighted {
+        vec![base, TextAttr::Highlighted]
+    } else {
+        vec![base]
+    }
+}
+
 /// Horizontal alignment of text within its bounding box.
 #[derive(Debug, Clone)]
 pub enum TextAlign {
