@@ -21,10 +21,13 @@ use crate::util::matches_direction;
 const V_OFFSET: f64 = 8.0; // x from ind name-left to vertical connector
 const DATA_INDENT: f64 = 12.0; // x from connector to data / spouse-name start
 const IND_DATA_OFFSET: f64 = V_OFFSET + DATA_INDENT; // = 20.0
-const NAME_TO_CONN_GAP: f64 = 8.0; // gap: end of spouse name → horiz connector
+const NAME_TO_CONN_GAP: f64 = 3.0; // gap: end of spouse name → horiz connector
 const ARC_R: f64 = 6.0; // quarter-circle radius
-const CHILD_SHORT_H: f64 = 10.0; // short horizontal before child name
-
+const CHILD_SHORT_H: f64 = 10.0; // short horizontal from spine to child gen x
+const IND_SPOUSE_GAP: f64 = 8.0; // vertical gap: ind block bottom → spouse name
+const CHILD_SIBLING_GAP: f64 = 6.0; // vertical gap between successive children
+const CHILD_TEXT_GAP: f64 = 6.0; // horizontal gap: connector end → child name
+const SPOUSE_TEXT_GAP: f64 = 4.0; // horizontal gap: connector end → spouse name
 pub struct FancyLayout;
 
 #[derive(Debug, Clone)]
@@ -174,6 +177,7 @@ fn place_subtree(
             if let Some(sid) = spouse_id {
                 if let Some(sp) = genrep.get_individual(sid) {
                     if sp.in_scope {
+                        y_cursor += IND_SPOUSE_GAP;
                         let sp_geo = FancyGeo {
                             x: x_gen,
                             y: y_cursor,
@@ -192,7 +196,7 @@ fn place_subtree(
             for child_id in &fam.children_ids {
                 let h = place_subtree(
                     child_id,
-                    x_gen + gen_width,
+                    x_gen + gen_width + CHILD_TEXT_GAP,
                     y_cursor,
                     generation + 1,
                     true,
@@ -200,7 +204,7 @@ fn place_subtree(
                     genrep,
                     out,
                 );
-                y_cursor += h;
+                y_cursor += h + CHILD_SIBLING_GAP;
             }
         }
     }
@@ -412,8 +416,8 @@ fn emit_subtree(
                         if let Some(sg) = sp.geo.as_ref() {
                             let sp_highlighted = highlighted_ids.contains(&sp.id);
                             let sp_name = format_name(sp, prefs);
-                            let sp_name_x = geo.x + IND_DATA_OFFSET;
-                            let sp_data_x = geo.x + 2.0 * IND_DATA_OFFSET;
+                            let sp_name_x = geo.x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                            let sp_data_x = geo.x + 2.0 * IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
 
                             let mut sp_lines: Vec<FancyLine> = Vec::new();
                             sp_lines.push(FancyLine {
@@ -532,30 +536,32 @@ fn emit_subtree(
                 if !children.is_empty() {
                     let child_gen_x = geo.x + gen_width;
                     let x_spine = child_gen_x - CHILD_SHORT_H - ARC_R;
-                    let sp_name_x = geo.x + IND_DATA_OFFSET;
-                    let x_conn_start = sp_name_x + spouse_name_w + NAME_TO_CONN_GAP;
-                    let y_last = *children.last().unwrap();
+                    let sp_text_x = geo.x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                    let x_conn_start = sp_text_x + spouse_name_w + NAME_TO_CONN_GAP;
+                    let y_sp_mid = y_sp + n_lh / 2.0;
+                    let y_last_mid = children.last().unwrap() + n_lh / 2.0;
 
                     let mut d = format!(
-                        "M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {:.1} L {:.1} {:.1}",
+                        "M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 1 {:.1} {:.1} L {:.1} {:.1}",
                         x_conn_start,
-                        y_sp,
+                        y_sp_mid,
                         x_spine - ARC_R,
-                        y_sp,
+                        y_sp_mid,
                         x_spine,
-                        y_sp + ARC_R,
+                        y_sp_mid + ARC_R,
                         x_spine,
-                        y_last - ARC_R,
+                        y_last_mid - ARC_R,
                     );
                     for y_c in &children {
+                        let y_c_mid = y_c + n_lh / 2.0;
                         d.push_str(&format!(
                             " M {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {:.1} L {:.1} {:.1}",
                             x_spine,
-                            y_c - ARC_R,
+                            y_c_mid - ARC_R,
                             x_spine + ARC_R,
-                            y_c,
+                            y_c_mid,
                             child_gen_x,
-                            y_c,
+                            y_c_mid,
                         ));
                     }
                     *max_x = f64::max(*max_x, child_gen_x);
@@ -574,14 +580,15 @@ fn emit_subtree(
     if !spouse_ys.is_empty() {
         let xv = geo.x + V_OFFSET;
         let y_trunk_top = geo.y + ind_height(prefs);
-        let y_trunk_bot = *spouse_ys.last().unwrap();
-        let sp_name_x = geo.x + IND_DATA_OFFSET;
+        let y_trunk_bot = spouse_ys.last().unwrap() + n_lh / 2.0;
+        let sp_conn_x = geo.x + IND_DATA_OFFSET;
 
         let mut d = format!("M {xv:.1} {y_trunk_top:.1} L {xv:.1} {y_trunk_bot:.1}");
         for y_sp in &spouse_ys {
+            let y_mid = y_sp + n_lh / 2.0;
             d.push_str(&format!(
-                " M {xv:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {y_sp:.1} L {sp_name_x:.1} {y_sp:.1}",
-                y_sp - ARC_R,
+                " M {xv:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {y_mid:.1} L {sp_conn_x:.1} {y_mid:.1}",
+                y_mid - ARC_R,
                 xv + ARC_R,
             ));
         }

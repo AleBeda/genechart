@@ -146,7 +146,7 @@ pub struct FancyPrefs {
 impl Default for FancyPrefs {
     fn default() -> Self {
         Self {
-            gen_width: 200.0,
+            gen_width: 300.0,
             child_gap: 10.0,
         }
     }
