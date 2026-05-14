@@ -103,6 +103,7 @@ pub struct ConnectorPrimitive {
 }
 
 /// A wedge primitive (fan layout).
+/// A wedge primitive (fan layout).
 #[derive(Debug, Clone)]
 pub struct WedgePrimitive {
     pub cx: f64,
@@ -113,6 +114,7 @@ pub struct WedgePrimitive {
     pub radius_outer: f64,
     pub label: Option<String>,
     pub label_attrs: Vec<TextAttr>,
+    pub radial_text: bool,
 }
 
 /// A single renderable element.

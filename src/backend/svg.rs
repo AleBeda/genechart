@@ -573,7 +573,15 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     let angle_rad = w.angle_center.to_radians();
                     let tx = cx_svg + mid_r * angle_rad.cos();
                     let ty = cy_svg - mid_r * angle_rad.sin(); // y-up math → y-down SVG
-                    let rotation = 90.0 - w.angle_center;
+                    let rotation = if w.radial_text {
+                        // Align text along the radius, readable range [-90°, 90°].
+                        // Verified: top(90°)→90°, left(135°)→45°, right(45°)→-45°, edges→0°
+                        let r = 180.0 - w.angle_center;
+                        if r > 90.0 { r - 180.0 } else { r }
+                    } else {
+                        // Tangential: perpendicular to radius (current behaviour)
+                        90.0 - w.angle_center
+                    };
                     let color = color_for_attr(&w.label_attrs, prefs);
                     out.push_str(&format!(
                         "  <text x=\"{tx:.1}\" y=\"{ty:.1}\" \

@@ -9,7 +9,7 @@ use std::f64::consts::PI;
 
 use super::Layout;
 use crate::parser::genrep::{Genrep, Individual};
-use crate::preferences::Prefs;
+use crate::preferences::{FanPrefs, Prefs};
 
 #[derive(Debug, Clone)]
 pub struct FanGeo {
@@ -49,7 +49,6 @@ impl Layout for FanLayout {
         }
 
         let ring_height = prefs.layout.fan.ring_height;
-        let ring_gap = prefs.layout.fan.ring_gap;
         let max_gen = prefs.scope.generations;
 
         let mut individuals: HashMap<String, Individual<FanGeo>> = HashMap::new();
@@ -71,8 +70,7 @@ impl Layout for FanLayout {
                 90.0,
                 180.0,
                 0u32,
-                ring_height,
-                ring_gap,
+                &prefs.layout.fan,
                 max_gen,
                 &mut individuals,
             );
@@ -93,8 +91,7 @@ fn place_ancestors(
     angle_center: f64,
     angle_span: f64,
     depth: u32,
-    ring_height: f64,
-    ring_gap: f64,
+    fan_prefs: &FanPrefs,
     max_gen: u32,
     out: &mut HashMap<String, Individual<FanGeo>>,
 ) {
@@ -119,8 +116,19 @@ fn place_ancestors(
 
     let next_depth = depth + 1;
     let child_span = angle_span / 2.0;
-    let radius_inner = next_depth as f64 * (ring_height + ring_gap);
-    let radius_outer = radius_inner + ring_height;
+    let rh = if next_depth >= fan_prefs.radial_gen {
+        fan_prefs.outer_ring_height
+    } else {
+        fan_prefs.ring_height
+    };
+    let radius_inner = if next_depth < fan_prefs.radial_gen {
+        next_depth as f64 * (fan_prefs.ring_height + fan_prefs.ring_gap)
+    } else {
+        fan_prefs.radial_gen as f64 * (fan_prefs.ring_height + fan_prefs.ring_gap)
+            + (next_depth - fan_prefs.radial_gen) as f64
+                * (fan_prefs.outer_ring_height + fan_prefs.ring_gap)
+    };
+    let radius_outer = radius_inner + rh;
     let radius_mid = (radius_inner + radius_outer) / 2.0;
 
     // Father: left side of chart = higher angle range → center at angle_center + angle_span/4
@@ -144,8 +152,7 @@ fn place_ancestors(
                     father_angle,
                     child_span,
                     next_depth,
-                    ring_height,
-                    ring_gap,
+                    fan_prefs,
                     max_gen,
                     out,
                 );
@@ -174,8 +181,7 @@ fn place_ancestors(
                     mother_angle,
                     child_span,
                     next_depth,
-                    ring_height,
-                    ring_gap,
+                    fan_prefs,
                     max_gen,
                     out,
                 );
@@ -204,6 +210,11 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
     let cx = max_radius;
     let cy = max_radius;
 
+    // Threshold angle_span below which a wedge gets radial text.
+    // At radial_gen=3: threshold = 180/8 = 22.5° (depth-3 wedges get radial).
+    // At radial_gen=0: threshold = 180°, all wedges get radial.
+    let inner_span_threshold = 180.0 / 2.0f64.powi(prefs.layout.fan.radial_gen as i32);
+
     // C2b — highlights
     let highlighted_ids =
         crate::preferences::load_highlights(std::path::Path::new(&prefs.files.highlights));
@@ -221,6 +232,7 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
 
     let mut primitives: Vec<Primitive> = Vec::with_capacity(indis.len());
     for (indi, geo) in &indis {
+        let radial_text = geo.angle_span <= inner_span_threshold + 1e-9;
         primitives.push(Primitive::Wedge(WedgePrimitive {
             cx,
             cy,
@@ -234,6 +246,7 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
             } else {
                 vec![TextAttr::IndividualName]
             },
+            radial_text,
         }));
     }
 
@@ -412,5 +425,27 @@ mod tests {
         let mut prefs = ancestors_prefs();
         prefs.scope.direction = "descendants".to_string();
         assert!(FanLayout.compute(&test_genrep(), &prefs).is_err());
+    }
+
+    #[test]
+    fn outer_ring_height_at_radial_gen() {
+        let mut prefs = ancestors_prefs();
+        prefs.layout.fan.outer_ring_height = 180.0;
+        prefs.layout.fan.radial_gen = 2; // switch at grandparent depth
+        prefs.scope.generations = 6;
+        let result = FanLayout.compute(&test_genrep(), &prefs).unwrap();
+        // I4 = paternal grandfather, depth 2 = first outer ring
+        // radius_inner = 2 * (80 + 20) = 200; radius_outer = 200 + 180 = 380
+        let geo = result.individuals["I4"].geo.as_ref().unwrap();
+        assert!(
+            (geo.radius_inner - 200.0).abs() < 1e-6,
+            "radius_inner={}",
+            geo.radius_inner
+        );
+        assert!(
+            (geo.radius_outer - 380.0).abs() < 1e-6,
+            "radius_outer={}",
+            geo.radius_outer
+        );
     }
 }

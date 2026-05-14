@@ -44,8 +44,10 @@ gap_height = 80.0
 box_width_2_spouses = 520.0 # must be >= 2 * box_width + gap_width
 
 [layout.fan]
-ring_height = 90   # radial thickness of each generation ring (canvas units)
-ring_gap = 10      # gap between rings
+ring_height = 90       # radial thickness of each inner generation ring (canvas units)
+ring_gap = 10          # gap between rings
+outer_ring_height = 200  # radial thickness for outer (rotated-text) generation rings
+radial_gen = 3         # depth at which to switch to radial text; 0 = all radial
 
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"

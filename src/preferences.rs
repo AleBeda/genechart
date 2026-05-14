@@ -127,6 +127,10 @@ pub struct FanPrefs {
     pub ring_height: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub ring_gap: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub outer_ring_height: f64,
+    #[serde(default)]
+    pub radial_gen: u32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
