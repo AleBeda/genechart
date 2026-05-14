@@ -363,7 +363,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             .iter()
             .filter_map(|(_, i, _)| {
                 i.birth.as_ref().and_then(|e| {
-                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
+                    format_event(
+                        &prefs.format.birth,
+                        e.date.as_ref(),
+                        e.place.as_deref(),
+                        &prefs.format.date_qualifiers,
+                    )
                 })
             })
             .map(|s| s.chars().count() as f64 * char_width_px)
@@ -377,7 +382,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             .iter()
             .filter_map(|(_, i, _)| {
                 i.death.as_ref().and_then(|e| {
-                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
+                    format_event(
+                        &prefs.format.death,
+                        e.date.as_ref(),
+                        e.place.as_deref(),
+                        &prefs.format.date_qualifiers,
+                    )
                 })
             })
             .map(|s| s.chars().count() as f64 * char_width_px)
@@ -392,7 +402,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             .filter_map(|(id, _i, g)| {
                 if g.is_spouse {
                     find_marriage_in_genrep(id, genrep).and_then(|e| {
-                        format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
+                        format_event(
+                            &prefs.format.marriage,
+                            e.date.as_ref(),
+                            e.place.as_deref(),
+                            &prefs.format.date_qualifiers,
+                        )
                     })
                 } else {
                     None
@@ -487,9 +502,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // Birth data
         if prefs.show.birth {
             if let Some(e) = &indi.birth {
-                if let Some(s) =
-                    format_event(&prefs.format.birth, e.date.as_ref(), e.place.as_deref())
-                {
+                if let Some(s) = format_event(
+                    &prefs.format.birth,
+                    e.date.as_ref(),
+                    e.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                ) {
                     let w = s.chars().count() as f64 * char_width_px;
                     primitives.push(Primitive::Text(TextPrimitive {
                         content: s,
@@ -509,9 +527,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // Death data
         if prefs.show.death {
             if let Some(e) = &indi.death {
-                if let Some(s) =
-                    format_event(&prefs.format.death, e.date.as_ref(), e.place.as_deref())
-                {
+                if let Some(s) = format_event(
+                    &prefs.format.death,
+                    e.date.as_ref(),
+                    e.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                ) {
                     let w = s.chars().count() as f64 * char_width_px;
                     primitives.push(Primitive::Text(TextPrimitive {
                         content: s,
@@ -531,9 +552,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // Marriage data (spouse only)
         if prefs.show.marriage && geo.is_spouse {
             if let Some(e) = find_marriage_in_genrep(id, genrep) {
-                if let Some(s) =
-                    format_event(&prefs.format.marriage, e.date.as_ref(), e.place.as_deref())
-                {
+                if let Some(s) = format_event(
+                    &prefs.format.marriage,
+                    e.date.as_ref(),
+                    e.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                ) {
                     let w = s.chars().count() as f64 * char_width_px;
                     primitives.push(Primitive::Text(TextPrimitive {
                         content: s,

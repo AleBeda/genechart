@@ -103,6 +103,8 @@ pub struct FormatPrefs {
     pub death: String,
     #[serde(default)]
     pub marriage: String,
+    #[serde(default)]
+    pub date_qualifiers: String, // "none" | "gedcom" | "compact"
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

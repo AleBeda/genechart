@@ -1055,7 +1055,12 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     .birth
                     .as_ref()
                     .and_then(|b| {
-                        format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref())
+                        format_event(
+                            &prefs.format.birth,
+                            b.date.as_ref(),
+                            b.place.as_deref(),
+                            &prefs.format.date_qualifiers,
+                        )
                     })
                     .unwrap_or_default();
                 texts.push(Primitive::Text(TextPrimitive {
@@ -1076,7 +1081,12 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     .death
                     .as_ref()
                     .and_then(|d| {
-                        format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref())
+                        format_event(
+                            &prefs.format.death,
+                            d.date.as_ref(),
+                            d.place.as_deref(),
+                            &prefs.format.date_qualifiers,
+                        )
                     })
                     .unwrap_or_default();
                 texts.push(Primitive::Text(TextPrimitive {
@@ -1190,7 +1200,12 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     .birth
                     .as_ref()
                     .and_then(|b| {
-                        format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref())
+                        format_event(
+                            &prefs.format.birth,
+                            b.date.as_ref(),
+                            b.place.as_deref(),
+                            &prefs.format.date_qualifiers,
+                        )
                     })
                     .unwrap_or_default();
                 texts.push(Primitive::Text(TextPrimitive {
@@ -1211,7 +1226,12 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     .death
                     .as_ref()
                     .and_then(|d| {
-                        format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref())
+                        format_event(
+                            &prefs.format.death,
+                            d.date.as_ref(),
+                            d.place.as_deref(),
+                            &prefs.format.date_qualifiers,
+                        )
                     })
                     .unwrap_or_default();
                 texts.push(Primitive::Text(TextPrimitive {
@@ -1486,6 +1506,7 @@ fn emit_spouse_primitives(
                 &prefs.format.marriage,
                 marr.date.as_ref(),
                 marr.place.as_deref(),
+                &prefs.format.date_qualifiers,
             ) {
                 texts.push(Primitive::Text(TextPrimitive {
                     content: s,
@@ -1566,7 +1587,14 @@ fn emit_spouse_primitives(
         let birth_content = sp
             .birth
             .as_ref()
-            .and_then(|b| format_event(&prefs.format.birth, b.date.as_ref(), b.place.as_deref()))
+            .and_then(|b| {
+                format_event(
+                    &prefs.format.birth,
+                    b.date.as_ref(),
+                    b.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
             .unwrap_or_default();
         texts.push(Primitive::Text(TextPrimitive {
             content: birth_content,
@@ -1587,7 +1615,14 @@ fn emit_spouse_primitives(
         let death_content = sp
             .death
             .as_ref()
-            .and_then(|d| format_event(&prefs.format.death, d.date.as_ref(), d.place.as_deref()))
+            .and_then(|d| {
+                format_event(
+                    &prefs.format.death,
+                    d.date.as_ref(),
+                    d.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
             .unwrap_or_default();
         texts.push(Primitive::Text(TextPrimitive {
             content: death_content,

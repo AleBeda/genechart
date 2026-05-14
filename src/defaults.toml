@@ -22,11 +22,10 @@ id = false # Show GEDCOM IDs of individuals and families (without the "@" chars,
 
 [format]
 individual = "{firstname} {lastname} {sex}"
-# {date} expands to the raw GEDCOM date string (e.g. "1 JAN 1812").
-# Date reformatting (e.g. {date:%d %b %Y}) requires a GEDCOM date parser — deferred feature.
-birth = "∗ {date}, {location}"
-death = "× {date}, {location}"
-marriage = "⚭ {date}, {location}"
+birth = "* {date:%d %b %Y}, {location}"
+death = "× {date:%d %b %Y}, {location}"
+marriage = "⚭ {date:%d %b %Y}, {location}"
+date_qualifiers = "compact" # Allowed values: "none", "gedcom", "compact"
 
 [layout]
 type = "simple" # Valid values: "simple", "boxed_couples", "fan"
