@@ -330,6 +330,35 @@ fn emit_subtree(
         base_name.clone()
     };
 
+    // Compute x positions anchored to actual name start (after gen-num prefix).
+    let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
+    let is_desc_bold = matches!(
+        prefs.output.style.fonts.descendant.trim(),
+        "bold" | "bolder"
+    );
+    let gen_prefix_w = if prefs.show.generation_num {
+        let prefix = format!("{}. ", geo.generation);
+        crate::backend::font_metrics::measure_text_w(&prefix, &name_family, nfs, is_desc_bold)
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let name_start_x = geo.x + gen_prefix_w;
+    let first_char_half_w = base_name
+        .chars()
+        .next()
+        .and_then(|c| {
+            crate::backend::font_metrics::measure_text_w(
+                &c.to_string(),
+                &name_family,
+                nfs,
+                is_desc_bold,
+            )
+        })
+        .map(|w| w / 2.0)
+        .unwrap_or(nfs * CHAR_WIDTH_RATIO / 2.0);
+    let xv = name_start_x + first_char_half_w;
+    let ind_data_x = name_start_x + IND_DATA_OFFSET;
     let mut lines: Vec<FancyLine> = Vec::new();
     lines.push(FancyLine {
         x: geo.x,
@@ -348,7 +377,7 @@ fn emit_subtree(
                 &prefs.format.date_qualifiers,
             ) {
                 lines.push(FancyLine {
-                    x: geo.x + IND_DATA_OFFSET,
+                    x: ind_data_x,
                     y: geo.y + y_off,
                     text: s,
                     attrs: vec![TextAttr::BirthData],
@@ -366,7 +395,7 @@ fn emit_subtree(
                 &prefs.format.date_qualifiers,
             ) {
                 lines.push(FancyLine {
-                    x: geo.x + IND_DATA_OFFSET,
+                    x: ind_data_x,
                     y: geo.y + y_off,
                     text: s,
                     attrs: vec![TextAttr::DeathData],
@@ -416,8 +445,8 @@ fn emit_subtree(
                         if let Some(sg) = sp.geo.as_ref() {
                             let sp_highlighted = highlighted_ids.contains(&sp.id);
                             let sp_name = format_name(sp, prefs);
-                            let sp_name_x = geo.x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
-                            let sp_data_x = geo.x + 2.0 * IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                            let sp_name_x = name_start_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                            let sp_data_x = name_start_x + 2.0 * IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
 
                             let mut sp_lines: Vec<FancyLine> = Vec::new();
                             sp_lines.push(FancyLine {
@@ -547,7 +576,7 @@ fn emit_subtree(
                 if !children.is_empty() {
                     let child_gen_x = geo.x + gen_width;
                     let x_spine = child_gen_x - CHILD_SHORT_H - ARC_R;
-                    let sp_text_x = geo.x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                    let sp_text_x = name_start_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
                     let x_conn_start = sp_text_x + spouse_name_w + NAME_TO_CONN_GAP;
                     let y_sp_mid = y_sp + n_lh / 2.0;
                     let y_last_mid = children.last().unwrap() + n_lh / 2.0;
@@ -589,10 +618,9 @@ fn emit_subtree(
 
     // ── IndivToSpouse connector ───────────────────────────────────────────────
     if !spouse_ys.is_empty() {
-        let xv = geo.x + V_OFFSET;
         let y_trunk_top = geo.y + n_lh;
         let y_trunk_bot = spouse_ys.last().unwrap() + n_lh / 2.0 - ARC_R;
-        let sp_conn_x = geo.x + IND_DATA_OFFSET;
+        let sp_conn_x = ind_data_x;
 
         let mut d = format!("M {xv:.1} {y_trunk_top:.1} L {xv:.1} {y_trunk_bot:.1}");
         for y_sp in &spouse_ys {
