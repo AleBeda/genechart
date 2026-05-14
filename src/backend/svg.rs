@@ -208,6 +208,76 @@ fn render_mixed_text(
     }
 }
 
+/// Like `render_mixed_text` but for text centered at x=0 inside a rotated `<g>`.
+/// Uses `dominant-baseline="middle"` so `y` is the vertical centre of each line.
+/// Splits at U+2000 to give each segment its own `<text>` element — required
+/// because svg2pdf cannot do per-character font fallback within a single element.
+fn render_mixed_text_rotated(
+    out: &mut String,
+    y: f64,
+    text: &str,
+    primary_family: &str,
+    font_size: f64,
+    color: &str,
+) {
+    if text.is_empty() {
+        return;
+    }
+    let cw = font_size * CHAR_WIDTH_RATIO;
+
+    // Split at U+2000 boundary.
+    let mut segments: Vec<(&str, bool)> = Vec::new();
+    let mut seg_start = 0usize;
+    let mut in_symbol = text.chars().next().is_some_and(|c| (c as u32) >= 0x2000);
+    for (byte_pos, c) in text.char_indices() {
+        let is_sym = (c as u32) >= 0x2000;
+        if is_sym != in_symbol {
+            segments.push((&text[seg_start..byte_pos], in_symbol));
+            seg_start = byte_pos;
+            in_symbol = is_sym;
+        }
+    }
+    segments.push((&text[seg_start..], in_symbol));
+
+    let base_font = primary_family
+        .split(',')
+        .next()
+        .unwrap_or(primary_family)
+        .trim()
+        .trim_matches('\'')
+        .trim_matches('"');
+
+    let seg_widths: Vec<f64> = segments
+        .iter()
+        .map(|(seg, is_sym)| {
+            if *is_sym {
+                seg.chars().count() as f64 * cw
+            } else {
+                font_metrics::measure_text_w(seg, base_font, font_size, false)
+                    .unwrap_or_else(|| seg.chars().count() as f64 * cw)
+            }
+        })
+        .collect();
+
+    let total_width: f64 = seg_widths.iter().sum();
+    let mut cur_x = -total_width / 2.0;
+    for ((seg, is_sym), &w) in segments.iter().zip(seg_widths.iter()) {
+        let fam = if *is_sym {
+            SYMBOL_FONT_FAMILY
+        } else {
+            primary_family
+        };
+        out.push_str(&format!(
+            "    <text x=\"{cur_x:.1}\" y=\"{y:.1}\" \
+             font-family=\"{fam}\" font-size=\"{font_size}\" \
+             fill=\"{color}\" dominant-baseline=\"middle\" \
+             xml:space=\"preserve\">{}</text>\n",
+            xml_escape(seg)
+        ));
+        cur_x += w;
+    }
+}
+
 fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -651,16 +721,14 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         let lh = line.font_size * 1.2;
                         let line_y = y + lh / 2.0;
                         y += lh;
-                        out.push_str(&format!(
-                            "    <text x=\"0\" y=\"{line_y:.1}\" \
-                             font-family=\"{ff}\" font-size=\"{fs}\" \
-                             fill=\"{col}\" text-anchor=\"middle\" dominant-baseline=\"middle\" \
-                             xml:space=\"preserve\">{txt}</text>\n",
-                            ff = line.font_family,
-                            fs = line.font_size,
-                            col = line.color,
-                            txt = xml_escape(&line.text),
-                        ));
+                        render_mixed_text_rotated(
+                            &mut out,
+                            line_y,
+                            &line.text,
+                            &line.font_family,
+                            line.font_size,
+                            &line.color,
+                        );
                     }
                     out.push_str("  </g>\n");
                 }
