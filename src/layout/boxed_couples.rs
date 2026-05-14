@@ -1227,7 +1227,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 }));
             }
 
-            if let Some((fam_id, fam)) = spouses.first() {
+            let spouse_emitted = if let Some((fam_id, fam)) = spouses.first() {
                 if let Some(sp_id) = spouse_id_from_family_bc(ind_id, fam) {
                     if let Some(sp) = genrep.individuals.get(&sp_id) {
                         emit_spouse_primitives(
@@ -1246,8 +1246,29 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             spacing,
                             highlighted_ids.contains(sp_id.as_str()),
                         );
+                        true
+                    } else {
+                        false
                     }
+                } else {
+                    false
                 }
+            } else {
+                false
+            };
+
+            if !spouse_emitted {
+                emit_blank_spouse_section(
+                    &mut texts,
+                    section_cx,
+                    marr_y,
+                    sp_section_top,
+                    prefs,
+                    geo.width,
+                    font_size,
+                    date_font_size,
+                    spacing,
+                );
             }
         }
     }
@@ -1358,6 +1379,82 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
     Scene {
         primitives,
         canvas_bounds,
+    }
+}
+
+/// Emit blank placeholder primitives for the spouse section when no spouse is present.
+/// This ensures the text backend allocates the same rows as a full spouse section,
+/// keeping all individuals in the same generation vertically aligned.
+#[allow(clippy::too_many_arguments)]
+fn emit_blank_spouse_section(
+    texts: &mut Vec<crate::scene::Primitive>,
+    cx: f64,
+    marr_y: f64,
+    sp_section_top: f64,
+    prefs: &Prefs,
+    section_width: f64,
+    font_size: f64,
+    date_font_size: f64,
+    spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
+) {
+    use crate::scene::{Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+
+    // Blank marriage row — causes text backend to allocate blank-before + blank-after rows
+    if prefs.show.marriage {
+        texts.push(Primitive::Text(TextPrimitive {
+            content: String::new(),
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: marr_y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::MarriageData],
+        }));
+    }
+
+    let sp_name_baseline = sp_section_top + spacing.name_above + font_size;
+    texts.push(Primitive::Text(TextPrimitive {
+        content: String::new(),
+        bbox: Rect {
+            x: cx - section_width / 2.0,
+            y: sp_name_baseline - font_size,
+            w: section_width,
+            h: font_size,
+        },
+        align: TextAlign::Center,
+        attrs: vec![TextAttr::SpouseName],
+    }));
+
+    let mut y = sp_name_baseline;
+    if prefs.show.birth {
+        y += spacing.date_above + date_font_size;
+        texts.push(Primitive::Text(TextPrimitive {
+            content: String::new(),
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::BirthData],
+        }));
+    }
+    if prefs.show.death {
+        y += spacing.date_above + date_font_size;
+        texts.push(Primitive::Text(TextPrimitive {
+            content: String::new(),
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: y - date_font_size,
+                w: section_width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::DeathData],
+        }));
     }
 }
 

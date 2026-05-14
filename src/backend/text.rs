@@ -275,7 +275,13 @@ fn draw_connector_on_grid(
     }
 
     let parent_col = display_to_col(conn.parent_points[0].x, char_width_px);
-    let parent_row = display_to_row(conn.parent_points[0].y, line_height_px);
+    // "bottom border" connector endpoints carry coordinate bbox.y + bbox.h, which
+    // display_to_row maps to row1 (one past the bottom border drawn by draw_box).
+    // Subtract 1 so the T-junction lands on the actual border row.
+    let parent_row = {
+        let raw = display_to_row(conn.parent_points[0].y, line_height_px);
+        if downward { raw.saturating_sub(1) } else { raw }
+    };
 
     let child_cols: Vec<usize> = conn
         .child_points
@@ -285,7 +291,10 @@ fn draw_connector_on_grid(
     let child_rows: Vec<usize> = conn
         .child_points
         .iter()
-        .map(|c| display_to_row(c.y, line_height_px))
+        .map(|c| {
+            let raw = display_to_row(c.y, line_height_px);
+            if downward { raw } else { raw.saturating_sub(1) }
+        })
         .collect();
 
     // Single child: straight vertical line only, no horizontal bar
@@ -2102,7 +2111,8 @@ mod tests {
     #[test]
     fn test_bc_text_connector_joins_box_downward() {
         // Connector must draw ┬ at parent bottom border and ┴ at child top border (downward tree).
-        // line_height_px=18: y=18→row1 (parent bottom), y=54→row3 (child top), y=36→row2 (gap).
+        // line_height_px=18: y=36→row1 (parent bottom), y=54→row3 (child top), y=45→row2 (gap).
+        // Boxes must be h=36 (2 rows) so draw_box actually renders borders.
         use crate::scene::{BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene};
 
         let scene = Scene {
@@ -2112,7 +2122,7 @@ mod tests {
                         x: 20.0,
                         y: 0.0,
                         w: 40.0,
-                        h: 18.0,
+                        h: 36.0,
                     },
                 }),
                 Primitive::Box(BoxPrimitive {
@@ -2124,7 +2134,7 @@ mod tests {
                     },
                 }),
                 Primitive::Connector(ConnectorPrimitive {
-                    parent_points: vec![Point { x: 40.0, y: 18.0 }],
+                    parent_points: vec![Point { x: 40.0, y: 36.0 }],
                     child_points: vec![Point { x: 40.0, y: 54.0 }],
                 }),
             ],
@@ -2167,7 +2177,8 @@ mod tests {
     #[test]
     fn test_bc_text_connector_joins_box_upward() {
         // Connector must draw ┬ at child bottom border and ┴ at parent top border (upward tree).
-        // line_height_px=18: y=18→row1 (child bottom), y=54→row3 (parent top), y=36→row2 (gap).
+        // line_height_px=18: y=36→row1 (child bottom), y=54→row3 (parent top), y=45→row2 (gap).
+        // Child box must be h=36 (2 rows) so draw_box actually renders the bottom border.
         use crate::scene::{BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene};
 
         let scene = Scene {
@@ -2185,12 +2196,12 @@ mod tests {
                         x: 20.0,
                         y: 0.0,
                         w: 40.0,
-                        h: 18.0,
+                        h: 36.0,
                     },
                 }),
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 40.0, y: 54.0 }],
-                    child_points: vec![Point { x: 40.0, y: 18.0 }],
+                    child_points: vec![Point { x: 40.0, y: 36.0 }],
                 }),
             ],
             canvas_bounds: Rect {
@@ -2225,6 +2236,75 @@ mod tests {
             lines[2].contains('\u{2502}'),
             "connector row between boxes should have │ (no gap); got: {:?}",
             lines[2]
+        );
+    }
+
+    #[test]
+    fn test_bc_text_no_spouse_blank_row() {
+        // A blank SpouseName primitive must advance the row counter so individual name
+        // appears at row 2 (not row 1), matching the layout of a box with a full spouse.
+        use crate::scene::{
+            BoxPrimitive, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        };
+
+        let scene = Scene {
+            primitives: vec![
+                Primitive::Box(BoxPrimitive {
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 54.0,
+                    },
+                }),
+                // Blank spouse placeholder (emitted by emit_blank_spouse_section)
+                Primitive::Text(TextPrimitive {
+                    content: String::new(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 80.0,
+                        h: 9.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::SpouseName],
+                }),
+                // Individual name at a larger Y (bottom section)
+                Primitive::Text(TextPrimitive {
+                    content: "Individual".to_string(),
+                    bbox: Rect {
+                        x: 0.0,
+                        y: 27.0,
+                        w: 80.0,
+                        h: 14.0,
+                    },
+                    align: TextAlign::Center,
+                    attrs: vec![TextAttr::IndividualName],
+                }),
+            ],
+            canvas_bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 80.0,
+                h: 54.0,
+            },
+        };
+        let prefs = Prefs::default();
+        let output = LayoutOutput::BoxedCouples(scene);
+
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&output, &prefs, &mut buf).unwrap();
+        let result = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+
+        let ind_row = lines
+            .iter()
+            .position(|l| l.contains("Individual"))
+            .expect("Individual not found");
+        assert_eq!(
+            ind_row, 2,
+            "Individual should be at row 2 (after blank spouse row); got row {}: {:?}",
+            ind_row, lines
         );
     }
 }
