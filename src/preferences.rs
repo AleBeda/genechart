@@ -368,7 +368,7 @@ pub fn load(
 
     // Level 6: --pref overrides
     for pref_str in pref_overrides {
-        merge_pref_str(&mut base, pref_str, tracer);
+        merge_pref_str(&mut base, pref_str, tracer)?;
     }
 
     let prefs: Prefs = base
@@ -389,6 +389,13 @@ fn merge_file(base: &mut Value, path: &Path, tracer: &crate::trace::Tracer) {
     match std::fs::read_to_string(path) {
         Ok(content) => match content.parse::<Value>() {
             Ok(overlay) => {
+                let unknown = find_unknown_keys(base, &overlay, "");
+                for key in &unknown {
+                    eprintln!(
+                        "warning: {}: unknown preference key '{key}'",
+                        path.display()
+                    );
+                }
                 tracer.emit("prefs", &format!("PREF SOURCE {}", path.display()));
                 merge_toml_tracked(base, overlay, "", tracer);
             }
@@ -407,6 +414,13 @@ fn merge_file_required(base: &mut Value, path: &Path, tracer: &crate::trace::Tra
     let overlay = content
         .parse::<Value>()
         .with_context(|| format!("--preff: failed to parse '{}'", path.display()))?;
+    let unknown = find_unknown_keys(base, &overlay, "");
+    for key in &unknown {
+        eprintln!(
+            "warning: {}: unknown preference key '{key}'",
+            path.display()
+        );
+    }
     tracer.emit("prefs", &format!("PREF SOURCE {}", path.display()));
     merge_toml_tracked(base, overlay, "", tracer);
     Ok(())
@@ -441,15 +455,18 @@ fn split_pref_assignments(s: &str) -> Vec<&str> {
     result
 }
 
-fn merge_pref_str(base: &mut Value, pref_str: &str, tracer: &crate::trace::Tracer) {
+fn merge_pref_str(base: &mut Value, pref_str: &str, tracer: &crate::trace::Tracer) -> Result<()> {
     let toml_doc: String = split_pref_assignments(pref_str).join("\n");
-    match toml_doc.parse::<Value>() {
-        Ok(overlay) => {
-            tracer.emit("prefs", &format!("PREF SOURCE --pref '{pref_str}'"));
-            merge_toml_tracked(base, overlay, "", tracer);
-        }
-        Err(e) => eprintln!("warning: failed to parse --pref '{pref_str}': {e}"),
+    let overlay = toml_doc
+        .parse::<Value>()
+        .with_context(|| format!("failed to parse --pref '{pref_str}'"))?;
+    let unknown = find_unknown_keys(base, &overlay, "");
+    if !unknown.is_empty() {
+        anyhow::bail!("--pref: unknown preference key(s): {}", unknown.join(", "));
     }
+    tracer.emit("prefs", &format!("PREF SOURCE --pref '{pref_str}'"));
+    merge_toml_tracked(base, overlay, "", tracer);
+    Ok(())
 }
 
 /// Format a TOML leaf value as a string for trace output.
@@ -531,6 +548,38 @@ fn merge_toml_tracked(
                     base_map.insert(key, val);
                 }
             }
+        }
+    }
+}
+
+/// Returns all dotted key paths present in `overlay` that are absent from `base`.
+fn find_unknown_keys(base: &Value, overlay: &Value, prefix: &str) -> Vec<String> {
+    let mut unknown = Vec::new();
+    collect_unknown_keys(base, overlay, prefix, &mut unknown);
+    unknown
+}
+
+fn collect_unknown_keys(base: &Value, overlay: &Value, prefix: &str, unknown: &mut Vec<String>) {
+    let Value::Table(overlay_map) = overlay else {
+        return;
+    };
+    let base_map = if let Value::Table(m) = base {
+        Some(m)
+    } else {
+        None
+    };
+    for (key, val) in overlay_map {
+        let full_key = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        match base_map.and_then(|m| m.get(key)) {
+            Some(base_val) if val.is_table() && base_val.is_table() => {
+                collect_unknown_keys(base_val, val, &full_key, unknown);
+            }
+            Some(_) => {}
+            None => unknown.push(full_key),
         }
     }
 }
@@ -646,7 +695,7 @@ mod tests {
         );
         // CLI override
         let tracer = crate::trace::Tracer::disabled();
-        merge_pref_str(&mut base, "scope.generations = 99", &tracer);
+        merge_pref_str(&mut base, "scope.generations = 99", &tracer).unwrap();
         let prefs: Prefs = base.try_into().unwrap();
         assert_eq!(prefs.scope.generations, 99);
     }
@@ -725,7 +774,8 @@ mod tests {
             &mut base,
             r#"format.marriage = "m. {date}, {location}", output.type = "pdf""#,
             &tracer,
-        );
+        )
+        .unwrap();
         let prefs: Prefs = base.try_into().unwrap();
         assert_eq!(
             prefs.output.output_type, "pdf",
@@ -742,8 +792,44 @@ mod tests {
     fn pref_str_single_assignment_no_comma() {
         let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
         let tracer = crate::trace::Tracer::disabled();
-        merge_pref_str(&mut base, r#"output.type = "svg""#, &tracer);
+        merge_pref_str(&mut base, r#"output.type = "svg""#, &tracer).unwrap();
         let prefs: Prefs = base.try_into().unwrap();
         assert_eq!(prefs.output.output_type, "svg");
+    }
+
+    #[test]
+    fn pref_unknown_key_is_error() {
+        let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
+        let tracer = crate::trace::Tracer::disabled();
+        let result = merge_pref_str(&mut base, "scope.generatins = 5", &tracer);
+        assert!(result.is_err(), "unknown key should be an error");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(
+            msg.contains("generatins"),
+            "error should name the bad key: {msg}"
+        );
+    }
+
+    #[test]
+    fn pref_valid_key_is_ok() {
+        let mut base = DEFAULTS_TOML.parse::<Value>().unwrap();
+        let tracer = crate::trace::Tracer::disabled();
+        assert!(merge_pref_str(&mut base, "scope.generations = 5", &tracer).is_ok());
+    }
+
+    #[test]
+    fn load_with_bad_pref_is_error() {
+        let result = load(
+            None,
+            None,
+            &["scope.generatins = 5".into()],
+            &crate::trace::Tracer::disabled(),
+        );
+        assert!(result.is_err(), "bad --pref key should abort load");
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            msg.contains("generatins"),
+            "error should mention the bad key: {msg}"
+        );
     }
 }
