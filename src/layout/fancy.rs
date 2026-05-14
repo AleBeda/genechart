@@ -336,6 +336,16 @@ fn emit_subtree(
         prefs.output.style.fonts.descendant.trim(),
         "bold" | "bolder"
     );
+    let (data_family, dfs) = {
+        let (fam, sz) = parsed_font(&prefs.output.style.fonts.dates);
+        let fam = if fam.is_empty() {
+            name_family.clone()
+        } else {
+            fam
+        };
+        let sz = if sz <= 0.0 { nfs } else { sz };
+        (fam, sz)
+    };
     let gen_prefix_w = if prefs.show.generation_num {
         let prefix = format!("{}. ", geo.generation);
         crate::backend::font_metrics::measure_text_w(&prefix, &name_family, nfs, is_desc_bold)
@@ -404,8 +414,17 @@ fn emit_subtree(
         }
     }
 
-    let name_w = name_text.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO;
-    *max_x = f64::max(*max_x, geo.x + name_w);
+    for line in &lines {
+        let is_name = line.attrs.contains(&TextAttr::IndividualName);
+        let (mfam, msz, mbold) = if is_name {
+            (name_family.as_str(), nfs, is_desc_bold)
+        } else {
+            (data_family.as_str(), dfs, false)
+        };
+        let w = crate::backend::font_metrics::measure_text_w(&line.text, mfam, msz, mbold)
+            .unwrap_or_else(|| line.text.chars().count() as f64 * msz * CHAR_WIDTH_RATIO);
+        *max_x = f64::max(*max_x, line.x + w);
+    }
     *max_y = f64::max(*max_y, geo.y + ind_height(prefs));
 
     primitives.push(Primitive::FancyText(FancyTextItem {
@@ -525,6 +544,20 @@ fn emit_subtree(
                             });
                             *max_x = f64::max(*max_x, sp_name_x + spouse_name_w);
                             *max_y = f64::max(*max_y, sg.y + spouse_height(prefs));
+                            for sp_line in &sp_lines {
+                                if !sp_line.attrs.contains(&TextAttr::SpouseName) {
+                                    let w = crate::backend::font_metrics::measure_text_w(
+                                        &sp_line.text,
+                                        &data_family,
+                                        dfs,
+                                        false,
+                                    )
+                                    .unwrap_or_else(|| {
+                                        sp_line.text.chars().count() as f64 * dfs * CHAR_WIDTH_RATIO
+                                    });
+                                    *max_x = f64::max(*max_x, sp_line.x + w);
+                                }
+                            }
 
                             primitives.push(Primitive::FancyText(FancyTextItem {
                                 lines: sp_lines,
