@@ -3,7 +3,7 @@
 # Run from the project root: genechart examples/kennedy/kennedy.ged
 
 [scope]
-root = "I1"          # Joseph Kennedy Sr. — start of the famous generation
+root = "I1"               # Joseph Kennedy Sr. — start of the famous generation
 generations = 4
 direction = "descendants"
 
@@ -17,6 +17,9 @@ copyright = ""
 [output.style.fonts]
 names = "Georgia 14"
 dates = "Arial 10"
+
+[output.style.connectors]
+width = 1.0
 
 [layout.boxed_couples]
 box_width = 300.0

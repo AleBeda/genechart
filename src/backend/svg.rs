@@ -741,7 +741,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         });
                         let name_line_y = -total_height / 2.0 + name_lh / 2.0;
                         let bg = hex_color(prefs.output.style.text.highlights.background_color);
-                        let pad = 2.0;
+                        let pad = 1.0;
                         out.push_str(&format!(
                             "    <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
                             -name_w / 2.0 - pad,
@@ -790,7 +790,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                             name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO
                         });
                         let bg = hex_color(prefs.output.style.text.highlights.background_color);
-                        let pad = 2.0;
+                        let pad = 1.0;
                         let rx = to_svg_x(name_line.x) - pad;
                         let ry = to_svg_y(name_line.y) - pad;
                         out.push_str(&format!(
