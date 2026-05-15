@@ -125,6 +125,7 @@ pub struct FancyLine {
 pub struct FancyTextItem {
     pub lines: Vec<FancyLine>,
     pub individual_id: String,
+    pub highlighted: bool,
 }
 
 /// Connector kind for the fancy layout (used for SVG grouping).

@@ -719,6 +719,37 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     out.push_str(&format!(
                         "  <g transform=\"translate({tx:.1},{ty:.1}) rotate({rotation:.1})\">\n"
                     ));
+                    if is_highlighted(&w.label_attrs) {
+                        let name_line = &lines[0];
+                        let name_lh = name_line.font_size * 1.2;
+                        let base_font = name_line
+                            .font_family
+                            .split(',')
+                            .next()
+                            .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
+                            .unwrap_or("monospace");
+                        let name_w = font_metrics::measure_text_w(
+                            &name_line.text,
+                            base_font,
+                            name_line.font_size,
+                            false,
+                        )
+                        .unwrap_or_else(|| {
+                            name_line.text.chars().count() as f64
+                                * name_line.font_size
+                                * CHAR_WIDTH_RATIO
+                        });
+                        let name_line_y = -total_height / 2.0 + name_lh / 2.0;
+                        let bg = hex_color(prefs.output.style.text.highlights.background_color);
+                        let pad = 2.0;
+                        out.push_str(&format!(
+                            "    <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+                            -name_w / 2.0 - pad,
+                            name_line_y - name_lh / 2.0 - pad,
+                            name_w + 2.0 * pad,
+                            name_lh + 2.0 * pad
+                        ));
+                    }
                     for line in &lines {
                         let lh = line.font_size * 1.2;
                         let line_y = y + lh / 2.0;
@@ -736,6 +767,39 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 }
             }
             crate::scene::Primitive::FancyText(item) => {
+                if item.highlighted {
+                    if let Some(name_line) = item.lines.iter().find(|l| {
+                        l.attrs.contains(&TextAttr::IndividualName)
+                            || l.attrs.contains(&TextAttr::SpouseName)
+                    }) {
+                        let (font_family, font_size) = font_for_attr(&name_line.attrs, prefs);
+                        let bold = weight_for_attr(&name_line.attrs, prefs) == "bold";
+                        let lh = font_size * 1.2;
+                        let base_font = font_family
+                            .split(',')
+                            .next()
+                            .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
+                            .unwrap_or("monospace");
+                        let w = font_metrics::measure_text_w(
+                            &name_line.text,
+                            base_font,
+                            font_size,
+                            bold,
+                        )
+                        .unwrap_or_else(|| {
+                            name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO
+                        });
+                        let bg = hex_color(prefs.output.style.text.highlights.background_color);
+                        let pad = 2.0;
+                        let rx = to_svg_x(name_line.x) - pad;
+                        let ry = to_svg_y(name_line.y) - pad;
+                        out.push_str(&format!(
+                            "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+                            w + 2.0 * pad,
+                            lh + 2.0 * pad
+                        ));
+                    }
+                }
                 for line in &item.lines {
                     let (font_family, font_size) = font_for_attr(&line.attrs, prefs);
                     let weight = weight_for_attr(&line.attrs, prefs);

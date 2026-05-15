@@ -430,6 +430,7 @@ fn emit_subtree(
     primitives.push(Primitive::FancyText(FancyTextItem {
         lines,
         individual_id: ind.id.clone(),
+        highlighted,
     }));
 
     // ── Iterate families ──────────────────────────────────────────────────────
@@ -562,6 +563,7 @@ fn emit_subtree(
                             primitives.push(Primitive::FancyText(FancyTextItem {
                                 lines: sp_lines,
                                 individual_id: sp.id.clone(),
+                                highlighted: sp_highlighted,
                             }));
 
                             spouse_ys.push(sg.y);

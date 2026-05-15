@@ -3,6 +3,7 @@
   <text x="20.0" y="44.0" font-family="Georgia" font-size="24" font-weight="normal" fill="black" xml:space="preserve">The Kennedy Family</text>
   <path d="M 660.0 693.2 L 780.0 693.2 A 120.0 120.0 0 1 0 540.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(660.0,645.2) rotate(0.0)">
+    <rect x="-88.2" y="-22.4" width="176.3" height="20.8" fill="#FFFF66"/>
     <text x="-83.4" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="#0000DD" dominant-baseline="middle" xml:space="preserve">John Fitzgerald Kennedy </text>
     <text x="75.0" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="#0000DD" dominant-baseline="middle" xml:space="preserve">♂</text>
     <text x="-66.1" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 29 May 1917, Brookline, MA</text>
@@ -22,12 +23,10 @@
     <text x="-60.3" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Sep 1888, Boston, MA</text>
     <text x="-74.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 Nov 1969, Hyannis Port, MA</text>
   </g>
-  <path d="M 660.0 313.2 A 380.0 380.0 0 0 0 391.3 424.5 L 476.2 509.4 A 260.0 260.0 0 0 1 660.0 433.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(542.1,408.7) rotate(-22.5)">
-    <text x="-72.4" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Augusta Hickey </text>
-    <text x="64.0" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
-    <text x="-31.7" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Dec 1857</text>
-    <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 06 May 1923</text>
+  <path d="M 1040.0 693.2 A 380.0 380.0 0 0 0 928.7 424.5 L 843.8 509.4 A 260.0 260.0 0 0 1 920.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(944.6,575.4) rotate(67.5)">
+    <text x="-82.5" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Josephine Hannon </text>
+    <text x="74.1" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
   </g>
   <path d="M 928.7 424.5 A 380.0 380.0 0 0 0 660.0 313.2 L 660.0 433.2 A 260.0 260.0 0 0 1 843.8 509.4 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(777.9,408.7) rotate(22.5)">
@@ -36,17 +35,19 @@
     <text x="-60.0" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 11 Feb 1863, Boston, MA</text>
     <text x="-60.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 02 Oct 1950, Boston, MA</text>
   </g>
-  <path d="M 1040.0 693.2 A 380.0 380.0 0 0 0 928.7 424.5 L 843.8 509.4 A 260.0 260.0 0 0 1 920.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(944.6,575.4) rotate(67.5)">
-    <text x="-82.5" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Josephine Hannon </text>
-    <text x="74.1" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
-  </g>
   <path d="M 391.3 424.5 A 380.0 380.0 0 0 0 280.0 693.2 L 400.0 693.2 A 260.0 260.0 0 0 1 476.2 509.4 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(375.4,575.4) rotate(-67.5)">
     <text x="-80.6" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Patrick Joseph Kennedy </text>
     <text x="72.2" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
     <text x="-59.5" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 14 Jan 1858, Boston, MA</text>
     <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 May 1929</text>
+  </g>
+  <path d="M 660.0 313.2 A 380.0 380.0 0 0 0 391.3 424.5 L 476.2 509.4 A 260.0 260.0 0 0 1 660.0 433.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(542.1,408.7) rotate(-22.5)">
+    <text x="-72.4" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Augusta Hickey </text>
+    <text x="64.0" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
+    <text x="-31.7" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Dec 1857</text>
+    <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 06 May 1923</text>
   </g>
   <path d="M 207.5 240.7 A 640.0 640.0 0 0 0 68.7 448.3 L 299.7 544.0 A 390.0 390.0 0 0 1 384.2 417.5 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(231.8,407.1) rotate(33.8)">
