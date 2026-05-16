@@ -346,6 +346,19 @@ fn emit_subtree(
         let sz = if sz <= 0.0 { nfs } else { sz };
         (fam, sz)
     };
+    let (id_family, id_sz) = {
+        let (fam, sz) = parsed_font(&prefs.output.style.fonts.id);
+        let fam = if fam.is_empty() {
+            "Courier New, monospace".to_string()
+        } else {
+            fam
+        };
+        let sz = if sz <= 0.0 { 8.0 } else { sz };
+        (fam, sz)
+    };
+    let name_text_w =
+        crate::backend::font_metrics::measure_text_w(&name_text, &name_family, nfs, is_desc_bold)
+            .unwrap_or_else(|| name_text.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO);
     let gen_prefix_w = if prefs.show.generation_num {
         let prefix = format!("{}. ", geo.generation);
         crate::backend::font_metrics::measure_text_w(&prefix, &name_family, nfs, is_desc_bold)
@@ -376,6 +389,19 @@ fn emit_subtree(
         text: name_text.clone(),
         attrs: label_attrs(TextAttr::IndividualName, highlighted),
     });
+    if prefs.show.id {
+        let ind_id_str = ind
+            .id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
+        lines.push(FancyLine {
+            x: geo.x + name_text_w + 4.0,
+            y: geo.y,
+            text: ind_id_str,
+            attrs: vec![TextAttr::IndividualId],
+        });
+    }
     let mut y_off = n_lh;
 
     if prefs.show.birth {
@@ -416,7 +442,10 @@ fn emit_subtree(
 
     for line in &lines {
         let is_name = line.attrs.contains(&TextAttr::IndividualName);
-        let (mfam, msz, mbold) = if is_name {
+        let is_id = line.attrs.contains(&TextAttr::IndividualId);
+        let (mfam, msz, mbold) = if is_id {
+            (id_family.as_str(), id_sz, false)
+        } else if is_name {
             (name_family.as_str(), nfs, is_desc_bold)
         } else {
             (data_family.as_str(), dfs, false)
@@ -465,6 +494,17 @@ fn emit_subtree(
                         if let Some(sg) = sp.geo.as_ref() {
                             let sp_highlighted = highlighted_ids.contains(&sp.id);
                             let sp_name = format_name(sp, prefs);
+                            let sp_bold =
+                                matches!(prefs.output.style.fonts.spouse.trim(), "bold" | "bolder");
+                            spouse_name_w = crate::backend::font_metrics::measure_text_w(
+                                &sp_name,
+                                &name_family,
+                                nfs,
+                                sp_bold,
+                            )
+                            .unwrap_or_else(|| {
+                                sp_name.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO
+                            });
                             let sp_name_x = name_start_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
                             let sp_data_x = name_start_x + 2.0 * IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
 
@@ -475,6 +515,19 @@ fn emit_subtree(
                                 text: sp_name.clone(),
                                 attrs: label_attrs(TextAttr::SpouseName, sp_highlighted),
                             });
+                            if prefs.show.id {
+                                let sp_id_str = sp
+                                    .id
+                                    .trim_start_matches('@')
+                                    .trim_end_matches('@')
+                                    .to_string();
+                                sp_lines.push(FancyLine {
+                                    x: sp_name_x + spouse_name_w + 4.0,
+                                    y: sg.y,
+                                    text: sp_id_str,
+                                    attrs: vec![TextAttr::IndividualId],
+                                });
+                            }
 
                             let mut sy_off = n_lh;
                             if prefs.show.birth {
@@ -513,51 +566,81 @@ fn emit_subtree(
                                 }
                                 sy_off += d_lh;
                             }
-                            if prefs.show.marriage {
-                                if let Some(ev) = &fam.marriage {
-                                    if let Some(s) = format_event(
+                            let marriage_text: Option<String> = if prefs.show.marriage {
+                                fam.marriage.as_ref().and_then(|ev| {
+                                    format_event(
                                         &prefs.format.marriage,
                                         ev.date.as_ref(),
                                         ev.place.as_deref(),
                                         &prefs.format.date_qualifiers,
-                                    ) {
-                                        sp_lines.push(FancyLine {
-                                            x: sp_data_x,
-                                            y: sg.y + sy_off,
-                                            text: s,
-                                            attrs: vec![TextAttr::MarriageData],
-                                        });
-                                    }
-                                }
+                                    )
+                                })
+                            } else {
+                                None
+                            };
+                            if let Some(ref s) = marriage_text {
+                                sp_lines.push(FancyLine {
+                                    x: sp_data_x,
+                                    y: sg.y + sy_off,
+                                    text: s.clone(),
+                                    attrs: vec![TextAttr::MarriageData],
+                                });
+                            }
+                            if prefs.show.id && prefs.show.marriage {
+                                let fam_id_str = fam_id
+                                    .trim_start_matches('@')
+                                    .trim_end_matches('@')
+                                    .to_string();
+                                let marr_w = marriage_text
+                                    .as_deref()
+                                    .and_then(|s| {
+                                        crate::backend::font_metrics::measure_text_w(
+                                            s,
+                                            &data_family,
+                                            dfs,
+                                            false,
+                                        )
+                                    })
+                                    .unwrap_or_else(|| {
+                                        marriage_text
+                                            .as_deref()
+                                            .map(|s| {
+                                                s.chars().count() as f64 * dfs * CHAR_WIDTH_RATIO
+                                            })
+                                            .unwrap_or(0.0)
+                                    });
+                                let id_x =
+                                    sp_data_x + if marr_w > 0.0 { marr_w + 4.0 } else { 0.0 };
+                                sp_lines.push(FancyLine {
+                                    x: id_x,
+                                    y: sg.y + sy_off,
+                                    text: fam_id_str,
+                                    attrs: vec![TextAttr::IndividualId],
+                                });
                             }
 
-                            let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
-                            let sp_bold =
-                                matches!(prefs.output.style.fonts.spouse.trim(), "bold" | "bolder");
-                            spouse_name_w = crate::backend::font_metrics::measure_text_w(
-                                &sp_name,
-                                &name_family,
-                                nfs,
-                                sp_bold,
-                            )
-                            .unwrap_or_else(|| {
-                                sp_name.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO
-                            });
                             *max_x = f64::max(*max_x, sp_name_x + spouse_name_w);
                             *max_y = f64::max(*max_y, sg.y + spouse_height(prefs));
                             for sp_line in &sp_lines {
-                                if !sp_line.attrs.contains(&TextAttr::SpouseName) {
-                                    let w = crate::backend::font_metrics::measure_text_w(
-                                        &sp_line.text,
-                                        &data_family,
-                                        dfs,
-                                        false,
-                                    )
-                                    .unwrap_or_else(|| {
-                                        sp_line.text.chars().count() as f64 * dfs * CHAR_WIDTH_RATIO
-                                    });
-                                    *max_x = f64::max(*max_x, sp_line.x + w);
+                                if sp_line.attrs.contains(&TextAttr::SpouseName) {
+                                    continue;
                                 }
+                                let is_id = sp_line.attrs.contains(&TextAttr::IndividualId);
+                                let (mfam, msz) = if is_id {
+                                    (id_family.as_str(), id_sz)
+                                } else {
+                                    (data_family.as_str(), dfs)
+                                };
+                                let w = crate::backend::font_metrics::measure_text_w(
+                                    &sp_line.text,
+                                    mfam,
+                                    msz,
+                                    false,
+                                )
+                                .unwrap_or_else(|| {
+                                    sp_line.text.chars().count() as f64 * msz * CHAR_WIDTH_RATIO
+                                });
+                                *max_x = f64::max(*max_x, sp_line.x + w);
                             }
 
                             primitives.push(Primitive::FancyText(FancyTextItem {
