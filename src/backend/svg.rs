@@ -408,6 +408,138 @@ fn weight_for_attr<'a>(attrs: &[TextAttr], prefs: &'a Prefs) -> &'a str {
     }
 }
 
+/// Rendering context passed to the recursive group renderer.
+struct BcSvgCtx<'a> {
+    to_svg_x: &'a dyn Fn(f64) -> f64,
+    to_svg_y: &'a dyn Fn(f64) -> f64,
+    box_fill: &'a str,
+    box_stroke: &'a str,
+    box_sw: f64,
+    box_radius: f64,
+    conn_color: &'a str,
+    conn_width: f64,
+    prefs: &'a Prefs,
+}
+
+/// Recursively render a `Primitive::Group` and its children to SVG.
+fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mut String) {
+    use crate::scene::Primitive;
+    match p {
+        Primitive::Box(b) => {
+            let x = (ctx.to_svg_x)(b.bbox.x);
+            let y = (ctx.to_svg_y)(b.bbox.y);
+            out.push_str(&svg_rect(
+                x,
+                y,
+                b.bbox.w,
+                b.bbox.h,
+                ctx.box_fill,
+                ctx.box_stroke,
+                ctx.box_sw,
+                ctx.box_radius,
+            ));
+        }
+        Primitive::Text(t) => {
+            let (font_family, font_size) = font_for_attr(&t.attrs, ctx.prefs);
+            let weight = weight_for_attr(&t.attrs, ctx.prefs);
+            let color = color_for_attr(&t.attrs, ctx.prefs);
+            let bg_color: Option<String> = if is_highlighted(&t.attrs) {
+                Some(hex_color(
+                    ctx.prefs.output.style.text.highlights.background_color,
+                ))
+            } else {
+                None
+            };
+            let baseline_svg = (ctx.to_svg_y)(t.bbox.y + t.bbox.h);
+            let cw = font_size * CHAR_WIDTH_RATIO;
+            let anchor_x = match t.align {
+                TextAlign::Left => (ctx.to_svg_x)(t.bbox.x),
+                TextAlign::Center => (ctx.to_svg_x)(t.bbox.x + t.bbox.w / 2.0),
+                TextAlign::Right => (ctx.to_svg_x)(t.bbox.x + t.bbox.w),
+            };
+            render_mixed_text(
+                out,
+                anchor_x,
+                baseline_svg,
+                &t.content,
+                &font_family,
+                font_size,
+                weight,
+                cw,
+                &color,
+                bg_color.as_deref(),
+                &t.align,
+            );
+        }
+        Primitive::Connector(c) => {
+            if c.child_points.is_empty() {
+                return;
+            }
+            let parent_svgs: Vec<(f64, f64)> = c
+                .parent_points
+                .iter()
+                .map(|p| ((ctx.to_svg_x)(p.x), (ctx.to_svg_y)(p.y)))
+                .collect();
+            let child_svgs: Vec<(f64, f64)> = c
+                .child_points
+                .iter()
+                .map(|p| ((ctx.to_svg_x)(p.x), (ctx.to_svg_y)(p.y)))
+                .collect();
+            let bar_y = (parent_svgs[0].1 + child_svgs[0].1) / 2.0;
+            let all_x: Vec<f64> = parent_svgs
+                .iter()
+                .map(|p| p.0)
+                .chain(child_svgs.iter().map(|p| p.0))
+                .collect();
+            let bar_x_min = all_x.iter().cloned().fold(f64::INFINITY, f64::min);
+            let bar_x_max = all_x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            for (px, py) in &parent_svgs {
+                out.push_str(&svg_line(
+                    *px,
+                    *py,
+                    *px,
+                    bar_y,
+                    ctx.conn_color,
+                    ctx.conn_width,
+                ));
+            }
+            if (bar_x_max - bar_x_min).abs() > 0.1 {
+                out.push_str(&svg_line(
+                    bar_x_min,
+                    bar_y,
+                    bar_x_max,
+                    bar_y,
+                    ctx.conn_color,
+                    ctx.conn_width,
+                ));
+            }
+            for (cx_svg, cy_svg) in &child_svgs {
+                out.push_str(&svg_line(
+                    *cx_svg,
+                    bar_y,
+                    *cx_svg,
+                    *cy_svg,
+                    ctx.conn_color,
+                    ctx.conn_width,
+                ));
+            }
+        }
+        Primitive::Group(g) => {
+            let id_attr = if g.id.is_empty() {
+                String::new()
+            } else {
+                format!(" id=\"{}\"", xml_escape(&g.id))
+            };
+            out.push_str(&format!("<g{id_attr}>\n"));
+            for child in &g.children {
+                render_bc_primitive(child, ctx, out);
+            }
+            out.push_str("</g>\n");
+        }
+        _ => {}
+    }
+}
+
 fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let scene = output.scene();
     if scene.primitives.is_empty() {
@@ -828,6 +960,20 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     FancyConnKind::IndivToSpouse => indiv_conns.push(conn),
                     FancyConnKind::SpouseToChildren => spouse_conns.push(conn),
                 }
+            }
+            crate::scene::Primitive::Group(_) => {
+                let ctx = BcSvgCtx {
+                    to_svg_x: &to_svg_x,
+                    to_svg_y: &to_svg_y,
+                    box_fill: &box_fill,
+                    box_stroke: &box_stroke,
+                    box_sw,
+                    box_radius,
+                    conn_color: &conn_color,
+                    conn_width,
+                    prefs,
+                };
+                render_bc_primitive(prim, &ctx, &mut out);
             }
         }
     }

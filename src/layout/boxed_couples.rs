@@ -881,8 +881,8 @@ fn spouse_id_from_family_bc<G>(
 pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::scene::Scene {
     use crate::format::{format_event, format_name};
     use crate::scene::{
-        BoxPrimitive, ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
-        TextPrimitive,
+        BoxPrimitive, ConnectorPrimitive, GroupPrimitive, Point, Primitive, Rect, Scene, TextAlign,
+        TextAttr, TextPrimitive,
     };
     // ── 4a: load highlights ──────────────────────────────────────────────────
     // ── 4a: load highlights ──────────────────────────────────────────────────
@@ -950,8 +950,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
     let bc = &prefs.layout.boxed_couples;
     let spacing = &prefs.output.style.spacing.boxed_couples;
 
-    let mut boxes: Vec<Primitive> = Vec::new();
-    let mut texts: Vec<Primitive> = Vec::new();
+    let mut box_groups: Vec<Primitive> = Vec::new();
 
     // ── 4e: per-individual primitives ───────────────────────────────────────
     for (ind_id, geo) in &placed {
@@ -967,9 +966,14 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             h: geo.height,
         };
         let is_highlighted = highlighted_ids.contains(*ind_id);
-        boxes.push(Primitive::Box(BoxPrimitive { bbox: box_bbox }));
+        let ind_id_trimmed = ind_id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
 
         let ind = &genrep.individuals[*ind_id];
+        let mut box_children: Vec<Primitive> = Vec::new();
+        box_children.push(Primitive::Box(BoxPrimitive { bbox: box_bbox }));
 
         // Layout sections
         let center_display_y = to_display_y(geo.y);
@@ -1004,7 +1008,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             let ind_cx = to_display_x(geo.x);
             let box_display_left = to_display_x(geo.x - geo.width / 2.0);
 
-            // Individual name (centered in wide box)
+            // Individual name (centered in wide box) — wrapped in name sub-group
             let name_baseline = ind_section_top + spacing.name_above + font_size;
             let name_bbox = Rect {
                 x: box_display_left,
@@ -1017,21 +1021,19 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 x: ind_cx - geo.width / 2.0,
                 ..name_bbox
             };
-            texts.push(Primitive::Text(TextPrimitive {
-                content: format_name(ind, prefs),
-                bbox: name_bbox,
-                align: TextAlign::Center,
-                attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+            box_children.push(Primitive::Group(GroupPrimitive {
+                id: format!("{ind_id_trimmed}-name"),
+                children: vec![Primitive::Text(TextPrimitive {
+                    content: format_name(ind, prefs),
+                    bbox: name_bbox,
+                    align: TextAlign::Center,
+                    attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+                })],
             }));
 
             if prefs.show.id {
-                let ind_id_text = ind
-                    .id
-                    .trim_start_matches('@')
-                    .trim_end_matches('@')
-                    .to_string();
-                texts.push(Primitive::Text(TextPrimitive {
-                    content: ind_id_text,
+                box_children.push(Primitive::Text(TextPrimitive {
+                    content: ind_id_trimmed.clone(),
                     bbox: Rect {
                         x: box_display_left + 2.0,
                         y: name_baseline - font_size,
@@ -1058,7 +1060,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         )
                     })
                     .unwrap_or_default();
-                texts.push(Primitive::Text(TextPrimitive {
+                box_children.push(Primitive::Text(TextPrimitive {
                     content: birth_content,
                     bbox: Rect {
                         x: ind_cx - geo.width / 2.0,
@@ -1084,7 +1086,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         )
                     })
                     .unwrap_or_default();
-                texts.push(Primitive::Text(TextPrimitive {
+                box_children.push(Primitive::Text(TextPrimitive {
                     content: death_content,
                     bbox: Rect {
                         x: ind_cx - geo.width / 2.0,
@@ -1102,8 +1104,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 if let Some(sp1_id) = spouse_id_from_family_bc(ind_id, fam1) {
                     if let Some(sp1) = genrep.individuals.get(&sp1_id) {
                         let id_x = to_display_x(geo.x - bc.box_width_2_spouses / 2.0) + 2.0;
-                        emit_spouse_primitives(
-                            &mut texts,
+                        box_children.extend(emit_spouse_primitives(
                             left_cx,
                             id_x,
                             marr_y,
@@ -1117,7 +1118,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             date_font_size,
                             spacing,
                             highlighted_ids.contains(sp1_id.as_str()),
-                        );
+                        ));
                     }
                 }
             }
@@ -1128,8 +1129,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     if let Some(sp2) = genrep.individuals.get(&sp2_id) {
                         let id_x =
                             to_display_x(geo.x + bc.box_width_2_spouses / 2.0 - bc.box_width) + 2.0;
-                        emit_spouse_primitives(
-                            &mut texts,
+                        box_children.extend(emit_spouse_primitives(
                             right_cx,
                             id_x,
                             marr_y,
@@ -1143,7 +1143,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             date_font_size,
                             spacing,
                             highlighted_ids.contains(sp2_id.as_str()),
-                        );
+                        ));
                     }
                 }
             }
@@ -1153,25 +1153,24 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             let box_display_left = to_display_x(geo.x - geo.width / 2.0);
             let name_baseline = ind_section_top + spacing.name_above + font_size;
 
-            texts.push(Primitive::Text(TextPrimitive {
-                content: format_name(ind, prefs),
-                bbox: Rect {
-                    x: section_cx - geo.width / 2.0,
-                    y: name_baseline - font_size,
-                    w: geo.width,
-                    h: font_size,
-                },
-                align: TextAlign::Center,
-                attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+            // Individual name — wrapped in name sub-group
+            box_children.push(Primitive::Group(GroupPrimitive {
+                id: format!("{ind_id_trimmed}-name"),
+                children: vec![Primitive::Text(TextPrimitive {
+                    content: format_name(ind, prefs),
+                    bbox: Rect {
+                        x: section_cx - geo.width / 2.0,
+                        y: name_baseline - font_size,
+                        w: geo.width,
+                        h: font_size,
+                    },
+                    align: TextAlign::Center,
+                    attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+                })],
             }));
             if prefs.show.id {
-                let ind_id_text = ind
-                    .id
-                    .trim_start_matches('@')
-                    .trim_end_matches('@')
-                    .to_string();
-                texts.push(Primitive::Text(TextPrimitive {
-                    content: ind_id_text,
+                box_children.push(Primitive::Text(TextPrimitive {
+                    content: ind_id_trimmed.clone(),
                     bbox: Rect {
                         x: box_display_left + 2.0,
                         y: name_baseline - font_size,
@@ -1198,7 +1197,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         )
                     })
                     .unwrap_or_default();
-                texts.push(Primitive::Text(TextPrimitive {
+                box_children.push(Primitive::Text(TextPrimitive {
                     content: birth_content,
                     bbox: Rect {
                         x: section_cx - geo.width / 2.0,
@@ -1224,7 +1223,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         )
                     })
                     .unwrap_or_default();
-                texts.push(Primitive::Text(TextPrimitive {
+                box_children.push(Primitive::Text(TextPrimitive {
                     content: death_content,
                     bbox: Rect {
                         x: section_cx - geo.width / 2.0,
@@ -1240,8 +1239,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             let spouse_emitted = if let Some((fam_id, fam)) = spouses.first() {
                 if let Some(sp_id) = spouse_id_from_family_bc(ind_id, fam) {
                     if let Some(sp) = genrep.individuals.get(&sp_id) {
-                        emit_spouse_primitives(
-                            &mut texts,
+                        box_children.extend(emit_spouse_primitives(
                             section_cx,
                             box_display_left + 2.0,
                             marr_y,
@@ -1255,7 +1253,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                             date_font_size,
                             spacing,
                             highlighted_ids.contains(sp_id.as_str()),
-                        );
+                        ));
                         true
                     } else {
                         false
@@ -1268,8 +1266,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             };
 
             if !spouse_emitted {
-                emit_blank_spouse_section(
-                    &mut texts,
+                box_children.extend(emit_blank_spouse_section(
                     section_cx,
                     marr_y,
                     sp_section_top,
@@ -1278,13 +1275,22 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                     font_size,
                     date_font_size,
                     spacing,
-                );
+                ));
             }
         }
+
+        // Double-wrap so that applications that strip one group level still see a group
+        box_groups.push(Primitive::Group(GroupPrimitive {
+            id: String::new(),
+            children: vec![Primitive::Group(GroupPrimitive {
+                id: ind_id_trimmed,
+                children: box_children,
+            })],
+        }));
     }
 
     // ── 4f: connector primitives ─────────────────────────────────────────────
-    let mut connectors: Vec<Primitive> = Vec::new();
+    let mut connector_groups: Vec<Primitive> = Vec::new();
 
     for (fam_id, fam) in &genrep.families {
         if !fam.in_scope {
@@ -1354,9 +1360,19 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             continue;
         }
 
-        connectors.push(Primitive::Connector(ConnectorPrimitive {
-            parent_points: vec![parent_point],
-            child_points,
+        let fam_id_trimmed = fam_id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
+        connector_groups.push(Primitive::Group(GroupPrimitive {
+            id: String::new(),
+            children: vec![Primitive::Group(GroupPrimitive {
+                id: format!("{fam_id_trimmed}-connectors"),
+                children: vec![Primitive::Connector(ConnectorPrimitive {
+                    parent_points: vec![parent_point],
+                    child_points,
+                })],
+            })],
         }));
     }
 
@@ -1382,9 +1398,8 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
         h: content_h,
     };
 
-    let mut primitives = boxes;
-    primitives.extend(texts);
-    primitives.extend(connectors);
+    let mut primitives = box_groups;
+    primitives.extend(connector_groups);
 
     Scene {
         primitives,
@@ -1397,7 +1412,6 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
 /// keeping all individuals in the same generation vertically aligned.
 #[allow(clippy::too_many_arguments)]
 fn emit_blank_spouse_section(
-    texts: &mut Vec<crate::scene::Primitive>,
     cx: f64,
     marr_y: f64,
     sp_section_top: f64,
@@ -1406,12 +1420,13 @@ fn emit_blank_spouse_section(
     font_size: f64,
     date_font_size: f64,
     spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
-) {
+) -> Vec<crate::scene::Primitive> {
     use crate::scene::{Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+    let mut result: Vec<Primitive> = Vec::new();
 
     // Blank marriage row — causes text backend to allocate blank-before + blank-after rows
     if prefs.show.marriage {
-        texts.push(Primitive::Text(TextPrimitive {
+        result.push(Primitive::Text(TextPrimitive {
             content: String::new(),
             bbox: Rect {
                 x: cx - section_width / 2.0,
@@ -1425,7 +1440,7 @@ fn emit_blank_spouse_section(
     }
 
     let sp_name_baseline = sp_section_top + spacing.name_above + font_size;
-    texts.push(Primitive::Text(TextPrimitive {
+    result.push(Primitive::Text(TextPrimitive {
         content: String::new(),
         bbox: Rect {
             x: cx - section_width / 2.0,
@@ -1440,7 +1455,7 @@ fn emit_blank_spouse_section(
     let mut y = sp_name_baseline;
     if prefs.show.birth {
         y += spacing.date_above + date_font_size;
-        texts.push(Primitive::Text(TextPrimitive {
+        result.push(Primitive::Text(TextPrimitive {
             content: String::new(),
             bbox: Rect {
                 x: cx - section_width / 2.0,
@@ -1454,7 +1469,7 @@ fn emit_blank_spouse_section(
     }
     if prefs.show.death {
         y += spacing.date_above + date_font_size;
-        texts.push(Primitive::Text(TextPrimitive {
+        result.push(Primitive::Text(TextPrimitive {
             content: String::new(),
             bbox: Rect {
                 x: cx - section_width / 2.0,
@@ -1466,12 +1481,13 @@ fn emit_blank_spouse_section(
             attrs: vec![TextAttr::DeathData],
         }));
     }
+    result
 }
 
-/// Emit text primitives for one spouse section of a boxed-couples box.
+/// Emit primitives for one spouse section of a boxed-couples box.
+/// Returns primitives grouped by semantic role (marriage sub-group, spouse name sub-group).
 #[allow(clippy::too_many_arguments)]
 fn emit_spouse_primitives(
-    texts: &mut Vec<crate::scene::Primitive>,
     cx: f64,
     id_x: f64,
     marr_y: f64,
@@ -1485,11 +1501,17 @@ fn emit_spouse_primitives(
     date_font_size: f64,
     spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
     is_highlighted: bool,
-) {
+) -> Vec<crate::scene::Primitive> {
     use crate::format::{format_event, format_name};
-    use crate::scene::{Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+    use crate::scene::{GroupPrimitive, Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+    let mut result: Vec<Primitive> = Vec::new();
 
-    // Marriage data (centered)
+    let fam_id_trimmed = fam_id
+        .trim_start_matches('@')
+        .trim_end_matches('@')
+        .to_string();
+
+    // Marriage data — wrapped in a sub-group so SVG editors see symbol + text as one unit
     if prefs.show.marriage {
         if let Some(marr) = &fam.marriage {
             if let Some(s) = format_event(
@@ -1498,29 +1520,28 @@ fn emit_spouse_primitives(
                 marr.place.as_deref(),
                 &prefs.format.date_qualifiers,
             ) {
-                texts.push(Primitive::Text(TextPrimitive {
-                    content: s,
-                    bbox: Rect {
-                        x: cx - section_width / 2.0,
-                        y: marr_y - date_font_size,
-                        w: section_width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::MarriageData],
+                result.push(Primitive::Group(GroupPrimitive {
+                    id: format!("{fam_id_trimmed}-marriage"),
+                    children: vec![Primitive::Text(TextPrimitive {
+                        content: s,
+                        bbox: Rect {
+                            x: cx - section_width / 2.0,
+                            y: marr_y - date_font_size,
+                            w: section_width,
+                            h: date_font_size,
+                        },
+                        align: TextAlign::Center,
+                        attrs: vec![TextAttr::MarriageData],
+                    })],
                 }));
             }
         }
     }
 
-    // Family ID
+    // Family ID (plain text, not inside marriage sub-group)
     if prefs.show.id {
-        let fam_id_text = fam_id
-            .trim_start_matches('@')
-            .trim_end_matches('@')
-            .to_string();
-        texts.push(Primitive::Text(TextPrimitive {
-            content: fam_id_text,
+        result.push(Primitive::Text(TextPrimitive {
+            content: fam_id_trimmed,
             bbox: Rect {
                 x: id_x,
                 y: marr_y - date_font_size,
@@ -1532,29 +1553,32 @@ fn emit_spouse_primitives(
         }));
     }
 
-    // Spouse name
+    // Spouse name — wrapped in a sub-group so SVG editors see name + sex symbol as one unit
+    let sp_id_trimmed = sp
+        .id
+        .trim_start_matches('@')
+        .trim_end_matches('@')
+        .to_string();
     let sp_name_baseline = sp_section_top + spacing.name_above + font_size;
-    texts.push(Primitive::Text(TextPrimitive {
-        content: format_name(sp, prefs),
-        bbox: Rect {
-            x: cx - section_width / 2.0,
-            y: sp_name_baseline - font_size,
-            w: section_width,
-            h: font_size,
-        },
-        align: TextAlign::Center,
-        attrs: crate::scene::label_attrs(TextAttr::SpouseName, is_highlighted),
+    result.push(Primitive::Group(GroupPrimitive {
+        id: format!("{sp_id_trimmed}-name"),
+        children: vec![Primitive::Text(TextPrimitive {
+            content: format_name(sp, prefs),
+            bbox: Rect {
+                x: cx - section_width / 2.0,
+                y: sp_name_baseline - font_size,
+                w: section_width,
+                h: font_size,
+            },
+            align: TextAlign::Center,
+            attrs: crate::scene::label_attrs(TextAttr::SpouseName, is_highlighted),
+        })],
     }));
 
-    // Spouse ID
+    // Spouse ID (plain text, not inside name sub-group)
     if prefs.show.id {
-        let sp_id_text = sp
-            .id
-            .trim_start_matches('@')
-            .trim_end_matches('@')
-            .to_string();
-        texts.push(Primitive::Text(TextPrimitive {
-            content: sp_id_text,
+        result.push(Primitive::Text(TextPrimitive {
+            content: sp_id_trimmed,
             bbox: Rect {
                 x: id_x,
                 y: sp_name_baseline - font_size,
@@ -1582,7 +1606,7 @@ fn emit_spouse_primitives(
                 )
             })
             .unwrap_or_default();
-        texts.push(Primitive::Text(TextPrimitive {
+        result.push(Primitive::Text(TextPrimitive {
             content: birth_content,
             bbox: Rect {
                 x: cx - section_width / 2.0,
@@ -1610,7 +1634,7 @@ fn emit_spouse_primitives(
                 )
             })
             .unwrap_or_default();
-        texts.push(Primitive::Text(TextPrimitive {
+        result.push(Primitive::Text(TextPrimitive {
             content: death_content,
             bbox: Rect {
                 x: cx - section_width / 2.0,
@@ -1622,6 +1646,8 @@ fn emit_spouse_primitives(
             attrs: vec![TextAttr::DeathData],
         }));
     }
+
+    result
 }
 
 #[cfg(test)]

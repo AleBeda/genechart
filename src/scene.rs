@@ -143,6 +143,15 @@ pub struct FancyConnector {
     pub stroke_width: f64,
     pub kind: FancyConnKind,
 }
+/// A group of primitives rendered as a single SVG `<g>` element.
+/// `id` is the SVG id attribute; empty string → no id attribute emitted.
+/// Children may themselves be `Primitive::Group` (enables double-wrapping).
+#[derive(Debug, Clone)]
+pub struct GroupPrimitive {
+    pub id: String,
+    pub children: Vec<Primitive>,
+}
+
 /// A wedge primitive (fan layout).
 #[derive(Debug, Clone)]
 pub struct WedgePrimitive {
@@ -169,6 +178,7 @@ pub enum Primitive {
     Wedge(WedgePrimitive),
     FancyText(FancyTextItem),
     FancyConn(FancyConnector),
+    Group(GroupPrimitive),
 }
 
 /// The complete IR emitted by a layout algorithm.

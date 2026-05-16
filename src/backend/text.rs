@@ -438,9 +438,11 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
     let total_cols = ((scene.canvas_bounds.w / char_width_px).ceil() as usize).max(1);
     let mut grid = TextGrid::new(total_rows, total_cols);
 
+    // Flatten Group primitives so the three render passes work on leaf primitives
+    let flat: Vec<&Primitive> = flatten_primitives(&scene.primitives);
+
     // Collect boxes in order
-    let boxes: Vec<&crate::scene::BoxPrimitive> = scene
-        .primitives
+    let boxes: Vec<&crate::scene::BoxPrimitive> = flat
         .iter()
         .filter_map(|p| {
             if let Primitive::Box(b) = p {
@@ -465,8 +467,7 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
         let box_col1 = display_to_col(bbox.x + bbox.w, char_width_px);
 
         // Find text primitives contained within this box
-        let texts: Vec<&crate::scene::TextPrimitive> = scene
-            .primitives
+        let texts: Vec<&crate::scene::TextPrimitive> = flat
             .iter()
             .filter_map(|p| {
                 if let Primitive::Text(t) = p {
@@ -561,7 +562,7 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
             .starts_with("bot");
     // root at bottom → children appear above root in display space → upward connectors
     let downward = !root_pos_bottom;
-    for prim in &scene.primitives {
+    for prim in &flat {
         if let Primitive::Connector(c) = prim {
             draw_connector_on_grid(&mut grid, c, line_height_px, char_width_px, downward);
         }
@@ -569,6 +570,19 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
 
     grid.to_rendered_string()
 }
+/// Recursively flatten `Primitive::Group` containers into a flat list of leaf primitives.
+fn flatten_primitives(prims: &[Primitive]) -> Vec<&Primitive> {
+    let mut result = Vec::new();
+    for p in prims {
+        if let Primitive::Group(g) = p {
+            result.extend(flatten_primitives(&g.children));
+        } else {
+            result.push(p);
+        }
+    }
+    result
+}
+
 fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> String {
     let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
     let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
@@ -632,8 +646,9 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
             Primitive::Box(_)
             | Primitive::Wedge(_)
             | Primitive::FancyText(_)
-            | Primitive::FancyConn(_) => {
-                // Not used in simple/boxed layout text output
+            | Primitive::FancyConn(_)
+            | Primitive::Group(_) => {
+                // Not used in simple layout text output; groups handled in render_boxed_couples_text
             }
         }
     }
