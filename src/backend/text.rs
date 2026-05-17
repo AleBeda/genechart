@@ -606,9 +606,34 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
         set
     };
 
+    // Pre-pass: write IndividualId primitives first so connectors from ancestor rows
+    // cannot displace them — IDs must always appear at column 0 (or fallback_shift).
+    for prim in &scene.primitives {
+        if let Primitive::Text(t) = prim {
+            if !t.attrs.contains(&TextAttr::IndividualId) {
+                continue;
+            }
+            let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+            let col = (t.bbox.x / char_width_px).round() as usize + fallback_shift;
+            let is_highlighted = t.attrs.contains(&TextAttr::Highlighted);
+            let content =
+                if is_highlighted && prefs.output.style.text.highlights.fallback == "uppercase" {
+                    t.content.to_uppercase()
+                } else {
+                    t.content.clone()
+                };
+            write_at_col(&mut lines[line_idx], col, &content, false);
+        }
+    }
+
+    // Main pass: all remaining primitives in emission order (preserving the
+    // interleaved connector / non-ID text ordering that the simple layout relies on).
     for prim in &scene.primitives {
         match prim {
             Primitive::Text(t) => {
+                if t.attrs.contains(&TextAttr::IndividualId) {
+                    continue; // already written in pre-pass
+                }
                 let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
                 let col = (t.bbox.x / char_width_px).round() as usize + fallback_shift;
                 let use_dot_leaders = dot_leaders
@@ -647,9 +672,7 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
             | Primitive::Wedge(_)
             | Primitive::FancyText(_)
             | Primitive::FancyConn(_)
-            | Primitive::Group(_) => {
-                // Not used in simple layout text output; groups handled in render_boxed_couples_text
-            }
+            | Primitive::Group(_) => {}
         }
     }
 
@@ -2197,6 +2220,77 @@ mod tests {
             "connector row between boxes should have │ (no gap); got: {:?}",
             lines[2]
         );
+    }
+
+    #[test]
+    fn test_ancestors_id_alignment() {
+        const GED: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME John /Ancestor/
+1 SEX M
+1 FAMS @F1@
+1 FAMC @F2@
+0 @I2@ INDI
+1 NAME Jane /Ancestress/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Paul /Child/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 @I4@ INDI
+1 NAME Grandpa /Ancestor/
+1 SEX M
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Grandma /Ancestor/
+1 SEX F
+1 FAMS @F2@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I1@
+0 TRLR
+";
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(3));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".into();
+        prefs.scope.direction = "ancestors".into();
+        prefs.layout.layout_type = "simple".into();
+        prefs.show.id = true;
+        prefs.show.generation_num = true;
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
+
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        // Every non-empty line must start with the ID at column 0 — not indented.
+        for line in output.lines() {
+            if line.is_empty() {
+                continue;
+            }
+            assert!(
+                line.starts_with('I'),
+                "ID line must start with 'I' at column 0 (not indented after │); got: {:?}",
+                line
+            );
+        }
     }
 
     #[test]
