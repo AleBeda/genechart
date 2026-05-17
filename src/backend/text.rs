@@ -658,7 +658,8 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
                 if c.parent_points.is_empty() || c.child_points.is_empty() {
                     continue;
                 }
-                let x_col = (c.parent_points[0].x / char_width_px).round() as usize;
+                let x_col =
+                    (c.parent_points[0].x / char_width_px).round() as usize + fallback_shift;
                 let y_start = (c.parent_points[0].y / line_height_px).round() as usize;
                 let y_end = (c.child_points[0].y / line_height_px).round() as usize;
                 for row in y_start..y_end {
@@ -2358,6 +2359,85 @@ mod tests {
             "connector row between boxes should have │ (no gap); got: {:?}",
             lines[2]
         );
+    }
+
+    #[test]
+    fn test_ancestors_connector_not_in_mother_row() {
+        // Regression for queue item #66: the connector below the root must NOT
+        // extend into the mother's own text row.  With vert_spacing=1 every pair
+        // of individuals has a gap row, so connector_below would draw │ in the
+        // mother's row with the old (mother_line+0.5)*lh formula.
+        const GED: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME John /Ancestor/
+1 SEX M
+1 FAMS @F1@
+1 FAMC @F2@
+0 @I2@ INDI
+1 NAME Jane /Ancestress/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Paul /Child/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 @I4@ INDI
+1 NAME Grandpa /Ancestor/
+1 SEX M
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Grandma /Ancestor/
+1 SEX F
+1 FAMS @F2@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I1@
+0 TRLR
+";
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(3));
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".into();
+        prefs.scope.direction = "ancestors".into();
+        prefs.layout.layout_type = "simple".into();
+        prefs.layout.simple.vert_spacing = 1; // creates gap rows between all individuals
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.generation_num = false;
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+        prefs.output.text.title = "".into();
+        prefs.output.text.copyright = "".into();
+
+        let layout_out = run_layout(&genrep, &prefs).unwrap();
+        let mut buf = Vec::<u8>::new();
+        TextRenderer.render(&layout_out, &prefs, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert!(
+            lines.iter().any(|l| l.contains('│')),
+            "expected at least one │ connector in ancestors output"
+        );
+
+        for line in &lines {
+            if line.contains("Jane") || line.contains("Ancestress") {
+                assert!(
+                    !line.contains('│'),
+                    "connector must not extend into mother's own row: {:?}",
+                    line
+                );
+            }
+        }
     }
 
     #[test]

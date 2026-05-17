@@ -572,15 +572,16 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }
 
         // ── Connector primitives (ancestors mode) ─────────────────────────────
-        // x aligned with the first character of the parent's name (parent is geo.generation + 1)
-        let x_conn =
-            id_col_px + (geo.indent as f64 + 1.0) * indent_px + gen_prefix_px(geo.generation + 1);
+        // x at the left edge of the parent's indent column (one step right of self's indent).
+        // Placing the connector before the gen-prefix keeps the gap to adjacent text equal to
+        // `indent` character widths, both in text and SVG output.
+        let x_conn = id_col_px + (geo.indent as f64 + 1.0) * indent_px;
 
         if !geo.connectors_above.is_empty() {
             let first = *geo.connectors_above.iter().min().unwrap();
             if first > 0 {
                 let father_line = first - 1;
-                let parent_y = (father_line as f64 + 0.5) * line_height_px;
+                let parent_y = (father_line as f64 + 1.0) * line_height_px;
                 let child_y = geo.line as f64 * line_height_px;
                 primitives.push(Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point {
@@ -599,7 +600,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             let last = *geo.connectors_below.iter().max().unwrap();
             let mother_line = last + 1;
             let parent_y = (geo.line as f64 + 1.0) * line_height_px;
-            let child_y = (mother_line as f64 + 0.5) * line_height_px;
+            let child_y = mother_line as f64 * line_height_px;
             primitives.push(Primitive::Connector(ConnectorPrimitive {
                 parent_points: vec![Point {
                     x: x_conn,
