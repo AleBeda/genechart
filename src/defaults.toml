@@ -56,6 +56,7 @@ child_gap = 10.0       # vertical gap between last spouse block and first child
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"
 path = "" # Output file path; empty means stdout
+noclobber = false # If true, refuse to overwrite an existing output file
 
 [output.paper]
 size = "A4" # Valid values: "A0"–"A5", "letter", "custom"

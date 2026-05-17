@@ -251,6 +251,10 @@ fn run() -> anyhow::Result<()> {
     let mut writer: Box<dyn std::io::Write> = if prefs.output.path.is_empty() {
         Box::new(std::io::stdout())
     } else {
+        let path = std::path::Path::new(&prefs.output.path);
+        if prefs.output.noclobber && path.exists() {
+            anyhow::bail!("output file already exists: {}", prefs.output.path);
+        }
         Box::new(std::fs::File::create(&prefs.output.path)?)
     };
 

@@ -169,6 +169,8 @@ pub struct OutputPrefs {
     #[serde(default)]
     pub path: String,
     #[serde(default)]
+    pub noclobber: bool,
+    #[serde(default)]
     pub paper: PaperPrefs,
     #[serde(default)]
     pub poster: PosterPrefs,
@@ -638,6 +640,12 @@ pub fn load_highlights(path: &Path) -> HashSet<String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn noclobber_defaults_false() {
+        let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
+        assert_eq!(prefs.output.noclobber, false);
+    }
 
     #[test]
     fn defaults_load() {
