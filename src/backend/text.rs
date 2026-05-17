@@ -659,9 +659,14 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
                     continue;
                 }
                 let x_col =
-                    (c.parent_points[0].x / char_width_px).round() as usize + fallback_shift;
-                let y_start = (c.parent_points[0].y / line_height_px).round() as usize;
-                let y_end = (c.child_points[0].y / line_height_px).round() as usize;
+                    (c.parent_points[0].x / char_width_px - 1.0).round() as usize + fallback_shift;
+                let y_parent = (c.parent_points[0].y / line_height_px).round() as usize;
+                let y_child = (c.child_points[0].y / line_height_px).round() as usize;
+                let (y_start, y_end) = if y_parent > y_child {
+                    (y_child, y_parent)
+                } else {
+                    (y_parent, y_child)
+                };
                 for row in y_start..y_end {
                     if row < total_lines {
                         pad_line_to(&mut lines[row], x_col + 1);
