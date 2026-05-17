@@ -12,7 +12,6 @@ highlights = "examples/kennedy/kennedy_highlights.txt"
 
 [output.text]
 title = "The Kennedy Family"
-copyright = ""
 
 [output.style.fonts]
 names = "Georgia 14"

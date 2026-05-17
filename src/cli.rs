@@ -58,6 +58,11 @@ pub struct Args {
     #[arg(long = "preff", value_name = "FILE")]
     pub preff: Option<PathBuf>,
 
+    /// Print the fully-resolved preferences as TOML and exit (no chart generated).
+    /// Combine with `-o` to see how the output type would be inferred.
+    #[arg(long = "prpref")]
+    pub prpref: bool,
+
     /// Enable structured trace output for the named component (repeatable).
     /// Known component: "prefs".  Bare --trace enables all components.
     #[arg(

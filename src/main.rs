@@ -11,6 +11,79 @@ mod util;
 
 use backend::Renderer as _;
 
+/// Return the current UTC time as "YYYY-MM-DD HH:MM:SS.mmm UTC".
+fn current_utc_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dur = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_ms = dur.as_millis() as i64;
+    let secs = total_ms / 1000;
+    let ms = (total_ms % 1000) as u32;
+    let day_secs = secs % 86400;
+    let days = secs / 86400;
+    let h = day_secs / 3600;
+    let m = (day_secs % 3600) / 60;
+    let s = day_secs % 60;
+    let (y, mo, d) = civil_from_days(days);
+    format!("{y:04}-{mo:02}-{d:02} {h:02}:{m:02}:{s:02}.{ms:03} UTC")
+}
+
+/// Convert days since Unix epoch (1970-01-01) to (year, month, day).
+/// Uses Howard Hinnant's algorithm.
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719468;
+    let era = if z >= 0 {
+        z / 146097
+    } else {
+        (z - 146096) / 146097
+    };
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let yr = yoe as i32 + (era as i32) * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let yr = if mo <= 2 { yr + 1 } else { yr };
+    (yr, mo, d)
+}
+
+/// Re-format known color fields in a serialized TOML string from decimal to hex literals.
+fn hexify_color_fields(toml: &str) -> String {
+    const COLOR_FIELDS: &[&str] = &[
+        "alignment_lines_color",
+        "background_color",
+        "background",
+        "border",
+        "color",
+        "dates",
+        "id",
+        "names",
+    ];
+    let mut out = String::with_capacity(toml.len());
+    for line in toml.lines() {
+        let trimmed = line.trim_start();
+        let mut converted = false;
+        for field in COLOR_FIELDS {
+            let prefix = format!("{field} = ");
+            if let Some(rest) = trimmed.strip_prefix(prefix.as_str()) {
+                if let Ok(n) = rest.parse::<i64>() {
+                    let indent = &line[..line.len() - trimmed.len()];
+                    out.push_str(&format!("{indent}{field} = 0x{n:X}\n"));
+                    converted = true;
+                    break;
+                }
+            }
+        }
+        if !converted {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 fn main() {
     if let Err(e) = run() {
         eprintln!("Error: {e:#}");
@@ -81,14 +154,17 @@ fn run() -> anyhow::Result<()> {
         }
 
         if let Some(out_path) = &args.output {
-            tracer.emit(
-                "prefs",
-                &format!(
-                    "PREF OVERRIDE KEY-VALUE output.path = \"{}\"",
-                    out_path.display()
-                ),
-            );
-            prefs.output.path = out_path.display().to_string();
+            // With --prpref, -o is used only to infer output.type; don't set the path.
+            if !args.prpref {
+                tracer.emit(
+                    "prefs",
+                    &format!(
+                        "PREF OVERRIDE KEY-VALUE output.path = \"{}\"",
+                        out_path.display()
+                    ),
+                );
+                prefs.output.path = out_path.display().to_string();
+            }
         }
 
         if let Some(root) = &args.root {
@@ -142,10 +218,14 @@ fn run() -> anyhow::Result<()> {
     prefs.files.gedcom = gedcom_path.display().to_string();
 
     // 7. Dump mode: print merged prefs and exit
-    if dump_mode {
+    if args.prpref || dump_mode {
+        prefs.title = Some(format!(
+            "Resolved preferences — {}",
+            current_utc_timestamp()
+        ));
         let serialized = toml::to_string_pretty(&prefs)
             .unwrap_or_else(|_| toml::to_string(&prefs).unwrap_or_default());
-        print!("{serialized}");
+        print!("{}", hexify_color_fields(&serialized));
         return Ok(());
     }
 

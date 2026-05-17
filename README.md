@@ -36,6 +36,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `-o` / `--output <FILE>` | Output file (extension infers type if no `--text`/`--svg`/`--pdf` flag) |
 | `--pref '<key name="val">'` | Override any preference inline (TOML syntax, repeatable) |
 | `--pref` | Bare `--pref` (no value): dump merged preferences to stdout and exit |
+| `--prpref` | Print the fully-resolved preferences as TOML and exit; combine with `-o` to see type inference |
 | `--preff <FILE>` | Load an explicit TOML preferences file |
 | `--trace [COMPONENT]` | Print structured diagnostics to stderr; bare `--trace` traces all |
 | `-h` / `--help` | Show help |
@@ -58,6 +59,9 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 # Dump merged preferences (useful for debugging)
 genechart family.ged --pref
+
+# Print resolved preferences for SVG output (no chart generated)
+genechart family.ged -r I1 --prpref -o chart.svg
 
 # Trace how preferences are resolved across all sources
 genechart family.ged -r I1 -g 5 --trace prefs 2>&1 | head
