@@ -483,6 +483,92 @@ fn compact_pass(
     }
 }
 
+/// Bottom-up re-centering pass: corrects parent x after `compact_pass` shifts children.
+///
+/// `compact_siblings` can shift a left child rightward into a gap, changing the
+/// midpoint of the sibling group without updating the already-stored parent x.
+/// This pass recurses children-first (post-order) so that by the time a parent
+/// is re-centered its children already have their final positions.
+///
+/// The centering formula mirrors [`place_descendants`]:
+/// - 1-spouse: median child for odd n; average of two middle children for even n.
+/// - 2-spouse: derived from `children1.last()` via `conn_out1_offset`, or
+///   `children2.first()` via `conn_out2_offset` when `children1` is empty.
+fn recenter_pass(
+    ind_id: &str,
+    genrep: &Genrep,
+    box_w: f64,
+    box_w2: f64,
+    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+) {
+    // Use spouses_of (already scope-filtered, sorted by date) and take at most 2.
+    // prune_spouses would give the same result for ≤2 spouses; any >2-spouse
+    // warning was already emitted during place_descendants.
+    let spouses: Vec<String> = spouses_of(ind_id, genrep).into_iter().take(2).collect();
+
+    if spouses.len() >= 2 {
+        let children1: Vec<String> = children_with_spouse(ind_id, &spouses[0], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children2: Vec<String> = children_with_spouse(ind_id, &spouses[1], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+
+        for child_id in children1.iter().chain(children2.iter()) {
+            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        }
+
+        if children1.is_empty() && children2.is_empty() {
+            return;
+        }
+
+        let conn_out1_offset = -(box_w2 / 2.0 - box_w / 2.0);
+        let conn_out2_offset = box_w2 / 2.0 - box_w / 2.0;
+        let new_x = if !children1.is_empty() {
+            get_x_of(children1.last().unwrap(), out) - conn_out1_offset
+        } else {
+            get_x_of(children2.first().unwrap(), out) - conn_out2_offset
+        };
+
+        if let Some(ind) = out.get_mut(ind_id) {
+            if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                g.x = new_x;
+                g.conn_in_x = new_x;
+            }
+        }
+    } else {
+        let all_children: Vec<String> = spouses
+            .iter()
+            .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+
+        if all_children.is_empty() {
+            return;
+        }
+
+        for child_id in &all_children {
+            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        }
+
+        let n = all_children.len();
+        let new_x = if n % 2 == 1 {
+            get_x_of(&all_children[n / 2], out)
+        } else {
+            (get_x_of(&all_children[n / 2 - 1], out) + get_x_of(&all_children[n / 2], out)) / 2.0
+        };
+
+        if let Some(ind) = out.get_mut(ind_id) {
+            if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                g.x = new_x;
+                g.conn_in_x = new_x;
+            }
+        }
+    }
+}
+
 /// Recursively places `ind_id` and all its in-scope descendants into `out`.
 ///
 /// ## Parameters
@@ -792,6 +878,7 @@ impl Layout for BoxedCouplesLayout {
                 gap_w,
                 0,
             );
+            recenter_pass(root_id, genrep, box_w, box_w2, &mut individuals);
         }
 
         // Add in-scope spouses of placed individuals to the output,
