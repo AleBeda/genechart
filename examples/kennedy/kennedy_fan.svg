@@ -9,13 +9,6 @@
     <text x="-66.1" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 29 May 1917, Brookline, MA</text>
     <text x="-58.5" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 22 Nov 1963, Dallas, TX</text>
   </g>
-  <path d="M 660.0 443.2 A 250.0 250.0 0 0 0 410.0 693.2 L 530.0 693.2 A 130.0 130.0 0 0 1 660.0 563.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(534.1,567.4) rotate(-45.0)">
-    <text x="-80.6" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Joseph Patrick Kennedy </text>
-    <text x="72.2" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
-    <text x="-60.3" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Sep 1888, Boston, MA</text>
-    <text x="-74.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 Nov 1969, Hyannis Port, MA</text>
-  </g>
   <path d="M 910.0 693.2 A 250.0 250.0 0 0 0 660.0 443.2 L 660.0 563.2 A 130.0 130.0 0 0 1 790.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(785.9,567.4) rotate(45.0)">
     <text x="-84.5" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Rose Elizabeth Fitzgerald </text>
@@ -23,17 +16,12 @@
     <text x="-83.1" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 22 Jul 1890, North End, Boston, MA</text>
     <text x="-73.5" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 22 Jan 1995, Hyannis Port, MA</text>
   </g>
-  <path d="M 1040.0 693.2 A 380.0 380.0 0 0 0 928.7 424.5 L 843.8 509.4 A 260.0 260.0 0 0 1 920.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(944.6,575.4) rotate(67.5)">
-    <text x="-82.5" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Josephine Hannon </text>
-    <text x="74.1" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
-  </g>
-  <path d="M 391.3 424.5 A 380.0 380.0 0 0 0 280.0 693.2 L 400.0 693.2 A 260.0 260.0 0 0 1 476.2 509.4 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(375.4,575.4) rotate(-67.5)">
-    <text x="-80.6" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Patrick Joseph Kennedy </text>
+  <path d="M 660.0 443.2 A 250.0 250.0 0 0 0 410.0 693.2 L 530.0 693.2 A 130.0 130.0 0 0 1 660.0 563.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(534.1,567.4) rotate(-45.0)">
+    <text x="-80.6" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Joseph Patrick Kennedy </text>
     <text x="72.2" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
-    <text x="-59.5" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 14 Jan 1858, Boston, MA</text>
-    <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 May 1929</text>
+    <text x="-60.3" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Sep 1888, Boston, MA</text>
+    <text x="-74.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 Nov 1969, Hyannis Port, MA</text>
   </g>
   <path d="M 660.0 313.2 A 380.0 380.0 0 0 0 391.3 424.5 L 476.2 509.4 A 260.0 260.0 0 0 1 660.0 433.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(542.1,408.7) rotate(-22.5)">
@@ -42,6 +30,13 @@
     <text x="-31.7" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 06 Dec 1857</text>
     <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 06 May 1923</text>
   </g>
+  <path d="M 391.3 424.5 A 380.0 380.0 0 0 0 280.0 693.2 L 400.0 693.2 A 260.0 260.0 0 0 1 476.2 509.4 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(375.4,575.4) rotate(-67.5)">
+    <text x="-80.6" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Patrick Joseph Kennedy </text>
+    <text x="72.2" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-59.5" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 14 Jan 1858, Boston, MA</text>
+    <text x="-33.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 18 May 1929</text>
+  </g>
   <path d="M 928.7 424.5 A 380.0 380.0 0 0 0 660.0 313.2 L 660.0 433.2 A 260.0 260.0 0 0 1 843.8 509.4 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(777.9,408.7) rotate(22.5)">
     <text x="-79.0" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">John Francis Fitzgerald </text>
@@ -49,12 +44,10 @@
     <text x="-60.0" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 11 Feb 1863, Boston, MA</text>
     <text x="-60.2" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 02 Oct 1950, Boston, MA</text>
   </g>
-  <path d="M 68.7 448.3 A 640.0 640.0 0 0 0 20.0 693.2 L 270.0 693.2 A 390.0 390.0 0 0 1 299.7 544.0 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <g transform="translate(154.9,592.8) rotate(11.2)">
-    <text x="-57.0" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Patrick Kennedy </text>
-    <text x="48.6" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
-    <text x="-82.8" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 16 Feb 1823, Dunganstown, Ireland</text>
-    <text x="-61.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 22 Nov 1858, Boston, MA</text>
+  <path d="M 1040.0 693.2 A 380.0 380.0 0 0 0 928.7 424.5 L 843.8 509.4 A 260.0 260.0 0 0 1 920.0 693.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(944.6,575.4) rotate(67.5)">
+    <text x="-82.5" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Josephine Hannon </text>
+    <text x="74.1" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
   </g>
   <path d="M 207.5 240.7 A 640.0 640.0 0 0 0 68.7 448.3 L 299.7 544.0 A 390.0 390.0 0 0 1 384.2 417.5 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
   <g transform="translate(231.8,407.1) rotate(33.8)">
@@ -62,5 +55,12 @@
     <text x="47.0" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
     <text x="-14.5" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 1821</text>
     <text x="-61.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 20 Dec 1888, Boston, MA</text>
+  </g>
+  <path d="M 68.7 448.3 A 640.0 640.0 0 0 0 20.0 693.2 L 270.0 693.2 A 390.0 390.0 0 0 1 299.7 544.0 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(154.9,592.8) rotate(11.2)">
+    <text x="-57.0" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Patrick Kennedy </text>
+    <text x="48.6" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-82.8" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* 16 Feb 1823, Dunganstown, Ireland</text>
+    <text x="-61.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 22 Nov 1858, Boston, MA</text>
   </g>
 </svg>

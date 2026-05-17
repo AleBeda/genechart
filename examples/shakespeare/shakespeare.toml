@@ -1,0 +1,30 @@
+# Preferences for the Shakespeare family example.
+# Auto-loaded by genechart alongside shakespeare.ged (same basename).
+# Run from the project root: genechart examples/shakespeare/shakespeare.ged
+
+[scope]
+root = "I0001"            # William Shakespeare — main subject
+generations = 3
+direction = "descendants"
+
+[files]
+highlights = "examples/shakespeare/shakespeare_highlights.txt"
+
+[output.text]
+title = "The Shakespeare Family"
+copyright = ""
+
+[output.style.fonts]
+names = "Georgia 14"
+dates = "Arial 10"
+
+[output.style.connectors]
+width = 1.0
+
+[layout.boxed_couples]
+box_width = 300.0
+box_width_2_spouses = 640.0
+
+[layout.fan]
+ring_height = 140
+outer_ring_height = 280

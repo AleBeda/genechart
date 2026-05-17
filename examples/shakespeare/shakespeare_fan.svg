@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="513" viewBox="0 0 920.0 513.2">
+  <text x="20.0" y="44.0" font-family="Georgia" font-size="24" font-weight="normal" fill="black" xml:space="preserve">The Shakespeare Family</text>
+  <path d="M 460.0 493.2 L 600.0 493.2 A 140.0 140.0 0 1 0 320.0 493.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(460.0,437.2) rotate(0.0)">
+    <rect x="-74.9" y="-21.4" width="149.7" height="18.8" fill="#FFFF66"/>
+    <text x="-71.1" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="#0000DD" dominant-baseline="middle" xml:space="preserve">William Shakespeare </text>
+    <text x="62.7" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="#0000DD" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-81.3" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* &lt;23 Apr 1564, Stratford-upon-Avon</text>
+    <text x="-79.4" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 23 Apr 1616, Stratford-upon-Avon</text>
+  </g>
+  <path d="M 460.0 203.2 A 290.0 290.0 0 0 0 170.0 493.2 L 310.0 493.2 A 150.0 150.0 0 0 1 460.0 343.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(314.3,347.6) rotate(-45.0)">
+    <text x="-62.0" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">John Shakespeare </text>
+    <text x="53.6" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-17.4" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* ~1531</text>
+    <text x="-32.7" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× 07 Sep 1601</text>
+  </g>
+  <path d="M 750.0 493.2 A 290.0 290.0 0 0 0 460.0 203.2 L 460.0 343.2 A 150.0 150.0 0 0 1 610.0 493.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(605.7,347.6) rotate(45.0)">
+    <text x="-43.0" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Mary Arden </text>
+    <text x="34.6" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
+    <text x="-17.4" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* ~1537</text>
+    <text x="-25.7" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× Sep 1608</text>
+  </g>
+  <path d="M 148.9 182.1 A 440.0 440.0 0 0 0 20.0 493.2 L 160.0 493.2 A 300.0 300.0 0 0 1 247.9 281.1 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(131.1,357.0) rotate(-67.5)">
+    <text x="-71.1" y="-12.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Richard Shakespeare </text>
+    <text x="62.7" y="-12.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-17.4" y="2.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">* ~1490</text>
+    <text x="-35.3" y="14.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× &lt;10 Feb 1561</text>
+  </g>
+  <path d="M 460.0 53.2 A 440.0 440.0 0 0 0 148.9 182.1 L 247.9 281.1 A 300.0 300.0 0 0 1 460.0 193.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(323.8,164.3) rotate(-22.5)">
+    <text x="-36.3" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Unknown </text>
+    <text x="27.9" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
+  </g>
+  <path d="M 771.1 182.1 A 440.0 440.0 0 0 0 460.0 53.2 L 460.0 193.2 A 300.0 300.0 0 0 1 672.1 281.1 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(596.2,164.3) rotate(22.5)">
+    <text x="-48.0" y="-6.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Robert Arden </text>
+    <text x="39.6" y="-6.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♂</text>
+    <text x="-25.7" y="8.4" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" fill="black" dominant-baseline="middle" xml:space="preserve">× Dec 1556</text>
+  </g>
+  <path d="M 900.0 493.2 A 440.0 440.0 0 0 0 771.1 182.1 L 672.1 281.1 A 300.0 300.0 0 0 1 760.0 493.2 Z" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <g transform="translate(788.9,357.0) rotate(67.5)">
+    <text x="-47.8" y="0.0" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">Agnes Webbe </text>
+    <text x="39.4" y="0.0" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" fill="black" dominant-baseline="middle" xml:space="preserve">♀</text>
+  </g>
+</svg>
