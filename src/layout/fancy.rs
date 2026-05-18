@@ -11,8 +11,8 @@ use crate::layout::common::{
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use crate::scene::{
-    FancyConnKind, FancyConnector, FancyLine, FancyTextItem, Primitive, Rect, Scene, TextAttr,
-    label_attrs,
+    FancyConnKind, FancyConnector, FancyLine, FancyTextItem, GroupPrimitive, Primitive, Rect,
+    Scene, TextAttr, label_attrs,
 };
 use crate::text_metrics::{CHAR_WIDTH_RATIO, FONT_SIZE, parsed_font};
 use crate::util::matches_direction;
@@ -44,9 +44,13 @@ impl Layout for FancyLayout {
 
     fn compute(&self, genrep: &Genrep, prefs: &Prefs) -> Result<Genrep<FancyGeo>> {
         let dir = prefs.scope.direction.to_lowercase();
-        if !matches_direction(&dir, "descendants") {
-            eprintln!("warning: fancy layout requires direction=descendants");
-            bail!("fancy layout requires direction=descendants");
+        let is_desc = matches_direction(&dir, "descendants");
+        let is_anc = matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree");
+        if !is_desc && !is_anc {
+            eprintln!(
+                "warning: fancy layout requires direction=descendants or direction=ancestors"
+            );
+            bail!("fancy layout: unsupported direction {dir:?}");
         }
 
         let root_opt = resolve_root_id(genrep, prefs);
@@ -62,7 +66,11 @@ impl Layout for FancyLayout {
         };
 
         let mut out: HashMap<String, Individual<FancyGeo>> = HashMap::new();
-        place_subtree(&root_id, 0.0, 0.0, 1, true, prefs, genrep, &mut out);
+        if is_desc {
+            place_subtree(&root_id, 0.0, 0.0, 1, true, prefs, genrep, &mut out);
+        } else {
+            place_anc_subtree(&root_id, 0.0, 0.0, 1, prefs, genrep, &mut out);
+        }
 
         Ok(Genrep {
             individuals: out,
@@ -212,7 +220,104 @@ fn place_subtree(
     y_cursor - y_start
 }
 
+fn place_anc_subtree(
+    id: &str,
+    x_gen: f64,
+    y_start: f64,
+    generation: u32,
+    prefs: &Prefs,
+    genrep: &Genrep,
+    out: &mut HashMap<String, Individual<FancyGeo>>,
+) -> (f64, f64) {
+    let ind = match genrep.get_individual(id) {
+        Some(i) if i.in_scope => i,
+        _ => return (y_start, 0.0),
+    };
+
+    let max_gen = prefs.scope.generations;
+    let gen_width = prefs.layout.fancy.gen_width;
+    let anc_gap = prefs.layout.fancy.anc_gap;
+    let inh = ind_height(prefs);
+    let next_x = x_gen + gen_width + CHILD_TEXT_GAP;
+
+    let parent_fam = if generation < max_gen {
+        ind.famc.first().and_then(|fid| genrep.get_family(fid))
+    } else {
+        None
+    };
+
+    let self_y;
+    let total_h;
+
+    if let Some(fam) = parent_fam {
+        let father_id = fam
+            .husband_id
+            .as_ref()
+            .filter(|fid| genrep.get_individual(fid).map_or(false, |i| i.in_scope));
+        let mother_id = fam
+            .wife_id
+            .as_ref()
+            .filter(|mid| genrep.get_individual(mid).map_or(false, |i| i.in_scope));
+
+        let mut y_cursor = y_start;
+        let mut father_y: Option<f64> = None;
+        let mut mother_y: Option<f64> = None;
+
+        if let Some(fid) = father_id {
+            let (fy, fh) =
+                place_anc_subtree(fid, next_x, y_cursor, generation + 1, prefs, genrep, out);
+            father_y = Some(fy);
+            y_cursor += fh;
+        }
+
+        if father_id.is_some() && mother_id.is_some() {
+            y_cursor += inh + anc_gap;
+        }
+
+        if let Some(mid) = mother_id {
+            let (my, mh) =
+                place_anc_subtree(mid, next_x, y_cursor, generation + 1, prefs, genrep, out);
+            mother_y = Some(my);
+            y_cursor += mh;
+        }
+
+        self_y = match (father_y, mother_y) {
+            (Some(fy), Some(my)) => (fy + my) / 2.0,
+            (Some(fy), None) => fy,
+            (None, Some(my)) => my,
+            (None, None) => y_start,
+        };
+        total_h = (y_cursor - y_start).max(inh);
+    } else {
+        self_y = y_start;
+        total_h = inh;
+    }
+
+    out.insert(
+        id.to_string(),
+        copy_individual(
+            ind,
+            Some(FancyGeo {
+                x: x_gen,
+                y: self_y,
+                generation,
+                is_main: true,
+            }),
+        ),
+    );
+    (self_y, total_h)
+}
+
 pub fn emit_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
+    let dir = prefs.scope.direction.to_lowercase();
+    if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
+        emit_anc_scene(genrep, prefs)
+    } else {
+        emit_desc_scene(genrep, prefs)
+    }
+}
+
+fn emit_desc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let highlighted_ids = highlight_set(prefs);
     let conn_color = hex_color_fancy(prefs.output.style.connectors.border);
     let conn_width = if prefs.output.style.connectors.width > 0.0 {
@@ -288,11 +393,371 @@ pub fn emit_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     }
 }
 
+fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
+    let highlighted_ids = highlight_set(prefs);
+    let conn_color = hex_color_fancy(prefs.output.style.connectors.border);
+    let conn_width = prefs.output.style.connectors.width.max(0.1);
+
+    let n_lh = name_lh(prefs);
+    let d_lh = data_lh(prefs);
+    let nfs = name_font_size(prefs);
+
+    let root_id = {
+        let r = prefs.scope.root.trim();
+        if !r.is_empty() && genrep.individuals.contains_key(r) {
+            r.to_string()
+        } else {
+            match genrep.first_individual_id.as_deref() {
+                Some(id) if !id.is_empty() => id.to_string(),
+                _ => {
+                    return Scene {
+                        primitives: vec![],
+                        canvas_bounds: Rect {
+                            x: 0.0,
+                            y: 0.0,
+                            w: 0.0,
+                            h: 0.0,
+                        },
+                    };
+                }
+            }
+        }
+    };
+
+    let mut primitives: Vec<Primitive> = Vec::new();
+    let mut anc_conns: Vec<FancyConnector> = Vec::new();
+    let mut max_x: f64 = 0.0;
+    let mut max_y: f64 = 0.0;
+
+    emit_anc_subtree(
+        &root_id,
+        genrep,
+        prefs,
+        &highlighted_ids,
+        &conn_color,
+        conn_width,
+        n_lh,
+        d_lh,
+        nfs,
+        &mut primitives,
+        &mut anc_conns,
+        &mut max_x,
+        &mut max_y,
+    );
+
+    for c in anc_conns {
+        primitives.push(Primitive::FancyConn(c));
+    }
+
+    Scene {
+        primitives,
+        canvas_bounds: Rect {
+            x: 0.0,
+            y: 0.0,
+            w: max_x,
+            h: max_y,
+        },
+    }
+}
+
 fn hex_color_fancy(val: i64) -> String {
     let r = (val >> 8) & 0xF;
     let g = (val >> 4) & 0xF;
     let b = val & 0xF;
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_anc_subtree(
+    id: &str,
+    genrep: &Genrep<FancyGeo>,
+    prefs: &Prefs,
+    highlighted_ids: &HashSet<String>,
+    conn_color: &str,
+    conn_width: f64,
+    n_lh: f64,
+    d_lh: f64,
+    nfs: f64,
+    primitives: &mut Vec<Primitive>,
+    anc_conns: &mut Vec<FancyConnector>,
+    max_x: &mut f64,
+    max_y: &mut f64,
+) {
+    let ind = match genrep.get_individual(id) {
+        Some(i) if i.in_scope => i,
+        _ => return,
+    };
+    let geo = match ind.geo.as_ref() {
+        Some(g) => g,
+        None => return,
+    };
+
+    let highlighted = highlighted_ids.contains(&ind.id);
+    let base_name = format_name(ind, prefs);
+    let name_text = if prefs.show.generation_num {
+        format!("{}. {}", geo.generation, base_name)
+    } else {
+        base_name.clone()
+    };
+
+    let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
+    let is_desc_bold = matches!(
+        prefs.output.style.fonts.descendant.trim(),
+        "bold" | "bolder"
+    );
+    let (data_family, dfs) = {
+        let (fam, sz) = parsed_font(&prefs.output.style.fonts.dates);
+        let fam = if fam.is_empty() {
+            name_family.clone()
+        } else {
+            fam
+        };
+        let sz = if sz <= 0.0 { nfs } else { sz };
+        (fam, sz)
+    };
+    let (id_family, id_sz) = {
+        let (fam, sz) = parsed_font(&prefs.output.style.fonts.id);
+        let fam = if fam.is_empty() {
+            "Courier New, monospace".to_string()
+        } else {
+            fam
+        };
+        let sz = if sz <= 0.0 { 8.0 } else { sz };
+        (fam, sz)
+    };
+    let name_text_w =
+        crate::backend::font_metrics::measure_text_w(&name_text, &name_family, nfs, is_desc_bold)
+            .unwrap_or_else(|| name_text.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO);
+    let gen_prefix_w = if prefs.show.generation_num {
+        let prefix = format!("{}. ", geo.generation);
+        crate::backend::font_metrics::measure_text_w(&prefix, &name_family, nfs, is_desc_bold)
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let ind_data_x = geo.x + gen_prefix_w + IND_DATA_OFFSET;
+
+    // ── Build text lines ─────────────────────────────────────────────────────
+    let mut lines: Vec<FancyLine> = Vec::new();
+    lines.push(FancyLine {
+        x: geo.x,
+        y: geo.y,
+        text: name_text.clone(),
+        attrs: label_attrs(TextAttr::IndividualName, highlighted),
+    });
+    if prefs.show.id {
+        let ind_id_str = ind
+            .id
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .to_string();
+        lines.push(FancyLine {
+            x: geo.x + name_text_w + 4.0,
+            y: geo.y,
+            text: ind_id_str,
+            attrs: vec![TextAttr::IndividualId],
+        });
+    }
+    let mut y_off = n_lh;
+    if prefs.show.birth {
+        if let Some(ev) = &ind.birth {
+            if let Some(s) = format_event(
+                &prefs.format.birth,
+                ev.date.as_ref(),
+                ev.place.as_deref(),
+                &prefs.format.date_qualifiers,
+            ) {
+                lines.push(FancyLine {
+                    x: ind_data_x,
+                    y: geo.y + y_off,
+                    text: s,
+                    attrs: vec![TextAttr::BirthData],
+                });
+            }
+        }
+        y_off += d_lh;
+    }
+    if prefs.show.death {
+        if let Some(ev) = &ind.death {
+            if let Some(s) = format_event(
+                &prefs.format.death,
+                ev.date.as_ref(),
+                ev.place.as_deref(),
+                &prefs.format.date_qualifiers,
+            ) {
+                lines.push(FancyLine {
+                    x: ind_data_x,
+                    y: geo.y + y_off,
+                    text: s,
+                    attrs: vec![TextAttr::DeathData],
+                });
+            }
+        }
+    }
+
+    // Update canvas bounds.
+    for line in &lines {
+        let is_name = line.attrs.contains(&TextAttr::IndividualName);
+        let is_id = line.attrs.contains(&TextAttr::IndividualId);
+        let (mfam, msz, mbold) = if is_id {
+            (id_family.as_str(), id_sz, false)
+        } else if is_name {
+            (name_family.as_str(), nfs, is_desc_bold)
+        } else {
+            (data_family.as_str(), dfs, false)
+        };
+        let w = crate::backend::font_metrics::measure_text_w(&line.text, mfam, msz, mbold)
+            .unwrap_or_else(|| line.text.chars().count() as f64 * msz * CHAR_WIDTH_RATIO);
+        *max_x = f64::max(*max_x, line.x + w);
+    }
+    *max_y = f64::max(*max_y, geo.y + ind_height(prefs));
+
+    // ── Emit text group ──────────────────────────────────────────────────────
+    let group_id = format!(
+        "anc-text-{}",
+        ind.id.trim_start_matches('@').trim_end_matches('@')
+    );
+    primitives.push(Primitive::Group(GroupPrimitive {
+        id: group_id,
+        children: vec![Primitive::FancyText(FancyTextItem {
+            lines,
+            individual_id: ind.id.clone(),
+            highlighted,
+        })],
+    }));
+
+    // ── Build connector to parents ───────────────────────────────────────────
+    let gen_width = prefs.layout.fancy.gen_width;
+    let parent_fam = ind.famc.first().and_then(|fid| genrep.get_family(fid));
+
+    if let Some(fam) = parent_fam {
+        let father = fam
+            .husband_id
+            .as_ref()
+            .and_then(|fid| genrep.get_individual(fid).filter(|i| i.in_scope));
+        let mother = fam
+            .wife_id
+            .as_ref()
+            .and_then(|mid| genrep.get_individual(mid).filter(|i| i.in_scope));
+
+        let father_geo = father.and_then(|f| f.geo.as_ref());
+        let mother_geo = mother.and_then(|m| m.geo.as_ref());
+
+        if father_geo.is_some() || mother_geo.is_some() {
+            let name_end_x = geo.x + name_text_w;
+            let parent_conn_end_x = geo.x + gen_width;
+            let x_spine = parent_conn_end_x - CHILD_SHORT_H - ARC_R;
+            let child_mid_y = geo.y + n_lh / 2.0;
+
+            let mut d = String::new();
+
+            match (father_geo, mother_geo) {
+                (Some(fg), Some(mg)) => {
+                    let father_mid_y = fg.y + n_lh / 2.0;
+                    let mother_mid_y = mg.y + n_lh / 2.0;
+
+                    // Horizontal from name end to spine junction.
+                    d.push_str(&format!(
+                        "M {:.1} {:.1} L {:.1} {:.1}",
+                        name_end_x, child_mid_y, x_spine, child_mid_y
+                    ));
+
+                    // Upper branch to father (child_mid_y > father_mid_y).
+                    if child_mid_y - father_mid_y > ARC_R {
+                        d.push_str(&format!(
+                            " M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 1 {:.1} {:.1} L {:.1} {:.1}",
+                            x_spine, child_mid_y,
+                            x_spine, father_mid_y + ARC_R,
+                            x_spine + ARC_R, father_mid_y,
+                            parent_conn_end_x, father_mid_y,
+                        ));
+                    } else {
+                        d.push_str(&format!(
+                            " M {:.1} {:.1} L {:.1} {:.1}",
+                            x_spine, child_mid_y, parent_conn_end_x, father_mid_y,
+                        ));
+                    }
+
+                    // Lower branch to mother (child_mid_y < mother_mid_y).
+                    if mother_mid_y - child_mid_y > ARC_R {
+                        d.push_str(&format!(
+                            " M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {:.1} L {:.1} {:.1}",
+                            x_spine, child_mid_y,
+                            x_spine, mother_mid_y - ARC_R,
+                            x_spine + ARC_R, mother_mid_y,
+                            parent_conn_end_x, mother_mid_y,
+                        ));
+                    } else {
+                        d.push_str(&format!(
+                            " M {:.1} {:.1} L {:.1} {:.1}",
+                            x_spine, child_mid_y, parent_conn_end_x, mother_mid_y,
+                        ));
+                    }
+                }
+                (Some(fg), None) => {
+                    let parent_mid_y = fg.y + n_lh / 2.0;
+                    d.push_str(&format!(
+                        "M {:.1} {:.1} L {:.1} {:.1}",
+                        name_end_x, child_mid_y, parent_conn_end_x, parent_mid_y,
+                    ));
+                }
+                (None, Some(mg)) => {
+                    let parent_mid_y = mg.y + n_lh / 2.0;
+                    d.push_str(&format!(
+                        "M {:.1} {:.1} L {:.1} {:.1}",
+                        name_end_x, child_mid_y, parent_conn_end_x, parent_mid_y,
+                    ));
+                }
+                (None, None) => {}
+            }
+
+            if !d.is_empty() {
+                *max_x = f64::max(*max_x, parent_conn_end_x);
+                anc_conns.push(FancyConnector {
+                    d,
+                    stroke: conn_color.to_string(),
+                    stroke_width: conn_width,
+                    kind: FancyConnKind::IndivToSpouse,
+                });
+            }
+        }
+
+        // ── Recurse into parents ─────────────────────────────────────────────
+        if let Some(f) = father {
+            emit_anc_subtree(
+                &f.id.clone(),
+                genrep,
+                prefs,
+                highlighted_ids,
+                conn_color,
+                conn_width,
+                n_lh,
+                d_lh,
+                nfs,
+                primitives,
+                anc_conns,
+                max_x,
+                max_y,
+            );
+        }
+        if let Some(m) = mother {
+            emit_anc_subtree(
+                &m.id.clone(),
+                genrep,
+                prefs,
+                highlighted_ids,
+                conn_color,
+                conn_width,
+                n_lh,
+                d_lh,
+                nfs,
+                primitives,
+                anc_conns,
+                max_x,
+                max_y,
+            );
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -755,5 +1220,123 @@ fn emit_subtree(
             stroke_width: conn_width,
             kind: FancyConnKind::IndivToSpouse,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::Layout;
+    use crate::parser::{compute_scope, parse_str};
+
+    const GEDCOM: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME John /Ancestor/
+1 SEX M
+1 BIRT
+2 DATE 1 JAN 1812
+2 PLAC London
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Jane /Ancestress/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Paul /Ancestor/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 TRLR
+";
+
+    fn anc_prefs() -> crate::preferences::Prefs {
+        let mut prefs = crate::preferences::Prefs::default();
+        prefs.scope.root = "I3".into();
+        prefs.scope.direction = "ancestors".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "fancy".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+        prefs.show.generation_num = false;
+        prefs
+    }
+
+    #[test]
+    fn anc_place_basic() {
+        let prefs = anc_prefs();
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+
+        let paul = result.get_individual("I3").unwrap();
+        let john = result.get_individual("I1").unwrap();
+        let jane = result.get_individual("I2").unwrap();
+
+        let paul_y = paul.geo.as_ref().unwrap().y;
+        let john_y = john.geo.as_ref().unwrap().y;
+        let jane_y = jane.geo.as_ref().unwrap().y;
+
+        // John (father) is above Paul; Jane (mother) is below.
+        assert!(
+            john_y <= paul_y,
+            "father should be at or above root: john_y={john_y} paul_y={paul_y}"
+        );
+        assert!(
+            jane_y >= paul_y,
+            "mother should be at or below root: jane_y={jane_y} paul_y={paul_y}"
+        );
+
+        // Paul's y is the midpoint of John's and Jane's y.
+        let expected = (john_y + jane_y) / 2.0;
+        assert!(
+            (paul_y - expected).abs() < 0.1,
+            "paul_y={paul_y} expected={expected}"
+        );
+    }
+
+    #[test]
+    fn anc_emit_scene_contains_names() {
+        let prefs = anc_prefs();
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        let all_text: Vec<String> = scene
+            .primitives
+            .iter()
+            .flat_map(|p| {
+                if let Primitive::Group(g) = p {
+                    g.children
+                        .iter()
+                        .flat_map(|c| {
+                            if let Primitive::FancyText(item) = c {
+                                item.lines
+                                    .iter()
+                                    .map(|l| l.text.clone())
+                                    .collect::<Vec<_>>()
+                            } else {
+                                vec![]
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+
+        let joined = all_text.join(" ");
+        assert!(joined.contains("Paul"), "missing Paul: {joined}");
+        assert!(joined.contains("John"), "missing John: {joined}");
+        assert!(joined.contains("Jane"), "missing Jane: {joined}");
     }
 }

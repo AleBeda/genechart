@@ -536,6 +536,58 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             }
             out.push_str("</g>\n");
         }
+        Primitive::FancyText(item) => {
+            if item.highlighted {
+                if let Some(name_line) = item.lines.iter().find(|l| {
+                    l.attrs.contains(&TextAttr::IndividualName)
+                        || l.attrs.contains(&TextAttr::SpouseName)
+                }) {
+                    let (font_family, font_size) = font_for_attr(&name_line.attrs, ctx.prefs);
+                    let bold = weight_for_attr(&name_line.attrs, ctx.prefs) == "bold";
+                    let lh = font_size * 1.2;
+                    let base_font = font_family
+                        .split(',')
+                        .next()
+                        .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
+                        .unwrap_or("monospace");
+                    let w =
+                        font_metrics::measure_text_w(&name_line.text, base_font, font_size, bold)
+                            .unwrap_or_else(|| {
+                                name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO
+                            });
+                    let bg = hex_color(ctx.prefs.output.style.text.highlights.background_color);
+                    let pad = 1.0;
+                    let rx = (ctx.to_svg_x)(name_line.x) - pad;
+                    let ry = (ctx.to_svg_y)(name_line.y) - pad;
+                    out.push_str(&format!(
+                        "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+                        w + 2.0 * pad,
+                        lh + 2.0 * pad
+                    ));
+                }
+            }
+            for line in &item.lines {
+                let (font_family, font_size) = font_for_attr(&line.attrs, ctx.prefs);
+                let weight = weight_for_attr(&line.attrs, ctx.prefs);
+                let color = color_for_attr(&line.attrs, ctx.prefs);
+                let cw = font_size * CHAR_WIDTH_RATIO;
+                let x_svg = (ctx.to_svg_x)(line.x);
+                let y_svg = (ctx.to_svg_y)(line.y + font_size * 0.85);
+                render_mixed_text(
+                    out,
+                    x_svg,
+                    y_svg,
+                    &line.text,
+                    &font_family,
+                    font_size,
+                    weight,
+                    cw,
+                    &color,
+                    None,
+                    &TextAlign::Left,
+                );
+            }
+        }
         _ => {}
     }
 }
@@ -1618,5 +1670,35 @@ mod tests {
                 "spouse (Jane) should be above individual (John) in svg_b: Jane.y={yb_jane}, John.y={yb_john}"
             );
         }
+    }
+
+    #[test]
+    fn fancy_ancestors_svg_contains_names() {
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I3".into();
+        prefs.scope.direction = "ancestors".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "fancy".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+
+        let mut genrep = parse_str(GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I3"), "ancestors", Some(2));
+        let output = run_layout(&genrep, &prefs).unwrap();
+        let svg = render_to_string(&output, &prefs).unwrap();
+
+        assert!(svg.contains("Paul"), "SVG missing Paul: {svg}");
+        assert!(svg.contains("John"), "SVG missing John: {svg}");
+        assert!(svg.contains("Jane"), "SVG missing Jane: {svg}");
+        assert!(
+            svg.contains("fancy-connectors-1"),
+            "SVG missing fancy-connectors-1: {svg}"
+        );
+        assert!(
+            svg.contains("anc-text-"),
+            "SVG missing anc-text group: {svg}"
+        );
     }
 }

@@ -136,6 +136,8 @@ pub struct FancyPrefs {
     pub gen_width: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub child_gap: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub anc_gap: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

@@ -126,6 +126,15 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_fancy_ancestors() {
+        let mut prefs = Prefs::default();
+        prefs.layout.layout_type = "fancy".to_string();
+        prefs.scope.direction = "ancestors".to_string();
+        let output = run_layout(&empty_genrep(), &prefs).unwrap();
+        assert!(matches!(output, LayoutOutput::Fancy(_)));
+    }
+
+    #[test]
     fn dispatch_unknown_falls_back_to_simple() {
         let mut prefs = Prefs::default();
         prefs.layout.layout_type = "unknown".to_string();

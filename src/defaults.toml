@@ -52,6 +52,7 @@ radial_gen = 3         # depth at which to switch to radial text; 0 = all radial
 [layout.fancy]
 gen_width = 300.0      # horizontal distance between successive generations (canvas units)
 child_gap = 10.0       # vertical gap between last spouse block and first child
+anc_gap = 10.0         # vertical breathing room around each individual in ancestors mode
 
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"
