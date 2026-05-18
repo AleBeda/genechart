@@ -104,13 +104,14 @@ Configuration: `[layout.fan]` — `ring_height`, `ring_gap`.
 
 ### fancy
 
-Cascading descendants layout (SVG/PDF only). Each direct descendant is left-aligned by generation at a fixed horizontal distance, with spouses listed below each individual and children branching to the right via curved connectors. Descendants-only.
+Cascading layout (SVG/PDF only). Supports both descendants and ancestors directions. In descendants mode, each direct descendant is left-aligned by generation at a fixed horizontal distance, with spouses listed below each individual and children branching to the right via curved connectors. In ancestors mode, the root is at the left and ancestors grow rightward, one column per generation.
 
 ```sh
 genechart family.ged -r I1 --type fancy -o chart.svg
+genechart family.ged -r I1 --type fancy --dir ancestors -o chart.svg
 ```
 
-Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations), `child_gap` (vertical gap between a person's last spouse and their first child).
+Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations), `child_gap` (vertical gap between a person's last spouse and their first child), `anc_gap` (vertical breathing room around each individual in ancestors mode).
 
 ## Output Formats
 
@@ -198,6 +199,7 @@ marriage = true
 notes = false
 last_gen_spouses = false
 id = false
+duplicated_individual = false
 
 [format]
 individual = "{firstname} {lastname} {sex}"
@@ -228,10 +230,12 @@ ring_gap = 10
 [layout.fancy]
 gen_width = 300.0
 child_gap = 10.0
+anc_gap = 10.0
 
 [output]
 type = "text"
 path = ""
+noclobber = false
 
 [output.paper]
 size = "A4"
