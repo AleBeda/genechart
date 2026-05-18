@@ -686,7 +686,7 @@ impl Layout for BoxedCouplesLayout {
     fn compute(&self, genrep: &Genrep, prefs: &Prefs) -> Result<Genrep<BoxedCouplesGeo>> {
         let dir = prefs.scope.direction.to_lowercase();
 
-        if matches_direction(&dir, "ancestors") {
+        if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
             return Err(anyhow::anyhow!(
                 "boxed_couples layout does not support the ancestors direction; use 'boxes' instead"
             ));
