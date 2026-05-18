@@ -648,6 +648,23 @@ mod tests {
     }
 
     #[test]
+    fn noclobber_not_flagged_as_unknown() {
+        // Verify that output.noclobber is present in the TOML base after
+        // merging defaults, so that find_unknown_keys does not warn about it.
+        let mut base = Value::Table(toml::map::Map::new());
+        let defaults: Value = DEFAULTS_TOML.parse().unwrap();
+        merge_toml_tracked(&mut base, defaults, "", &crate::trace::Tracer::disabled());
+
+        let user_overlay: Value = "output.noclobber = true\n".parse().unwrap();
+        let unknown = find_unknown_keys(&base, &user_overlay, "");
+        assert!(
+            unknown.is_empty(),
+            "output.noclobber should be a known key, flagged as unknown: {:?}",
+            unknown
+        );
+    }
+
+    #[test]
     fn defaults_load() {
         let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
         assert_eq!(prefs.scope.generations, 4);
