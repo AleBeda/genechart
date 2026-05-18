@@ -536,6 +536,40 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             }
             out.push_str("</g>\n");
         }
+        Primitive::BoxesSpouseConnector(c) => {
+            if c.spouse_entries.is_empty() {
+                return;
+            }
+            let exit_x = (ctx.to_svg_x)(c.individual_exit.x);
+            let exit_y = (ctx.to_svg_y)(c.individual_exit.y);
+            let bar_y = (exit_y + (ctx.to_svg_y)(c.spouse_entries[0].y)) / 2.0;
+            let last_x = c
+                .spouse_entries
+                .iter()
+                .map(|p| (ctx.to_svg_x)(p.x))
+                .fold(f64::NEG_INFINITY, f64::max);
+            out.push_str(&svg_line(
+                exit_x,
+                exit_y,
+                exit_x,
+                bar_y,
+                ctx.conn_color,
+                ctx.conn_width,
+            ));
+            out.push_str(&svg_line(
+                exit_x,
+                bar_y,
+                last_x,
+                bar_y,
+                ctx.conn_color,
+                ctx.conn_width,
+            ));
+            for sp in &c.spouse_entries {
+                let sx = (ctx.to_svg_x)(sp.x);
+                let sy = (ctx.to_svg_y)(sp.y);
+                out.push_str(&svg_line(sx, bar_y, sx, sy, ctx.conn_color, ctx.conn_width));
+            }
+        }
         Primitive::FancyText(item) => {
             if item.highlighted {
                 if let Some(name_line) = item.lines.iter().find(|l| {
@@ -1011,6 +1045,40 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 match &conn.kind {
                     FancyConnKind::IndivToSpouse => indiv_conns.push(conn),
                     FancyConnKind::SpouseToChildren => spouse_conns.push(conn),
+                }
+            }
+            crate::scene::Primitive::BoxesSpouseConnector(c) => {
+                if c.spouse_entries.is_empty() {
+                    continue;
+                }
+                let exit_x = to_svg_x(c.individual_exit.x);
+                let exit_y = to_svg_y(c.individual_exit.y);
+                let bar_y = (exit_y + to_svg_y(c.spouse_entries[0].y)) / 2.0;
+                let last_x = c
+                    .spouse_entries
+                    .iter()
+                    .map(|p| to_svg_x(p.x))
+                    .fold(f64::NEG_INFINITY, f64::max);
+                out.push_str(&svg_line(
+                    exit_x,
+                    exit_y,
+                    exit_x,
+                    bar_y,
+                    &conn_color,
+                    conn_width,
+                ));
+                out.push_str(&svg_line(
+                    exit_x,
+                    bar_y,
+                    last_x,
+                    bar_y,
+                    &conn_color,
+                    conn_width,
+                ));
+                for sp in &c.spouse_entries {
+                    let sx = to_svg_x(sp.x);
+                    let sy = to_svg_y(sp.y);
+                    out.push_str(&svg_line(sx, bar_y, sx, sy, &conn_color, conn_width));
                 }
             }
             crate::scene::Primitive::Group(_) => {

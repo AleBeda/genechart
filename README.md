@@ -29,7 +29,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `-r` / `--root <ID>` | Root individual ID (default: first individual in file) |
 | `-g <N>` / `--generations <N>` / `--gen <N>` | Number of generations to show |
 | `--dir <DIRECTION>` | Chart direction: `descendants`, `ancestors` = `pedigree`, `forest` |
-| `--type <TYPE>` | Layout algorithm: `simple`, `fan`, `boxed_couples`, `fancy` |
+| `--type <TYPE>` | Layout algorithm: `simple`, `fan`, `boxed_couples`, `fancy`, `boxes` |
 | `--text` | Output as plain text |
 | `--svg` | Output as SVG |
 | `--pdf` | Output as PDF |
@@ -112,6 +112,21 @@ genechart family.ged -r I1 --type fancy --dir ancestors -o chart.svg
 ```
 
 Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations), `child_gap` (vertical gap between a person's last spouse and their first child), `anc_gap` (vertical breathing room around each individual in ancestors mode).
+
+### boxes
+
+One individual per box (SVG/PDF only). No marriage data is shown. Supports both descendants and ancestors directions. Consanguineous individuals are placed at every position they appear; a double border is drawn when `show.duplicated_individual = true`.
+
+**Ancestors direction:** the root is at one edge and parents grow outward one box per generation. Father boxes are placed to the left, mother boxes to the right. A horizontal connector bar links each individual to their parents.
+
+**Descendants direction:** the root is at one edge and each individual has their own box. Spouses are placed to the right of the individual, slightly lower (`couple_y_offset`). Children of each spouse are placed below that spouse, centered under it.
+
+```sh
+genechart family.ged -r I1 --type boxes --dir ancestors -o chart.svg
+genechart family.ged -r I1 --type boxes -o chart.svg
+```
+
+Configuration: `[layout.boxes]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `couple_y_offset` (vertical offset between individual and spouse box tops, descendants only).
 
 ## Output Formats
 
@@ -231,6 +246,13 @@ ring_gap = 10
 gen_width = 300.0
 child_gap = 10.0
 anc_gap = 10.0
+
+[layout.boxes]
+box_width = 240.0
+box_height = 80.0
+gap_width = 40.0
+gap_height = 80.0
+couple_y_offset = 20.0
 
 [output]
 type = "text"

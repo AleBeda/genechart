@@ -4,6 +4,91 @@ use crate::parser::genrep::{Family, Genrep, Individual};
 use crate::preferences::{Prefs, load_highlights};
 use std::collections::{HashMap, HashSet};
 
+// ── Envelope helpers (used by boxed_couples and boxes) ────────────────────────
+
+/// Merges two right-edge envelopes by taking the maximum at each depth level.
+pub(crate) fn merge_max(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
+    let new_len = a.len().max(b.len());
+    let mut res = Vec::with_capacity(new_len);
+    for i in 0..new_len {
+        let va = a.get(i).copied().unwrap_or(f64::NEG_INFINITY);
+        let vb = b.get(i).copied().unwrap_or(f64::NEG_INFINITY);
+        res.push(va.max(vb));
+    }
+    res
+}
+
+/// Merges two left-edge envelopes by taking the minimum at each depth level.
+pub(crate) fn merge_min(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
+    let new_len = a.len().max(b.len());
+    let mut res = Vec::with_capacity(new_len);
+    for i in 0..new_len {
+        let va = a.get(i).copied().unwrap_or(f64::INFINITY);
+        let vb = b.get(i).copied().unwrap_or(f64::INFINITY);
+        res.push(va.min(vb));
+    }
+    res
+}
+
+/// Extends `env` to `min_len` by filling missing slots from `global_right`.
+pub(crate) fn fill_env_from_global(
+    mut env: Vec<f64>,
+    min_len: usize,
+    global_right: &[f64],
+    base_gen: usize,
+) -> Vec<f64> {
+    for j in env.len()..min_len {
+        env.push(global_right.get(base_gen + j).copied().unwrap_or(0.0));
+    }
+    env
+}
+
+// ── Genealogical helpers (used by boxed_couples and boxes) ────────────────────
+
+/// Returns sorted in-scope spouse IDs of `ind_id`.
+pub(crate) fn spouses_of<G>(ind_id: &str, genrep: &Genrep<G>) -> Vec<String> {
+    let ind = match genrep.get_individual(ind_id) {
+        Some(i) => i,
+        None => return vec![],
+    };
+    let sorted_fams = sort_families_by_date(ind, genrep);
+    sorted_fams
+        .iter()
+        .filter_map(|fam_id| genrep.get_family(fam_id))
+        .filter(|fam| fam.in_scope)
+        .filter_map(|fam| {
+            if fam.husband_id.as_deref() == Some(ind_id) {
+                fam.wife_id.clone()
+            } else {
+                fam.husband_id.clone()
+            }
+        })
+        .filter(|sp| genrep.get_individual(sp).is_some_and(|i| i.in_scope))
+        .collect()
+}
+
+/// Returns in-scope children born to the pairing of `ind_id` and `spouse_id`.
+pub(crate) fn children_with_spouse<G>(
+    ind_id: &str,
+    spouse_id: &str,
+    genrep: &Genrep<G>,
+) -> Vec<String> {
+    let ind = match genrep.get_individual(ind_id) {
+        Some(i) => i,
+        None => return vec![],
+    };
+    ind.fams
+        .iter()
+        .filter_map(|fam_id| genrep.get_family(fam_id))
+        .filter(|fam| {
+            fam.husband_id.as_deref() == Some(spouse_id)
+                || fam.wife_id.as_deref() == Some(spouse_id)
+        })
+        .flat_map(|fam| fam.children_ids.iter().cloned())
+        .filter(|cid| genrep.get_individual(cid).is_some_and(|c| c.in_scope))
+        .collect()
+}
+
 /// Parse a GEDCOM raw date string into a sortable `(year, month, day)` key.
 ///
 /// Supported formats: `"1 JAN 1812"`, `"JAN 1812"`, `"1812"`, `"BEF 1900"`,

@@ -22,7 +22,10 @@
 //!    a top-down sweep so left-packed siblings move right without cascading overlaps.
 
 use super::Layout;
-use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
+use super::common::{
+    children_with_spouse, copy_families, copy_individual, fill_env_from_global, merge_max,
+    merge_min, resolve_root_id, sort_families_by_date, spouses_of,
+};
 use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use crate::util::matches_direction;
@@ -79,46 +82,6 @@ pub enum BoxedCouplesGeo {
     Family(FamilyGeo),
 }
 
-/// Returns the IDs of all in-scope spouses of `ind_id`, sorted by marriage date.
-fn spouses_of(ind_id: &str, genrep: &Genrep) -> Vec<String> {
-    let ind = match genrep.get_individual(ind_id) {
-        Some(i) => i,
-        None => return vec![],
-    };
-    let sorted_fams = sort_families_by_date(ind, genrep);
-    sorted_fams
-        .iter()
-        .filter_map(|fam_id| genrep.get_family(fam_id))
-        .filter(|fam| fam.in_scope)
-        .filter_map(|fam| {
-            if fam.husband_id.as_deref() == Some(ind_id) {
-                fam.wife_id.clone()
-            } else {
-                fam.husband_id.clone()
-            }
-        })
-        .filter(|sp| genrep.get_individual(sp).is_some_and(|i| i.in_scope))
-        .collect()
-}
-
-/// Returns the IDs of in-scope children born to the pairing of `ind_id` and `spouse_id`.
-fn children_with_spouse(ind_id: &str, spouse_id: &str, genrep: &Genrep) -> Vec<String> {
-    let ind = match genrep.get_individual(ind_id) {
-        Some(i) => i,
-        None => return vec![],
-    };
-    ind.fams
-        .iter()
-        .filter_map(|fam_id| genrep.get_family(fam_id))
-        .filter(|fam| {
-            fam.husband_id.as_deref() == Some(spouse_id)
-                || fam.wife_id.as_deref() == Some(spouse_id)
-        })
-        .flat_map(|fam| fam.children_ids.iter().cloned())
-        .filter(|cid| genrep.get_individual(cid).is_some_and(|c| c.in_scope))
-        .collect()
-}
-
 /// Returns at most 2 in-scope spouses, preferring those with children.
 ///
 /// The layout can represent at most 2 spouses (a 1-spouse box or a wide
@@ -142,55 +105,6 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
         spouses.truncate(2);
     }
     spouses
-}
-
-/// Extends `env` to `min_len` by filling missing slots from `global_right`.
-///
-/// `env[j]` is the minimum x right-edge that must be cleared by any box at
-/// absolute generation `base_gen + j`.  When a previous sibling is a leaf its
-/// right-envelope has length 1 (only its own right-edge), leaving the deeper
-/// slots undefined.  Filling from `global_right[base_gen + j]` — the
-/// rightmost right-edge already placed at that generation across the whole
-/// traversal — gives the correct tight constraint without over-constraining by
-/// propagating a shallower boundary downward.
-fn fill_env_from_global(
-    mut env: Vec<f64>,
-    min_len: usize,
-    global_right: &[f64],
-    base_gen: usize,
-) -> Vec<f64> {
-    for j in env.len()..min_len {
-        env.push(global_right.get(base_gen + j).copied().unwrap_or(0.0));
-    }
-    env
-}
-
-/// Merges two right-edge envelopes by taking the maximum x-coordinate at each depth level.
-///
-/// The resulting vector's length is the maximum of the two input lengths. If one vector
-/// is shorter than the other, its missing values are treated as `f64::NEG_INFINITY`,
-/// ensuring the merged contour accounts for the full depth and width of both subtrees.
-fn merge_max(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
-    let new_len = a.len().max(b.len());
-    let mut res = Vec::with_capacity(new_len);
-    for i in 0..new_len {
-        let val_a = a.get(i).copied().unwrap_or(f64::NEG_INFINITY);
-        let val_b = b.get(i).copied().unwrap_or(f64::NEG_INFINITY);
-        res.push(val_a.max(val_b));
-    }
-    res
-}
-
-/// Merges two left-edge envelopes by taking the minimum at each depth level.
-fn merge_min(a: Vec<f64>, b: Vec<f64>) -> Vec<f64> {
-    let new_len = a.len().max(b.len());
-    let mut res = Vec::with_capacity(new_len);
-    for i in 0..new_len {
-        let val_a = a.get(i).copied().unwrap_or(f64::INFINITY);
-        let val_b = b.get(i).copied().unwrap_or(f64::INFINITY);
-        res.push(val_a.min(val_b));
-    }
-    res
 }
 
 /// Returns the right-side envelope of `ind`'s placed subtree.
@@ -764,39 +678,6 @@ fn place_descendants(
     }
 }
 
-/// Stub for ancestor-direction layout; currently delegates to [`place_descendants`].
-///
-/// A true ancestors traversal would walk `famc` links and place parents above the child.
-#[allow(clippy::too_many_arguments)]
-fn place_ancestors(
-    genrep: &Genrep,
-    ind_id: &str,
-    env_left: &[f64],
-    generation: u32,
-    box_w: f64,
-    box_h: f64,
-    box_w2: f64,
-    gap_w: f64,
-    gap_h: f64,
-    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
-    global_right: &mut Vec<f64>,
-) {
-    // TODO: implement true ancestors traversal (walk famc, place parents above the child)
-    place_descendants(
-        genrep,
-        ind_id,
-        env_left,
-        generation,
-        box_w,
-        box_h,
-        box_w2,
-        gap_w,
-        gap_h,
-        out,
-        global_right,
-    );
-}
-
 pub struct BoxedCouplesLayout;
 
 impl Layout for BoxedCouplesLayout {
@@ -804,6 +685,12 @@ impl Layout for BoxedCouplesLayout {
 
     fn compute(&self, genrep: &Genrep, prefs: &Prefs) -> Result<Genrep<BoxedCouplesGeo>> {
         let dir = prefs.scope.direction.to_lowercase();
+
+        if matches_direction(&dir, "ancestors") {
+            return Err(anyhow::anyhow!(
+                "boxed_couples layout does not support the ancestors direction; use 'boxes' instead"
+            ));
+        }
 
         if matches_direction(&dir, "forest") {
             eprintln!("warning: boxed_couples layout does not support direction=forest");
@@ -842,44 +729,28 @@ impl Layout for BoxedCouplesLayout {
 
         let mut individuals: HashMap<String, Individual<BoxedCouplesGeo>> = HashMap::new();
 
-        if matches_direction(&dir, "ancestors") {
-            place_ancestors(
-                genrep,
-                root_id,
-                &env_left,
-                0,
-                box_w,
-                box_h,
-                box_w2,
-                gap_w,
-                gap_h,
-                &mut individuals,
-                &mut global_right,
-            );
-        } else {
-            place_descendants(
-                genrep,
-                root_id,
-                &env_left,
-                0,
-                box_w,
-                box_h,
-                box_w2,
-                gap_w,
-                gap_h,
-                &mut individuals,
-                &mut global_right,
-            );
-            compact_pass(
-                root_id,
-                genrep,
-                &mut individuals,
-                &mut global_right,
-                gap_w,
-                0,
-            );
-            recenter_pass(root_id, genrep, box_w, box_w2, &mut individuals);
-        }
+        place_descendants(
+            genrep,
+            root_id,
+            &env_left,
+            0,
+            box_w,
+            box_h,
+            box_w2,
+            gap_w,
+            gap_h,
+            &mut individuals,
+            &mut global_right,
+        );
+        compact_pass(
+            root_id,
+            genrep,
+            &mut individuals,
+            &mut global_right,
+            gap_w,
+            0,
+        );
+        recenter_pass(root_id, genrep, box_w, box_w2, &mut individuals);
 
         // Add in-scope spouses of placed individuals to the output,
         // skipping spouses of the last (deepest) generation unless opted in.

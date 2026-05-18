@@ -156,6 +156,22 @@ pub struct GroupPrimitive {
     pub children: Vec<Primitive>,
 }
 
+/// Connector from an individual's right edge to one or more spouse boxes.
+/// Used by the `boxes` layout (descendants direction).
+///
+/// Geometry (display space):
+///   `bar_y = (individual_exit.y + spouse_entries[0].y) / 2`
+///   - vertical segment: `individual_exit` → `(individual_exit.x, bar_y)`
+///   - horizontal bar: `(individual_exit.x, bar_y)` → `(last_spouse.x, bar_y)`
+///   - vertical drops: `(spouse_i.x, bar_y)` → `spouse_i` for each entry
+#[derive(Debug, Clone)]
+pub struct BoxesSpouseConnector {
+    /// Attach point: right edge of the individual box, at the box's top edge (display coords).
+    pub individual_exit: Point,
+    /// Entry points: top-center of each spouse box (display coords), left to right.
+    pub spouse_entries: Vec<Point>,
+}
+
 /// A wedge primitive (fan layout).
 #[derive(Debug, Clone)]
 pub struct WedgePrimitive {
@@ -183,6 +199,7 @@ pub enum Primitive {
     FancyText(FancyTextItem),
     FancyConn(FancyConnector),
     Group(GroupPrimitive),
+    BoxesSpouseConnector(BoxesSpouseConnector),
 }
 
 /// The complete IR emitted by a layout algorithm.

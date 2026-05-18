@@ -55,6 +55,13 @@ gen_width = 300.0      # horizontal distance between successive generations (can
 child_gap = 10.0       # vertical gap between last spouse block and first child
 anc_gap = 10.0         # vertical breathing room around each individual in ancestors mode
 
+[layout.boxes]
+box_width = 240.0
+box_height = 80.0
+gap_width = 40.0
+gap_height = 80.0
+couple_y_offset = 20.0  # vertical offset between individual and spouse box tops (descendants only)
+
 [output]
 type = "text" # Valid values: "text", "svg", "pdf"
 path = "" # Output file path; empty means stdout

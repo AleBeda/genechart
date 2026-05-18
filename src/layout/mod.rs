@@ -4,6 +4,7 @@ use crate::scene::Scene;
 use anyhow::Result;
 
 pub mod boxed_couples;
+pub mod boxes;
 pub mod common;
 pub mod fan;
 pub mod fancy;
@@ -17,6 +18,7 @@ pub trait Layout {
 pub enum LayoutOutput {
     Simple(Scene),
     BoxedCouples(Scene),
+    Boxes(Scene),
     Fan(Scene),
     Fancy(Scene),
 }
@@ -28,6 +30,7 @@ impl LayoutOutput {
         match self {
             LayoutOutput::Simple(s)
             | LayoutOutput::BoxedCouples(s)
+            | LayoutOutput::Boxes(s)
             | LayoutOutput::Fan(s)
             | LayoutOutput::Fancy(s) => s,
         }
@@ -38,6 +41,7 @@ impl LayoutOutput {
         match self {
             LayoutOutput::Simple(s)
             | LayoutOutput::BoxedCouples(s)
+            | LayoutOutput::Boxes(s)
             | LayoutOutput::Fan(s)
             | LayoutOutput::Fancy(s) => s,
         }
@@ -59,6 +63,11 @@ impl LayoutOutput {
     pub fn is_fancy(&self) -> bool {
         matches!(self, LayoutOutput::Fancy(_))
     }
+
+    #[allow(dead_code)]
+    pub fn is_boxes(&self) -> bool {
+        matches!(self, LayoutOutput::Boxes(_))
+    }
 }
 
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
@@ -71,6 +80,10 @@ pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
             let result = boxed_couples::BoxedCouplesLayout.compute(genrep, prefs)?;
             let scene = boxed_couples::emit_scene(&result, prefs);
             Ok(LayoutOutput::BoxedCouples(scene))
+        }
+        "boxes" => {
+            let result = boxes::BoxesLayout.compute(genrep, prefs)?;
+            Ok(LayoutOutput::Boxes(boxes::emit_scene(&result, prefs)))
         }
         "fan" => {
             let result = fan::FanLayout.compute(genrep, prefs)?;
@@ -114,6 +127,15 @@ mod tests {
         prefs.layout.layout_type = "boxed_couples".to_string();
         let output = run_layout(&empty_genrep(), &prefs).unwrap();
         assert!(matches!(output, LayoutOutput::BoxedCouples(_)));
+    }
+
+    #[test]
+    fn dispatch_boxes() {
+        let mut prefs = Prefs::default();
+        prefs.layout.layout_type = "boxes".to_string();
+        prefs.scope.direction = "ancestors".to_string();
+        let output = run_layout(&empty_genrep(), &prefs).unwrap();
+        assert!(matches!(output, LayoutOutput::Boxes(_)));
     }
 
     #[test]

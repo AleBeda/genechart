@@ -118,6 +118,22 @@ pub struct LayoutPrefs {
     pub fan: FanPrefs,
     #[serde(default)]
     pub fancy: FancyPrefs,
+    #[serde(default)]
+    pub boxes: BoxesPrefs,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct BoxesPrefs {
+    #[serde(default, deserialize_with = "de_f64")]
+    pub box_width: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub box_height: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub gap_width: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub gap_height: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub couple_y_offset: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
