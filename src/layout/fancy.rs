@@ -69,7 +69,17 @@ impl Layout for FancyLayout {
         if is_desc {
             place_subtree(&root_id, 0.0, 0.0, 1, true, prefs, genrep, &mut out);
         } else {
-            place_anc_subtree(&root_id, 0.0, 0.0, 1, prefs, genrep, &mut out);
+            let mut visit_count: HashMap<String, usize> = HashMap::new();
+            place_anc_subtree(
+                &root_id,
+                0.0,
+                0.0,
+                1,
+                prefs,
+                genrep,
+                &mut out,
+                &mut visit_count,
+            );
         }
 
         Ok(Genrep {
@@ -220,6 +230,14 @@ fn place_subtree(
     y_cursor - y_start
 }
 
+fn anc_instance_key(id: &str, count: usize) -> String {
+    if count == 0 {
+        id.to_string()
+    } else {
+        format!("{}##{}", id, count)
+    }
+}
+
 fn place_anc_subtree(
     id: &str,
     x_gen: f64,
@@ -228,7 +246,12 @@ fn place_anc_subtree(
     prefs: &Prefs,
     genrep: &Genrep,
     out: &mut HashMap<String, Individual<FancyGeo>>,
+    visit_count: &mut HashMap<String, usize>,
 ) -> (f64, f64) {
+    let count = *visit_count.get(id).unwrap_or(&0);
+    *visit_count.entry(id.to_string()).or_insert(0) += 1;
+    let instance_key = anc_instance_key(id, count);
+
     let ind = match genrep.get_individual(id) {
         Some(i) if i.in_scope => i,
         _ => return (y_start, 0.0),
@@ -264,8 +287,16 @@ fn place_anc_subtree(
         let mut mother_y: Option<f64> = None;
 
         if let Some(fid) = father_id {
-            let (fy, fh) =
-                place_anc_subtree(fid, next_x, y_cursor, generation + 1, prefs, genrep, out);
+            let (fy, fh) = place_anc_subtree(
+                fid,
+                next_x,
+                y_cursor,
+                generation + 1,
+                prefs,
+                genrep,
+                out,
+                visit_count,
+            );
             father_y = Some(fy);
             y_cursor += fh;
         }
@@ -275,8 +306,16 @@ fn place_anc_subtree(
         }
 
         if let Some(mid) = mother_id {
-            let (my, mh) =
-                place_anc_subtree(mid, next_x, y_cursor, generation + 1, prefs, genrep, out);
+            let (my, mh) = place_anc_subtree(
+                mid,
+                next_x,
+                y_cursor,
+                generation + 1,
+                prefs,
+                genrep,
+                out,
+                visit_count,
+            );
             mother_y = Some(my);
             y_cursor += mh;
         }
@@ -294,7 +333,7 @@ fn place_anc_subtree(
     }
 
     out.insert(
-        id.to_string(),
+        instance_key,
         copy_individual(
             ind,
             Some(FancyGeo {
@@ -428,6 +467,7 @@ fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let mut anc_conns: Vec<FancyConnector> = Vec::new();
     let mut max_x: f64 = 0.0;
     let mut max_y: f64 = 0.0;
+    let mut visit_count: HashMap<String, usize> = HashMap::new();
 
     emit_anc_subtree(
         &root_id,
@@ -443,7 +483,12 @@ fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
         &mut anc_conns,
         &mut max_x,
         &mut max_y,
+        &mut visit_count,
     );
+
+    if prefs.show.duplicated_individual {
+        emit_anc_dup_links(genrep, &conn_color, conn_width, n_lh, &mut anc_conns);
+    }
 
     for c in anc_conns {
         primitives.push(Primitive::FancyConn(c));
@@ -482,8 +527,13 @@ fn emit_anc_subtree(
     anc_conns: &mut Vec<FancyConnector>,
     max_x: &mut f64,
     max_y: &mut f64,
+    visit_count: &mut HashMap<String, usize>,
 ) {
-    let ind = match genrep.get_individual(id) {
+    let count = *visit_count.get(id).unwrap_or(&0);
+    *visit_count.entry(id.to_string()).or_insert(0) += 1;
+    let my_key = anc_instance_key(id, count);
+
+    let ind = match genrep.individuals.get(&my_key) {
         Some(i) if i.in_scope => i,
         _ => return,
     };
@@ -613,9 +663,13 @@ fn emit_anc_subtree(
     *max_y = f64::max(*max_y, geo.y + ind_height(prefs));
 
     // ── Emit text group ──────────────────────────────────────────────────────
+    // For duplicate instances, the group id uses "-dup-N" suffix (e.g. "anc-text-I5-dup-1").
     let group_id = format!(
         "anc-text-{}",
-        ind.id.trim_start_matches('@').trim_end_matches('@')
+        my_key
+            .trim_start_matches('@')
+            .trim_end_matches('@')
+            .replace("##", "-dup-")
     );
     primitives.push(Primitive::Group(GroupPrimitive {
         id: group_id,
@@ -634,17 +688,26 @@ fn emit_anc_subtree(
     let parent_fam = ind.famc.first().and_then(|fid| genrep.get_family(fid));
 
     if let Some(fam) = parent_fam {
-        let father = fam
+        // Peek at each parent's NEXT instance key (before recursing into them).
+        let father_id = fam
             .husband_id
+            .as_deref()
+            .filter(|fid| genrep.get_individual(fid).map_or(false, |i| i.in_scope));
+        let father_key =
+            father_id.map(|fid| anc_instance_key(fid, *visit_count.get(fid).unwrap_or(&0)));
+        let father_geo = father_key
             .as_ref()
-            .and_then(|fid| genrep.get_individual(fid).filter(|i| i.in_scope));
-        let mother = fam
-            .wife_id
-            .as_ref()
-            .and_then(|mid| genrep.get_individual(mid).filter(|i| i.in_scope));
+            .and_then(|k| genrep.individuals.get(k).and_then(|i| i.geo.as_ref()));
 
-        let father_geo = father.and_then(|f| f.geo.as_ref());
-        let mother_geo = mother.and_then(|m| m.geo.as_ref());
+        let mother_id = fam
+            .wife_id
+            .as_deref()
+            .filter(|mid| genrep.get_individual(mid).map_or(false, |i| i.in_scope));
+        let mother_key =
+            mother_id.map(|mid| anc_instance_key(mid, *visit_count.get(mid).unwrap_or(&0)));
+        let mother_geo = mother_key
+            .as_ref()
+            .and_then(|k| genrep.individuals.get(k).and_then(|i| i.geo.as_ref()));
 
         if father_geo.is_some() || mother_geo.is_some() {
             let name_end_x = geo.x + name_text_w;
@@ -718,7 +781,10 @@ fn emit_anc_subtree(
                 *max_x = f64::max(*max_x, parent_conn_end_x);
                 let conn_id = format!(
                     "anc-conn-{}",
-                    ind.id.trim_start_matches('@').trim_end_matches('@')
+                    my_key
+                        .trim_start_matches('@')
+                        .trim_end_matches('@')
+                        .replace("##", "-dup-")
                 );
                 anc_conns.push(FancyConnector {
                     d,
@@ -726,14 +792,15 @@ fn emit_anc_subtree(
                     stroke_width: conn_width,
                     kind: FancyConnKind::IndivToSpouse,
                     id: conn_id,
+                    stroke_dasharray: String::new(),
                 });
             }
         }
 
         // ── Recurse into parents ─────────────────────────────────────────────
-        if let Some(f) = father {
+        if let Some(fid) = father_id {
             emit_anc_subtree(
-                &f.id.clone(),
+                fid,
                 genrep,
                 prefs,
                 highlighted_ids,
@@ -746,11 +813,12 @@ fn emit_anc_subtree(
                 anc_conns,
                 max_x,
                 max_y,
+                visit_count,
             );
         }
-        if let Some(m) = mother {
+        if let Some(mid) = mother_id {
             emit_anc_subtree(
-                &m.id.clone(),
+                mid,
                 genrep,
                 prefs,
                 highlighted_ids,
@@ -763,8 +831,74 @@ fn emit_anc_subtree(
                 anc_conns,
                 max_x,
                 max_y,
+                visit_count,
             );
         }
+    }
+}
+
+fn emit_anc_dup_links(
+    genrep: &Genrep<FancyGeo>,
+    conn_color: &str,
+    conn_width: f64,
+    n_lh: f64,
+    anc_conns: &mut Vec<FancyConnector>,
+) {
+    // Collect all "##"-keyed instances grouped by base ID, as (x, y) pairs.
+    let mut dup_groups: HashMap<String, Vec<(f64, f64)>> = HashMap::new();
+
+    for (key, ind) in &genrep.individuals {
+        if let Some(pos) = key.find("##") {
+            let geo = match ind.geo.as_ref() {
+                Some(g) => g,
+                None => continue,
+            };
+            dup_groups
+                .entry(key[..pos].to_string())
+                .or_default()
+                .push((geo.x, geo.y));
+        }
+    }
+
+    for (base_id, mut points) in dup_groups {
+        let base_geo = match genrep
+            .individuals
+            .get(&base_id)
+            .and_then(|i| i.geo.as_ref())
+        {
+            Some(g) => g,
+            None => continue,
+        };
+        // Include the base (first) instance.
+        points.push((base_geo.x, base_geo.y));
+        // Sort by (x, y) so the polyline goes from the instance closest to the
+        // root (smallest x) to the furthest. For same-generation instances (same
+        // x) this becomes a vertical sort by y.
+        points.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // Build a polyline connecting all instances at their mid-y positions.
+        let mut d = String::new();
+        for (i, (x, y)) in points.iter().enumerate() {
+            let mid_y = y + n_lh / 2.0;
+            if i == 0 {
+                d.push_str(&format!("M {:.1} {:.1}", x, mid_y));
+            } else {
+                d.push_str(&format!(" L {:.1} {:.1}", x, mid_y));
+            }
+        }
+
+        let dup_id = format!(
+            "anc-dup-{}",
+            base_id.trim_start_matches('@').trim_end_matches('@')
+        );
+        anc_conns.push(FancyConnector {
+            d,
+            stroke: conn_color.to_string(),
+            stroke_width: conn_width,
+            kind: FancyConnKind::IndivToSpouse,
+            id: dup_id,
+            stroke_dasharray: "4 3".to_string(),
+        });
     }
 }
 
@@ -1202,6 +1336,7 @@ fn emit_subtree(
                         stroke_width: conn_width,
                         kind: FancyConnKind::SpouseToChildren,
                         id: String::new(),
+                        stroke_dasharray: String::new(),
                     });
                 }
             }
@@ -1229,6 +1364,7 @@ fn emit_subtree(
             stroke_width: conn_width,
             kind: FancyConnKind::IndivToSpouse,
             id: String::new(),
+            stroke_dasharray: String::new(),
         });
     }
 }
@@ -1359,5 +1495,186 @@ mod tests {
         assert!(joined.contains("Paul"), "missing Paul: {joined}");
         assert!(joined.contains("John"), "missing John: {joined}");
         assert!(joined.contains("Jane"), "missing Jane: {joined}");
+    }
+
+    // Consanguineous GEDCOM: I1 is both paternal and maternal grandfather of I4.
+    const CONSANG_GEDCOM: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Common /Ancestor/
+1 SEX M
+0 @I2@ INDI
+1 NAME Father /Individual/
+1 SEX M
+1 FAMS @F1@
+1 FAMC @F2@
+0 @I3@ INDI
+1 NAME Mother /Individual/
+1 SEX F
+1 FAMS @F1@
+1 FAMC @F3@
+0 @I4@ INDI
+1 NAME Root /Individual/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I3@
+1 CHIL @I4@
+0 @F2@ FAM
+1 HUSB @I1@
+1 CHIL @I2@
+0 @F3@ FAM
+1 HUSB @I1@
+1 CHIL @I3@
+0 TRLR
+";
+
+    fn consang_prefs(dup: bool) -> crate::preferences::Prefs {
+        let mut prefs = crate::preferences::Prefs::default();
+        prefs.scope.root = "I4".into();
+        prefs.scope.direction = "ancestors".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "fancy".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.show.birth = false;
+        prefs.show.death = false;
+        prefs.show.marriage = false;
+        prefs.show.generation_num = false;
+        prefs.show.duplicated_individual = dup;
+        prefs
+    }
+
+    #[test]
+    fn anc_place_dup_false_still_shows_both_instances() {
+        // With show.duplicated_individual=false, both instances should still be
+        // placed (the preference only controls the dashed link, not visibility).
+        let prefs = consang_prefs(false);
+        let mut genrep = parse_str(CONSANG_GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I4"), "ancestors", Some(3));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+
+        assert!(
+            result.individuals.contains_key("I1"),
+            "I1 (first instance) should exist"
+        );
+        assert!(
+            result.individuals.contains_key("I1##1"),
+            "I1##1 (second instance) should also exist even when show.duplicated_individual=false"
+        );
+    }
+
+    #[test]
+    fn anc_place_dup_true_two_entries() {
+        let prefs = consang_prefs(true);
+        let mut genrep = parse_str(CONSANG_GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I4"), "ancestors", Some(3));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+
+        assert!(
+            result.individuals.contains_key("I1"),
+            "I1 (first instance) should exist"
+        );
+        assert!(
+            result.individuals.contains_key("I1##1"),
+            "I1##1 (second instance) should exist when show.duplicated_individual=true"
+        );
+
+        let y1 = result.individuals["I1"].geo.as_ref().unwrap().y;
+        let y2 = result.individuals["I1##1"].geo.as_ref().unwrap().y;
+        assert!(
+            (y1 - y2).abs() > 1.0,
+            "two instances of I1 should be at different y positions: y1={y1} y2={y2}"
+        );
+    }
+
+    #[test]
+    fn anc_emit_dup_false_shows_both_no_dashed_link() {
+        // With false: both instances appear in the scene, but no dashed connector.
+        let prefs = consang_prefs(false);
+        let mut genrep = parse_str(CONSANG_GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I4"), "ancestors", Some(3));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        let mut common_count = 0usize;
+        for p in &scene.primitives {
+            if let Primitive::Group(outer) = p {
+                for c in &outer.children {
+                    if let Primitive::Group(inner) = c {
+                        for ic in &inner.children {
+                            if let Primitive::FancyText(item) = ic {
+                                if item.lines.iter().any(|l| l.text.contains("Common")) {
+                                    common_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            common_count, 2,
+            "both instances should appear when duplicated_individual=false"
+        );
+
+        // No dashed connector when false.
+        let has_dashed = scene.primitives.iter().any(|p| {
+            if let Primitive::FancyConn(c) = p {
+                !c.stroke_dasharray.is_empty()
+            } else {
+                false
+            }
+        });
+        assert!(
+            !has_dashed,
+            "no dashed connector expected when duplicated_individual=false"
+        );
+    }
+
+    #[test]
+    fn anc_emit_dup_true_dashed_link() {
+        let prefs = consang_prefs(true);
+        let mut genrep = parse_str(CONSANG_GEDCOM).unwrap();
+        compute_scope(&mut genrep, Some("I4"), "ancestors", Some(3));
+        let result = FancyLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        // Common Ancestor should appear twice.
+        let mut common_count = 0usize;
+        for p in &scene.primitives {
+            if let Primitive::Group(outer) = p {
+                for c in &outer.children {
+                    if let Primitive::Group(inner) = c {
+                        for ic in &inner.children {
+                            if let Primitive::FancyText(item) = ic {
+                                if item.lines.iter().any(|l| l.text.contains("Common")) {
+                                    common_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            common_count, 2,
+            "Common Ancestor should appear twice when duplicated_individual=true"
+        );
+
+        // A dashed FancyConn connector should exist.
+        let has_dashed = scene.primitives.iter().any(|p| {
+            if let Primitive::FancyConn(c) = p {
+                !c.stroke_dasharray.is_empty()
+            } else {
+                false
+            }
+        });
+        assert!(
+            has_dashed,
+            "expected a dashed connector for duplicated individual"
+        );
     }
 }

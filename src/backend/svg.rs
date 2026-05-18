@@ -1041,9 +1041,14 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             if !c.id.is_empty() {
                 out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
             }
+            let dash = if c.stroke_dasharray.is_empty() {
+                String::new()
+            } else {
+                format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
+            };
             out.push_str(&format!(
-                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
-                c.d, c.stroke, c.stroke_width
+                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
+                c.d, c.stroke, c.stroke_width, dash
             ));
             if !c.id.is_empty() {
                 out.push_str("    </g>\n");
@@ -1057,9 +1062,14 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             if !c.id.is_empty() {
                 out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
             }
+            let dash = if c.stroke_dasharray.is_empty() {
+                String::new()
+            } else {
+                format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
+            };
             out.push_str(&format!(
-                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
-                c.d, c.stroke, c.stroke_width
+                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
+                c.d, c.stroke, c.stroke_width, dash
             ));
             if !c.id.is_empty() {
                 out.push_str("    </g>\n");

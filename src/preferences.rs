@@ -86,6 +86,8 @@ pub struct ShowPrefs {
     pub last_gen_spouses: bool,
     #[serde(default)]
     pub id: bool,
+    #[serde(default)]
+    pub duplicated_individual: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -647,6 +649,12 @@ mod tests {
     fn noclobber_defaults_false() {
         let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
         assert_eq!(prefs.output.noclobber, false);
+    }
+
+    #[test]
+    fn duplicated_individual_defaults_false() {
+        let prefs = Prefs::default();
+        assert!(!prefs.show.duplicated_individual);
     }
 
     #[test]

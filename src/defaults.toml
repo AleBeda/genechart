@@ -19,6 +19,7 @@ marriage = true
 notes = false
 last_gen_spouses = false # Show spouses of the last generation (only applies to descendants/forest)
 id = false # Show GEDCOM IDs of individuals and families (without the "@" chars, e.g. "I1", "F2") for debugging purposes
+duplicated_individual = false # Show duplicated individuals at each position (fancy ancestors only); connects instances with a dashed line
 
 [format]
 individual = "{firstname} {lastname} {sex}"
