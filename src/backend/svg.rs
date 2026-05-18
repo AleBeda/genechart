@@ -1038,20 +1038,32 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             "  <g id=\"fancy-connectors-1\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
         ));
         for c in &indiv_conns {
+            if !c.id.is_empty() {
+                out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
+            }
             out.push_str(&format!(
                 "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
                 c.d, c.stroke, c.stroke_width
             ));
+            if !c.id.is_empty() {
+                out.push_str("    </g>\n");
+            }
         }
         out.push_str("  </g>\n");
         out.push_str(&format!(
             "  <g id=\"fancy-connectors-2\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
         ));
         for c in &spouse_conns {
+            if !c.id.is_empty() {
+                out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
+            }
             out.push_str(&format!(
                 "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"/>\n",
                 c.d, c.stroke, c.stroke_width
             ));
+            if !c.id.is_empty() {
+                out.push_str("    </g>\n");
+            }
         }
         out.push_str("  </g>\n");
     }

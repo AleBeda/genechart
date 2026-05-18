@@ -142,6 +142,8 @@ pub struct FancyConnector {
     pub stroke: String,
     pub stroke_width: f64,
     pub kind: FancyConnKind,
+    /// SVG id for the wrapper `<g>` element; empty string → no wrapper emitted.
+    pub id: String,
 }
 /// A group of primitives rendered as a single SVG `<g>` element.
 /// `id` is the SVG id attribute; empty string → no id attribute emitted.

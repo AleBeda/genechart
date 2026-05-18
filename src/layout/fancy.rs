@@ -619,10 +619,13 @@ fn emit_anc_subtree(
     );
     primitives.push(Primitive::Group(GroupPrimitive {
         id: group_id,
-        children: vec![Primitive::FancyText(FancyTextItem {
-            lines,
-            individual_id: ind.id.clone(),
-            highlighted,
+        children: vec![Primitive::Group(GroupPrimitive {
+            id: String::new(),
+            children: vec![Primitive::FancyText(FancyTextItem {
+                lines,
+                individual_id: ind.id.clone(),
+                highlighted,
+            })],
         })],
     }));
 
@@ -713,11 +716,16 @@ fn emit_anc_subtree(
 
             if !d.is_empty() {
                 *max_x = f64::max(*max_x, parent_conn_end_x);
+                let conn_id = format!(
+                    "anc-conn-{}",
+                    ind.id.trim_start_matches('@').trim_end_matches('@')
+                );
                 anc_conns.push(FancyConnector {
                     d,
                     stroke: conn_color.to_string(),
                     stroke_width: conn_width,
                     kind: FancyConnKind::IndivToSpouse,
+                    id: conn_id,
                 });
             }
         }
@@ -1193,6 +1201,7 @@ fn emit_subtree(
                         stroke: conn_color.to_string(),
                         stroke_width: conn_width,
                         kind: FancyConnKind::SpouseToChildren,
+                        id: String::new(),
                     });
                 }
             }
@@ -1219,6 +1228,7 @@ fn emit_subtree(
             stroke: conn_color.to_string(),
             stroke_width: conn_width,
             kind: FancyConnKind::IndivToSpouse,
+            id: String::new(),
         });
     }
 }
@@ -1314,14 +1324,25 @@ mod tests {
             .primitives
             .iter()
             .flat_map(|p| {
-                if let Primitive::Group(g) = p {
-                    g.children
+                if let Primitive::Group(outer) = p {
+                    outer
+                        .children
                         .iter()
                         .flat_map(|c| {
-                            if let Primitive::FancyText(item) = c {
-                                item.lines
+                            if let Primitive::Group(inner) = c {
+                                inner
+                                    .children
                                     .iter()
-                                    .map(|l| l.text.clone())
+                                    .flat_map(|ic| {
+                                        if let Primitive::FancyText(item) = ic {
+                                            item.lines
+                                                .iter()
+                                                .map(|l| l.text.clone())
+                                                .collect::<Vec<_>>()
+                                        } else {
+                                            vec![]
+                                        }
+                                    })
                                     .collect::<Vec<_>>()
                             } else {
                                 vec![]
