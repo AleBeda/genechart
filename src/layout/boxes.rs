@@ -573,6 +573,54 @@ fn recenter_pass_desc(
     }
 }
 
+/// Left-to-right sweep that pushes overlapping siblings apart after recentering.
+/// Must be called bottom-up so inner overlaps are resolved before outer ones.
+fn separate_pass_desc(
+    ind_id: &str,
+    genrep: &Genrep,
+    box_w: f64,
+    gap_w: f64,
+    out: &mut HashMap<String, Individual<BoxesGeo>>,
+    global_right: &mut Vec<f64>,
+) {
+    let generation = match out.get(ind_id).and_then(|ind| ind.geo.as_ref()) {
+        Some(BoxesGeo::Individual(g)) => g.generation,
+        _ => return,
+    };
+    let child_generation = generation + 1;
+
+    let all_children: Vec<String> = spouses_of(ind_id, genrep)
+        .iter()
+        .flat_map(|sp| children_with_spouse(ind_id, sp, genrep))
+        .filter(|cid| out.contains_key(cid.as_str()))
+        .collect();
+
+    for child in &all_children {
+        separate_pass_desc(child, genrep, box_w, gap_w, out, global_right);
+    }
+
+    for i in 1..all_children.len() {
+        let right_env = get_right_envelope_desc(&all_children[i - 1], genrep, out, box_w, gap_w);
+        let left_env = get_left_envelope_desc(&all_children[i], genrep, out, box_w, gap_w);
+        if right_env.is_empty() || left_env.is_empty() {
+            continue;
+        }
+        let overlap = right_env[0] + gap_w - left_env[0];
+        if overlap > 1e-6 {
+            shift_subtree_desc(
+                &all_children[i],
+                overlap,
+                child_generation,
+                genrep,
+                box_w,
+                gap_w,
+                out,
+                global_right,
+            );
+        }
+    }
+}
+
 /// Recursively places `ind_id` and its in-scope descendants.
 #[allow(clippy::too_many_arguments)]
 fn place_descendants(
@@ -873,6 +921,14 @@ impl Layout for BoxesLayout {
                 0,
             );
             recenter_pass_desc(root_id, genrep, box_w, gap_w, &mut individuals);
+            separate_pass_desc(
+                root_id,
+                genrep,
+                box_w,
+                gap_w,
+                &mut individuals,
+                &mut global_right,
+            );
         }
 
         // Copy any in-scope individuals not yet placed (e.g. spouses in descendants mode).
