@@ -1,0 +1,22 @@
+[scope]
+root = "I1"
+generations = 3
+direction = "descendants"
+
+[layout]
+type = "boxes"
+root_pos = "top"
+
+[show]
+photo = true
+
+[photos]
+directory = "photos"
+index = "photos.index"
+embedded = true
+width = 80.0
+height = 80.0
+margin = 3.0
+scale = "crop"
+box_resize = true
+downsample = 150.0

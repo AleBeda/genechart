@@ -22,6 +22,10 @@ echo "==> Kennedy: fancy SVG (3 generations from Joseph Kennedy Sr.)"
 genechart "$KENNEDY" --root I1 --gen 3 --type fancy --svg \
   -o examples/kennedy/kennedy_fancy.svg
 
+echo "==> Kennedy: boxes SVG with photos (3 generations from Joseph Kennedy Sr., root at top)"
+genechart "$KENNEDY" --preff examples/kennedy/kennedy_boxes_photos.toml --svg \
+  -o examples/kennedy/kennedy_boxes_photos.svg
+
 echo "Done. Outputs written to examples/kennedy/"
 
 SHAKESPEARE=examples/shakespeare/shakespeare.ged
