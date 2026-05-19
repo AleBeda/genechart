@@ -1117,7 +1117,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                     let ph_w = prefs.photos.width.min(box_w - 2.0 * prefs.photos.margin);
                     children.push(Primitive::Image(ImagePrimitive {
                         bbox: Rect {
-                            x: cx_display - box_w / 2.0 + prefs.photos.margin,
+                            x: cx_display - ph_w / 2.0,
                             y: box_display_top + prefs.photos.margin,
                             w: ph_w,
                             h: prefs.photos.height,

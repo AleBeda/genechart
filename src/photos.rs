@@ -6,6 +6,7 @@
 
 use crate::preferences::PhotosPrefs;
 use base64::Engine as _;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -28,8 +29,6 @@ pub fn build_photo_map(
     is_pdf: bool,
     svg_output_path: &str,
 ) -> PhotoMap {
-    let mut map = PhotoMap::new();
-
     let gedcom_dir = if gedcom_path.is_empty() {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     } else {
@@ -52,41 +51,41 @@ pub fn build_photo_map(
     };
 
     let embed = photos_prefs.embedded || is_pdf;
+    let target_w = photos_prefs.width as u32;
+    let target_h = photos_prefs.height as u32;
 
-    for &id in individual_ids {
-        let photo_path = match find_photo_path(id, &gedcom_dir, photos_prefs, &index_map) {
-            Some(p) => p,
-            None => continue,
-        };
+    individual_ids
+        .par_iter()
+        .filter_map(|&id| {
+            let photo_path = find_photo_path(id, &gedcom_dir, photos_prefs, &index_map)?;
 
-        let img = match image::open(&photo_path) {
-            Ok(img) => img,
-            Err(e) => {
-                eprintln!(
-                    "warning: photos: cannot open {:?} for {id}: {e}",
-                    photo_path
-                );
-                continue;
+            let img = match image::open(&photo_path) {
+                Ok(img) => img,
+                Err(e) => {
+                    eprintln!(
+                        "warning: photos: cannot open {:?} for {id}: {e}",
+                        photo_path
+                    );
+                    return None;
+                }
+            };
+
+            let img = apply_scale(img, target_w, target_h, &photos_prefs.scale);
+            let is_png = is_png_path(&photo_path);
+
+            let href = if embed {
+                build_embedded_href(img, is_png, photos_prefs)
+            } else {
+                build_linked_href(&photo_path, svg_dir.as_deref())
+            };
+
+            if href.is_empty() {
+                None
+            } else {
+                Some((id.to_string(), href))
             }
-        };
-
-        let target_w = photos_prefs.width as u32;
-        let target_h = photos_prefs.height as u32;
-        let img = apply_scale(img, target_w, target_h, &photos_prefs.scale);
-        let is_png = is_png_path(&photo_path);
-
-        let href = if embed {
-            build_embedded_href(img, is_png, photos_prefs)
-        } else {
-            build_linked_href(&photo_path, svg_dir.as_deref())
-        };
-
-        if !href.is_empty() {
-            map.insert(id.to_string(), href);
-        }
-    }
-
-    map
+        })
+        .collect()
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
