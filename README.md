@@ -128,6 +128,8 @@ genechart family.ged -r I1 --type boxes -o chart.svg
 
 Configuration: `[layout.boxes]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `couple_y_offset` (vertical offset between individual and spouse box tops, descendants only).
 
+**Photos:** the `boxes` layout optionally displays a photo at the top of each box, above the name. Enable with `show.photo = true` and configure the `[photos]` section. Photos are not supported in other layout types.
+
 ## Output Formats
 
 ### Text
@@ -215,6 +217,18 @@ notes = false
 last_gen_spouses = false
 id = false
 duplicated_individual = false
+photo = false
+
+[photos]
+directory = "photos"    # relative to GEDCOM file
+index = ""              # "" = ID-based filenames (e.g. I1.jpg); non-empty = path to index file
+embedded = false        # true: base64 data URI; false: relative path; PDF always embeds
+width = 100.0           # canvas units
+height = 100.0          # canvas units
+margin = 2.0            # space on all four sides of the photo within the box
+scale = "crop"          # "fit" | "crop" | "none"
+box_resize = true       # grow box height by (height + 2*margin) to fit the photo
+downsample = 72.0       # max DPI for embedded images; 0.0 = no downsampling
 
 [format]
 individual = "{firstname} {lastname} {sex}"
@@ -384,6 +398,59 @@ I12 Paul Smith # emigrated 1900
 ```
 
 Highlighted individuals are visually distinguished in SVG/PDF output. They are rendered in a different text color, configurable via `output.style.text.highlights.color`, and with a different background color, configurable via `output.style.text.highlights.background_color`. The text backend supports two fallback modes, controlled by `output.style.text.highlights.fallback`: when set to `"uppercase"`, the highlighted individual's name is capitalized; when set to any other value (e.g. `"->"`), that literal string is prepended to the left of the line (even before the ID column, if shown), and all content on that line is shifted right to make room.
+
+## Photos
+
+Photos are supported in the `boxes` layout only. Enable with `show.photo = true`.
+
+### Photo discovery
+
+Photos are resolved relative to the GEDCOM file's directory:
+
+- **ID-based (default):** `<photos.directory>/<individual_id>.<ext>`, where `ext` is tried as `jpg`, `jpeg`, `png` (both cases). For example, individual `I1` maps to `photos/I1.jpg`.
+- **Index file:** set `photos.index` to a path (relative to the GEDCOM directory) of a plain-text file. Each line has the format `ID filename [anything...]`; `#` starts a comment; blank lines are ignored.
+
+  ```
+  # Kennedy family photos
+  I0  jfk.jpg
+  I52 jackie.jpg      # married 1953
+  I53 caroline.jpg
+  ```
+
+### Scaling
+
+| `scale` value | Behaviour |
+|---|---|
+| `"crop"` *(default)* | Fill the box exactly, cropping the centre |
+| `"fit"` | Scale to fit within the box, preserving aspect ratio |
+| `"none"` | No scaling; use the original image dimensions |
+
+### Embedding vs linking
+
+| Setting | Behaviour |
+|---|---|
+| `embedded = false` *(default)* | The SVG `href` is a path relative to the SVG output file |
+| `embedded = true` | The image is base64-encoded into the SVG as a data URI |
+| PDF output | Always embeds regardless of `embedded` |
+
+### Downsampling
+
+`photos.downsample` caps the resolution of embedded images. The maximum pixel dimensions are computed as `width * downsample / 96` × `height * downsample / 96`. Set to `0.0` to disable.
+
+### Box sizing
+
+When `box_resize = true` (default), all boxes in the chart grow taller by `height + 2 * margin` to accommodate the photo. When `box_resize = false`, the photo is skipped for boxes where it would not fit alongside at least one line of text.
+
+### Example
+
+```sh
+genechart family.ged -r I1 --type boxes \
+  --pref 'show.photo = true' \
+  --pref 'photos.directory = "photos"' \
+  --pref 'photos.embedded = true' \
+  --pref 'photos.scale = "crop"' \
+  -o chart.svg
+```
 
 ## Building
 
