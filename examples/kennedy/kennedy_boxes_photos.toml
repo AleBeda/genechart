@@ -1,22 +1,26 @@
 [scope]
 root = "I1"
-generations = 3
+generations = 2
 direction = "descendants"
 
 [layout]
 type = "boxes"
 root_pos = "top"
 
+[layout.boxes]
+box_width = 280.0
+
 [show]
 photo = true
+last_gen_spouses = true
 
 [photos]
 directory = "photos"
 index = "photos.index"
 embedded = true
-width = 80.0
-height = 80.0
-margin = 3.0
+width = 140.0
+height = 140.0
+margin = 8.0
 scale = "crop"
 box_resize = true
 downsample = 150.0

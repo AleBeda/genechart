@@ -1,649 +1,280 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="8960" height="928" viewBox="0 0 8960.0 928.3">
+<svg xmlns="http://www.w3.org/2000/svg" width="4800" height="892" viewBox="0 0 4800.0 892.3">
   <text x="20.0" y="44.0" font-family="Georgia" font-size="24" font-weight="normal" fill="black" xml:space="preserve">The Kennedy Family</text>
-  <text x="20.0" y="950.5" font-family="Arial" font-size="8" font-weight="normal" fill="black" xml:space="preserve">© 2026 Alex Bedarida</text>
+  <text x="20.0" y="914.5" font-family="Arial" font-size="8" font-weight="normal" fill="black" xml:space="preserve">© 2026 Alex Bedarida</text>
 <g>
-<g id="I69">
-  <rect x="7860.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I69-name">
-  <text x="7910.4" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Kym Maria Smith </text>
-  <text x="8041.2" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+<g id="I16">
+  <rect x="2580.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I16-name">
+  <text x="2628.5" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Patricia Helen Kennedy </text>
+  <text x="2803.1" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-</g>
-</g>
-<g>
-<g id="I1">
-  <rect x="1420.0" y="53.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="1500.00" y="56.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I1-name">
-  <text x="1446.8" y="157.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Joseph Patrick Kennedy </text>
-  <text x="1624.8" y="157.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="1479.7" y="169.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 06 Sep 1888, Boston, MA</text>
-  <text x="1465.7" y="181.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 18 Nov 1969, Hyannis Port, MA</text>
-</g>
-</g>
-<g>
-<g id="I39">
-  <rect x="8140.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I39-name">
-  <rect x="8164.6" y="304.6" width="190.8" height="16.8" fill="#FFFF66"/>
-  <text x="8166.6" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">Edward Moore Kennedy </text>
-  <text x="8345.0" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
-</g>
-  <text x="8194.7" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 22 Feb 1932, Brookline, MA</text>
-  <text x="8185.7" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 25 Aug 2009, Hyannis Port, MA</text>
-</g>
-</g>
-<g>
-<g id="I24">
-  <rect x="4220.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I24-name">
-  <text x="4246.8" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Joseph Patrick Kennedy </text>
-  <text x="4424.8" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="4308.3" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 24 Sep 1952</text>
-</g>
-</g>
-<g>
-<g id="I0">
-  <rect x="20.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="100.00" y="302.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I0-name">
-  <rect x="41.8" y="390.6" width="196.5" height="16.8" fill="#FFFF66"/>
-  <text x="43.8" y="403.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">John Fitzgerald Kennedy </text>
-  <text x="227.8" y="403.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
-</g>
-  <text x="73.9" y="415.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 29 May 1917, Brookline, MA</text>
-  <text x="81.5" y="427.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 22 Nov 1963, Dallas, TX</text>
-</g>
-</g>
-<g>
-<g id="I23">
-  <rect x="3940.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I23-name">
-  <text x="3945.5" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Kathleen Hartington Kennedy </text>
-  <text x="4166.1" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="3962.4" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 04 Jul 1951, Greenwich, Connecticut, U.S.</text>
-</g>
-</g>
-<g>
-<g id="I27">
-  <rect x="5060.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I27-name">
-  <text x="5086.2" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Mary Courtney Kennedy </text>
-  <text x="5265.4" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="5148.3" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 08 Sep 1956</text>
-</g>
-</g>
-<g>
-<g id="I21">
-  <rect x="5060.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="5140.00" y="302.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I21-name">
-  <rect x="5084.4" y="390.6" width="191.2" height="16.8" fill="#FFFF66"/>
-  <text x="5086.4" y="403.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">Robert Francis Kennedy </text>
-  <text x="5265.2" y="403.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
-</g>
-  <text x="5119.7" y="415.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Nov 1925, Boston, MA</text>
-  <text x="5108.1" y="427.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 06 Jun 1968, Los Angeles, CA</text>
-</g>
-</g>
-<g>
-<g id="I55">
-  <rect x="580.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I55-name">
-  <text x="603.8" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Patrick Bouvier Kennedy </text>
-  <text x="787.8" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="615.5" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 07 Aug 1963, Otis Air Force B, Mass</text>
-  <text x="638.7" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 09 Aug 1963, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I26">
-  <rect x="4780.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I26-name">
-  <text x="4806.5" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">David Anthony Kennedy </text>
-  <text x="4985.1" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="4830.0" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 15 Jun 1955, Washington, DC</text>
-  <text x="4820.6" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 25 Apr 1984, Palm Beach, Florida</text>
+  <text x="2659.1" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 06 May 1924, Boston, MA</text>
+  <text x="2624.0" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 17 Sep 2006, Manhattan, New York, U.S.</text>
 </g>
 </g>
 <g>
 <g id="I3">
-  <rect x="580.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <rect x="660.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
 <g id="I3-name">
-  <text x="606.8" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Joseph Patrick Kennedy </text>
-  <text x="784.8" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+  <text x="706.8" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Joseph Patrick Kennedy </text>
+  <text x="884.8" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
 </g>
-  <text x="642.2" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 01 Jul 1915, Boston, MA</text>
-  <text x="628.1" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 02 Aug 1944, Suffolk, England</text>
-</g>
-</g>
-<g>
-<g id="I9">
-  <rect x="1420.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I9-name">
-  <text x="1450.5" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Robert Sargent Shriver </text>
-  <text x="1621.1" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="1471.6" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 28 Apr 1954, Chicago, Illinois</text>
-</g>
-</g>
-<g>
-<g id="I11">
-  <rect x="1700.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I11-name">
-  <text x="1735.1" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Maria Owings Shriver </text>
-  <text x="1896.5" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="1750.5" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 06 Nov 1955, Chicago, Illinois</text>
-</g>
-</g>
-<g>
-<g id="I29">
-  <rect x="5620.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I29-name">
-  <text x="5658.7" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Mary Kerry Kennedy </text>
-  <text x="5812.9" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="5669.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 08 Sep 1959, Washington, DC</text>
-</g>
-</g>
-<g>
-<g id="I31">
-  <rect x="6180.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I31-name">
-  <text x="6171.3" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Matthew Maxwell Taylor Kennedy </text>
-  <text x="6420.3" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="6205.8" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 11 Jan 1965, Manhattan, New York, U.S.</text>
-</g>
-</g>
-<g>
-<g id="I54">
-  <rect x="300.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I54-name">
-  <text x="323.8" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">John Fitzgerald Kennedy </text>
-  <text x="507.8" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="349.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 25 Nov 1960, Washington, DC</text>
-  <text x="389.8" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 16 Jul 1999</text>
+  <text x="742.2" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 01 Jul 1915, Boston, MA</text>
+  <text x="728.1" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 02 Aug 1944, Suffolk, England</text>
 </g>
 </g>
 <g>
 <g id="I8">
-  <rect x="1700.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <rect x="1940.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
 <g id="I8-name">
-  <text x="1734.8" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Eunice Mary Kennedy </text>
-  <text x="1896.8" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+  <text x="1994.8" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Eunice Mary Kennedy </text>
+  <text x="2156.8" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-  <text x="1762.2" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 10 Jul 1921, Boston, MA</text>
-  <text x="1787.3" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 11 Aug 2009</text>
-</g>
-</g>
-<g>
-<g id="I33">
-  <rect x="6740.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I33-name">
-  <text x="6728.9" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Rory Elizabeth Katherine Kennedy </text>
-  <text x="6982.7" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="6789.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 12 Dec 1968, Washington, DC</text>
+  <text x="2022.2" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 10 Jul 1921, Boston, MA</text>
+  <text x="2047.3" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 11 Aug 2009</text>
 </g>
 </g>
 <g>
-<g id="I28">
-  <rect x="5340.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I28-name">
-  <text x="5382.7" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Michael L. Kennedy </text>
-  <text x="5528.9" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+<g id="I0">
+  <rect x="20.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="90.00" y="377.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I0-name">
+  <rect x="61.8" y="530.6" width="196.5" height="16.8" fill="#FFFF66"/>
+  <text x="63.8" y="543.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">John Fitzgerald Kennedy </text>
+  <text x="247.8" y="543.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
 </g>
-  <text x="5389.4" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 27 Feb 1958, Washington, DC</text>
-  <text x="5387.3" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 31 Dec 1997, Aspen, Colorado</text>
-</g>
-</g>
-<g>
-<g id="I6">
-  <rect x="1140.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I6-name">
-  <text x="1163.3" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Kathleen Angus Kennedy </text>
-  <text x="1348.3" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="1200.0" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Feb 1920, Boston, MA</text>
-  <text x="1208.4" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 13 May 1948, France</text>
-</g>
-</g>
-<g>
-<g id="I17">
-  <rect x="2820.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I17-name">
-  <text x="2858.0" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Christopher Lawford </text>
-  <text x="3013.6" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="2851.3" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 29 Mar 1955, Santa Monica, California</text>
-  <text x="2821.2" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 04 Sep 2018, Vancouver, British Columbia, Canada</text>
-</g>
-</g>
-<g>
-<g id="I13">
-  <rect x="2260.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I13-name">
-  <text x="2292.1" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Mark Kennedy Shriver </text>
-  <text x="2459.5" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="2309.4" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 17 Feb 1964, Washington, DC</text>
-</g>
-</g>
-<g>
-<g id="I43">
-  <rect x="8700.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I43-name">
-  <text x="8726.8" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Patrick Joseph Kennedy </text>
-  <text x="8904.8" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="8790.8" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 14 Jul 1967</text>
-</g>
-</g>
-<g>
-<g id="I37">
-  <rect x="7300.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I37-name">
-  <text x="7327.9" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">William Kennedy Smith </text>
-  <text x="7503.7" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="7359.7" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 04 Sep 1960, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I38">
-  <rect x="7580.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I38-name">
-  <text x="7640.4" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Amanda Smith </text>
-  <text x="7751.2" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-</g>
-</g>
-<g>
-<g id="I12">
-  <rect x="1980.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I12-name">
-  <text x="2034.9" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Timothy Shriver </text>
-  <text x="2156.7" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="2039.7" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 29 Aug 1959, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I19">
-  <rect x="3380.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I19-name">
-  <text x="3376.0" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Sydney Maleia Kennedy Lawford </text>
-  <text x="3615.6" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="3411.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 25 Aug 1956, Santa Monica, California</text>
-</g>
-</g>
-<g>
-<g id="I18">
-  <rect x="3100.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I18-name">
-  <text x="3152.7" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Victoria Lawford </text>
-  <text x="3278.9" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="3131.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 04 Nov 1958, Santa Monica, California</text>
-</g>
-</g>
-<g>
-<g id="I14">
-  <rect x="2540.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I14-name">
-  <text x="2542.6" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Anthony Paul Kennedy Shriver </text>
-  <text x="2769.0" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="2602.2" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Jul 1965, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I41">
-  <rect x="8140.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I41-name">
-  <text x="8185.8" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Kara Ann Kennedy </text>
-  <text x="8325.8" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="8179.7" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 27 Feb 1960, Bronxville, New York</text>
-  <text x="8188.1" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 16 Sep 2011, Washington, DC</text>
-</g>
-</g>
-<g>
-<g id="I16">
-  <rect x="2960.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I16-name">
-  <text x="2988.5" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Patricia Helen Kennedy </text>
-  <text x="3163.1" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="3019.1" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 06 May 1924, Boston, MA</text>
-  <text x="2984.0" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 17 Sep 2006, Manhattan, New York, U.S.</text>
-</g>
-</g>
-<g>
-<g id="I25">
-  <rect x="4500.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I25-name">
-  <text x="4526.4" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Robert Francis Kennedy </text>
-  <text x="4705.2" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="4589.1" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 17 Jan 1954</text>
-</g>
-</g>
-<g>
-<g id="I53">
-  <rect x="20.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I53-name">
-  <text x="39.0" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Caroline Bouvier Kennedy </text>
-  <text x="232.6" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="83.9" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 27 Nov 1957, New York</text>
-</g>
-</g>
-<g>
-<g id="I4">
-  <rect x="860.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I4-name">
-  <text x="899.4" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Rose Marie Kennedy </text>
-  <text x="1052.2" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="919.7" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 13 Sep 1918, Boston, MA</text>
-  <text x="948.2" y="341.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 07 Jan 2005</text>
+  <text x="93.9" y="555.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 29 May 1917, Brookline, MA</text>
+  <text x="101.5" y="567.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 22 Nov 1963, Dallas, TX</text>
 </g>
 </g>
 <g>
 <g id="I35">
-  <rect x="7160.0" y="299.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <rect x="3860.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
 <g id="I35-name">
-  <text x="7206.4" y="317.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Jean Ann Kennedy </text>
-  <text x="7345.2" y="317.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+  <text x="3926.4" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Jean Ann Kennedy </text>
+  <text x="4065.2" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-  <text x="7220.0" y="329.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Feb 1928, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I20">
-  <rect x="3660.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I20-name">
-  <text x="3684.3" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Robin Elizabeth Lawford </text>
-  <text x="3867.3" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="3750.8" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 02 Jul 1961</text>
+  <text x="3940.0" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Feb 1928, Boston, MA</text>
 </g>
 </g>
 <g>
-<g id="I30">
-  <rect x="5900.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I30-name">
-  <text x="5909.0" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Christopher George Kennedy </text>
-  <text x="6122.6" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+<g id="I4">
+  <rect x="980.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I4-name">
+  <text x="1039.4" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Rose Marie Kennedy </text>
+  <text x="1192.2" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-  <text x="5960.5" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 04 Jun 1963, Boston, MA</text>
-</g>
-</g>
-<g>
-<g id="I36">
-  <rect x="7020.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I36-name">
-  <text x="7081.1" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Stephen Smith </text>
-  <text x="7190.5" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
+  <text x="1059.7" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 13 Sep 1918, Boston, MA</text>
+  <text x="1088.2" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 07 Jan 2005</text>
 </g>
 </g>
 <g>
-<g id="I42">
-  <rect x="8420.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I42-name">
-  <text x="8446.6" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Edward Moore Kennedy </text>
-  <text x="8625.0" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+<g id="I21">
+  <rect x="3220.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="3290.00" y="377.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I21-name">
+  <rect x="3264.4" y="530.6" width="191.2" height="16.8" fill="#FFFF66"/>
+  <text x="3266.4" y="543.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">Robert Francis Kennedy </text>
+  <text x="3445.2" y="543.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
 </g>
-  <text x="8508.3" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 26 Sep 1961</text>
-</g>
-</g>
-<g>
-<g id="I32">
-  <rect x="6460.0" y="545.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I32-name">
-  <text x="6472.9" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Douglas Harriman Kennedy </text>
-  <text x="6678.7" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="6509.4" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 24 Mar 1967, Washington, DC</text>
+  <text x="3299.7" y="555.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Nov 1925, Boston, MA</text>
+  <text x="3288.1" y="567.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 06 Jun 1968, Los Angeles, CA</text>
 </g>
 </g>
 <g>
-<g id="I2">
-  <rect x="1700.0" y="73.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="1780.00" y="76.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I2-name">
-  <text x="1722.5" y="177.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Rose Elizabeth Fitzgerald </text>
-  <text x="1909.1" y="177.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+<g id="I39">
+  <rect x="4500.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I39-name">
+  <rect x="4544.6" y="374.6" width="190.8" height="16.8" fill="#FFFF66"/>
+  <text x="4546.6" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="#0000DD" xml:space="preserve">Edward Moore Kennedy </text>
+  <text x="4725.0" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="#0000DD" xml:space="preserve">♂</text>
 </g>
-  <text x="1736.9" y="189.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 22 Jul 1890, North End, Boston, MA</text>
-  <text x="1746.5" y="201.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 22 Jan 1995, Hyannis Port, MA</text>
-</g>
-</g>
-<g>
-<g id="I40">
-  <rect x="8420.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I40-name">
-  <text x="8454.9" y="337.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Virginia Joan Bennett </text>
-  <text x="8616.7" y="337.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="8463.3" y="349.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 02 Sep 1936, Crowley, Louisiana</text>
+  <text x="4574.7" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 22 Feb 1932, Brookline, MA</text>
+  <text x="4565.7" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 25 Aug 2009, Hyannis Port, MA</text>
 </g>
 </g>
 <g>
-<g id="I52">
-  <rect x="300.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="380.00" y="322.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I52-name">
-  <text x="296.3" y="423.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Jacqueline Lee Kennedy Bouvier </text>
-  <text x="535.3" y="423.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+<g id="I6">
+  <rect x="1300.0" y="369.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I6-name">
+  <text x="1343.3" y="387.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Kathleen Angus Kennedy </text>
+  <text x="1528.3" y="387.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-  <text x="319.9" y="435.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 28 Jul 1929, Southampton, Long Island, NY</text>
-  <text x="362.3" y="447.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 19 May 1994, New York</text>
-</g>
-</g>
-<g>
-<g id="I22">
-  <rect x="5340.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-  <image x="5420.00" y="322.23" width="80.00" height="80.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
-<g id="I22-name">
-  <text x="5409.3" y="423.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Ethel Skakel </text>
-  <text x="5502.3" y="423.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
-</g>
-  <text x="5391.6" y="435.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 11 Apr 1928, Chicago, Illinois</text>
+  <text x="1380.0" y="399.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 20 Feb 1920, Boston, MA</text>
+  <text x="1388.4" y="411.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 13 May 1948, France</text>
 </g>
 </g>
 <g>
-<g id="I7">
-  <rect x="1980.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I7-name">
-  <text x="2010.5" y="337.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Robert Sargent Shriver </text>
-  <text x="2181.1" y="337.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+<g id="I1">
+  <rect x="1620.0" y="53.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="1690.00" y="61.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I1-name">
+  <text x="1666.8" y="227.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Joseph Patrick Kennedy </text>
+  <text x="1844.8" y="227.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
 </g>
-  <text x="2027.2" y="349.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 09 Nov 1915, Westminster, MD</text>
-  <text x="2033.7" y="361.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 18 Jan 2011, Bethesda, MD</text>
-</g>
-</g>
-<g>
-<g id="I5">
-  <rect x="1420.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
-<g id="I5-name">
-  <text x="1419.1" y="337.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">William John Robert Cavendish </text>
-  <text x="1652.5" y="337.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
-</g>
-  <text x="1508.3" y="349.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 10 Dec 1917</text>
-  <text x="1486.5" y="361.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 10 Sep 1944, Belgium</text>
+  <text x="1699.7" y="239.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 06 Sep 1888, Boston, MA</text>
+  <text x="1685.7" y="251.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 18 Nov 1969, Hyannis Port, MA</text>
 </g>
 </g>
 <g>
 <g id="I15">
-  <rect x="3240.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <rect x="2900.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
 <g id="I15-name">
-  <text x="3302.4" y="337.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Peter Lawford </text>
-  <text x="3409.2" y="337.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+  <text x="2982.4" y="407.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Peter Lawford </text>
+  <text x="3089.2" y="407.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
 </g>
-  <text x="3287.7" y="349.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 07 Sep 1923, London, England</text>
-  <text x="3273.1" y="361.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 24 Dec 1984, Los Angeles, California</text>
+  <text x="2967.7" y="419.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 07 Sep 1923, London, England</text>
+  <text x="2953.1" y="431.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 24 Dec 1984, Los Angeles, California</text>
+</g>
+</g>
+<g>
+<g id="I7">
+  <rect x="2260.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I7-name">
+  <text x="2310.5" y="407.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Robert Sargent Shriver </text>
+  <text x="2481.1" y="407.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+</g>
+  <text x="2327.2" y="419.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 09 Nov 1915, Westminster, MD</text>
+  <text x="2333.7" y="431.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 18 Jan 2011, Bethesda, MD</text>
+</g>
+</g>
+<g>
+<g id="I52">
+  <rect x="340.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="410.00" y="397.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I52-name">
+  <text x="356.3" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Jacqueline Lee Kennedy Bouvier </text>
+  <text x="595.3" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+</g>
+  <text x="379.9" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 28 Jul 1929, Southampton, Long Island, NY</text>
+  <text x="422.3" y="587.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 19 May 1994, New York</text>
 </g>
 </g>
 <g>
 <g id="I34">
-  <rect x="7440.0" y="319.2" width="240.0" height="166.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <rect x="4180.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
 <g id="I34-name">
-  <text x="7471.1" y="337.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Stephen Edward Smith </text>
-  <text x="7640.5" y="337.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+  <text x="4231.1" y="407.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Stephen Edward Smith </text>
+  <text x="4400.5" y="407.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
 </g>
-  <text x="7483.8" y="349.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 24 Sep 1927, Bayport, New York</text>
-  <text x="7476.5" y="361.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 19 Aug 1990, Manhattan, New York</text>
-</g>
-</g>
-<g>
-<g id="I2-connectors">
-  <line x1="1820.0" y1="239.2" x2="1820.0" y2="269.2" stroke="#000000" stroke-width="1"/>
-  <line x1="140.0" y1="269.2" x2="8260.0" y2="269.2" stroke="#000000" stroke-width="1"/>
-  <line x1="140.0" y1="269.2" x2="140.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="700.0" y1="269.2" x2="700.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="980.0" y1="269.2" x2="980.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1260.0" y1="269.2" x2="1260.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1820.0" y1="269.2" x2="1820.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3080.0" y1="269.2" x2="3080.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5180.0" y1="269.2" x2="5180.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7280.0" y1="269.2" x2="7280.0" y2="299.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8260.0" y1="269.2" x2="8260.0" y2="299.2" stroke="#000000" stroke-width="1"/>
+  <text x="4243.8" y="419.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 24 Sep 1927, Bayport, New York</text>
+  <text x="4236.5" y="431.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 19 Aug 1990, Manhattan, New York</text>
 </g>
 </g>
 <g>
-<g id="I2-ind-connectors">
-  <line x1="1660.0" y1="53.2" x2="1660.0" y2="63.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1660.0" y1="63.2" x2="1820.0" y2="63.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1820.0" y1="63.2" x2="1820.0" y2="73.2" stroke="#000000" stroke-width="1"/>
+<g id="I22">
+  <rect x="3540.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="3610.00" y="397.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I22-name">
+  <text x="3629.3" y="563.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Ethel Skakel </text>
+  <text x="3722.3" y="563.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+</g>
+  <text x="3611.6" y="575.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 11 Apr 1928, Chicago, Illinois</text>
 </g>
 </g>
 <g>
-<g id="I40-connectors">
-  <line x1="8540.0" y1="485.2" x2="8540.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8260.0" y1="515.2" x2="8820.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8260.0" y1="515.2" x2="8260.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8540.0" y1="515.2" x2="8540.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8820.0" y1="515.2" x2="8820.0" y2="545.2" stroke="#000000" stroke-width="1"/>
+<g id="I40">
+  <rect x="4820.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I40-name">
+  <text x="4874.9" y="407.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Virginia Joan Bennett </text>
+  <text x="5036.7" y="407.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
+</g>
+  <text x="4883.3" y="419.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 02 Sep 1936, Crowley, Louisiana</text>
 </g>
 </g>
 <g>
-<g id="I40-ind-connectors">
-  <line x1="8380.0" y1="299.2" x2="8380.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8380.0" y1="309.2" x2="8540.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="8540.0" y1="309.2" x2="8540.0" y2="319.2" stroke="#000000" stroke-width="1"/>
+<g id="I5">
+  <rect x="1620.0" y="389.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+<g id="I5-name">
+  <text x="1639.1" y="407.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">William John Robert Cavendish </text>
+  <text x="1872.5" y="407.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♂</text>
+</g>
+  <text x="1728.3" y="419.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 10 Dec 1917</text>
+  <text x="1706.5" y="431.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 10 Sep 1944, Belgium</text>
 </g>
 </g>
 <g>
-<g id="I52-connectors">
-  <line x1="420.0" y1="485.2" x2="420.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="140.0" y1="515.2" x2="700.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="140.0" y1="515.2" x2="140.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="420.0" y1="515.2" x2="420.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="700.0" y1="515.2" x2="700.0" y2="545.2" stroke="#000000" stroke-width="1"/>
+<g id="I2">
+  <rect x="1940.0" y="73.2" width="280.0" height="236.0" rx="0.0" ry="0.0" fill="#FFFFFF" stroke="#222222" stroke-width="0.5"/>
+  <image x="2010.00" y="81.23" width="140.00" height="140.00" href="data:image/jpeg;base64,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" preserveAspectRatio="none"/>
+<g id="I2-name">
+  <text x="1982.5" y="247.2" font-family="Georgia, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="bold" fill="black" xml:space="preserve">Rose Elizabeth Fitzgerald </text>
+  <text x="2169.1" y="247.2" font-family="'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="14" font-weight="normal" fill="black" xml:space="preserve">♀</text>
 </g>
-</g>
-<g>
-<g id="I52-ind-connectors">
-  <line x1="260.0" y1="299.2" x2="260.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="260.0" y1="309.2" x2="420.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="420.0" y1="309.2" x2="420.0" y2="319.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I22-connectors">
-  <line x1="5460.0" y1="485.2" x2="5460.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="4060.0" y1="515.2" x2="6860.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="4060.0" y1="515.2" x2="4060.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="4340.0" y1="515.2" x2="4340.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="4620.0" y1="515.2" x2="4620.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="4900.0" y1="515.2" x2="4900.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5180.0" y1="515.2" x2="5180.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5460.0" y1="515.2" x2="5460.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5740.0" y1="515.2" x2="5740.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="6020.0" y1="515.2" x2="6020.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="6300.0" y1="515.2" x2="6300.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="6580.0" y1="515.2" x2="6580.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="6860.0" y1="515.2" x2="6860.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I22-ind-connectors">
-  <line x1="5300.0" y1="299.2" x2="5300.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5300.0" y1="309.2" x2="5460.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="5460.0" y1="309.2" x2="5460.0" y2="319.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I7-connectors">
-  <line x1="2100.0" y1="485.2" x2="2100.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1540.0" y1="515.2" x2="2660.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1540.0" y1="515.2" x2="1540.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1820.0" y1="515.2" x2="1820.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2100.0" y1="515.2" x2="2100.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2380.0" y1="515.2" x2="2380.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2660.0" y1="515.2" x2="2660.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I7-ind-connectors">
-  <line x1="1940.0" y1="299.2" x2="1940.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1940.0" y1="309.2" x2="2100.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2100.0" y1="309.2" x2="2100.0" y2="319.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I5-ind-connectors">
-  <line x1="1380.0" y1="299.2" x2="1380.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1380.0" y1="309.2" x2="1540.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="1540.0" y1="309.2" x2="1540.0" y2="319.2" stroke="#000000" stroke-width="1"/>
-</g>
-</g>
-<g>
-<g id="I15-connectors">
-  <line x1="3360.0" y1="485.2" x2="3360.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2940.0" y1="515.2" x2="3780.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="2940.0" y1="515.2" x2="2940.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3220.0" y1="515.2" x2="3220.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3500.0" y1="515.2" x2="3500.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3780.0" y1="515.2" x2="3780.0" y2="545.2" stroke="#000000" stroke-width="1"/>
+  <text x="1996.9" y="259.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">* 22 Jul 1890, North End, Boston, MA</text>
+  <text x="2006.5" y="271.2" font-family="Arial, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif" font-size="10" font-weight="normal" fill="black" xml:space="preserve">× 22 Jan 1995, Hyannis Port, MA</text>
 </g>
 </g>
 <g>
 <g id="I15-ind-connectors">
-  <line x1="3200.0" y1="299.2" x2="3200.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3200.0" y1="309.2" x2="3360.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="3360.0" y1="309.2" x2="3360.0" y2="319.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2860.0" y1="369.2" x2="2860.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2860.0" y1="379.2" x2="3040.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="3040.0" y1="379.2" x2="3040.0" y2="389.2" stroke="#000000" stroke-width="1"/>
 </g>
 </g>
 <g>
-<g id="I34-connectors">
-  <line x1="7560.0" y1="485.2" x2="7560.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7140.0" y1="515.2" x2="7980.0" y2="515.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7140.0" y1="515.2" x2="7140.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7420.0" y1="515.2" x2="7420.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7700.0" y1="515.2" x2="7700.0" y2="545.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7980.0" y1="515.2" x2="7980.0" y2="545.2" stroke="#000000" stroke-width="1"/>
+<g id="I7-ind-connectors">
+  <line x1="2220.0" y1="369.2" x2="2220.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2220.0" y1="379.2" x2="2400.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2400.0" y1="379.2" x2="2400.0" y2="389.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I52-ind-connectors">
+  <line x1="300.0" y1="369.2" x2="300.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="300.0" y1="379.2" x2="480.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="480.0" y1="379.2" x2="480.0" y2="389.2" stroke="#000000" stroke-width="1"/>
 </g>
 </g>
 <g>
 <g id="I34-ind-connectors">
-  <line x1="7400.0" y1="299.2" x2="7400.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7400.0" y1="309.2" x2="7560.0" y2="309.2" stroke="#000000" stroke-width="1"/>
-  <line x1="7560.0" y1="309.2" x2="7560.0" y2="319.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4140.0" y1="369.2" x2="4140.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4140.0" y1="379.2" x2="4320.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4320.0" y1="379.2" x2="4320.0" y2="389.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I22-ind-connectors">
+  <line x1="3500.0" y1="369.2" x2="3500.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="3500.0" y1="379.2" x2="3680.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="3680.0" y1="379.2" x2="3680.0" y2="389.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I40-ind-connectors">
+  <line x1="4780.0" y1="369.2" x2="4780.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4780.0" y1="379.2" x2="4960.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4960.0" y1="379.2" x2="4960.0" y2="389.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I5-ind-connectors">
+  <line x1="1580.0" y1="369.2" x2="1580.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="1580.0" y1="379.2" x2="1760.0" y2="379.2" stroke="#000000" stroke-width="1"/>
+  <line x1="1760.0" y1="379.2" x2="1760.0" y2="389.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I2-connectors">
+  <line x1="2080.0" y1="309.2" x2="2080.0" y2="339.2" stroke="#000000" stroke-width="1"/>
+  <line x1="160.0" y1="339.2" x2="4640.0" y2="339.2" stroke="#000000" stroke-width="1"/>
+  <line x1="160.0" y1="339.2" x2="160.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="800.0" y1="339.2" x2="800.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="1120.0" y1="339.2" x2="1120.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="1440.0" y1="339.2" x2="1440.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2080.0" y1="339.2" x2="2080.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2720.0" y1="339.2" x2="2720.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="3360.0" y1="339.2" x2="3360.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4000.0" y1="339.2" x2="4000.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+  <line x1="4640.0" y1="339.2" x2="4640.0" y2="369.2" stroke="#000000" stroke-width="1"/>
+</g>
+</g>
+<g>
+<g id="I2-ind-connectors">
+  <line x1="1900.0" y1="53.2" x2="1900.0" y2="63.2" stroke="#000000" stroke-width="1"/>
+  <line x1="1900.0" y1="63.2" x2="2080.0" y2="63.2" stroke="#000000" stroke-width="1"/>
+  <line x1="2080.0" y1="63.2" x2="2080.0" y2="73.2" stroke="#000000" stroke-width="1"/>
 </g>
 </g>
 </svg>
