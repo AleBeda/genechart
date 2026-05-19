@@ -69,6 +69,29 @@ Cascading descendants layout (SVG/PDF only). Each generation is offset diagonall
 distinctive staircase appearance. Highlighted individuals (JFK, RFK, Ted) are visually
 distinct from their siblings.
 
+### `kennedy_boxes_photos.svg` — boxes layout with photos, 3 generations from Joseph Sr.
+
+```
+genechart kennedy.ged --preff kennedy_boxes_photos.toml --svg
+```
+
+One box per individual, root at the top, descendants growing downward. Each box whose
+individual has a photo shows it centered above the name and dates. Settings are in
+`kennedy_boxes_photos.toml` (boxes layout, `root_pos = "top"`, embedded photos, crop scale,
+80×80 canvas units).
+
+Six Wikipedia portraits are included in `photos/` and mapped to individual IDs via
+`photos.index`:
+
+| File | Individual |
+|------|-----------|
+| `Joseph_P._Kennedy,_Sr._1938_(cropped).jpg` | I1 — Joseph Kennedy Sr. |
+| `Rose_Kennedy_1967.JPG` | I2 — Rose Fitzgerald Kennedy |
+| `John_F._Kennedy,_White_House_color_photo_portrait.jpeg` | I0 — John Fitzgerald Kennedy |
+| `Mrs_Kennedy_in_the_Diplomatic_Reception_Room_cropped.jpeg` | I52 — Jacqueline Bouvier Kennedy |
+| `Robert_F._Kennedy.jpg` | I21 — Robert Francis Kennedy |
+| `Ethel_Kennedy_Smile_1968_(cropped).jpg` | I22 — Ethel Skakel Kennedy |
+
 ## Highlights
 
 `kennedy_highlights.txt` marks three brothers for visual emphasis:

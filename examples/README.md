@@ -22,4 +22,4 @@ cargo install --path .
 
 | Directory | Source | What it demonstrates |
 |-----------|--------|----------------------|
-| `kennedy/` | Kennedy family, 70 individuals, 5 generations | All four layout types; highlights; TOML auto-load |
+| `kennedy/` | Kennedy family, 70 individuals, 5 generations | All layout types; photos; highlights; TOML auto-load |
