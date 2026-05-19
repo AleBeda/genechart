@@ -570,6 +570,17 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 out.push_str(&svg_line(sx, bar_y, sx, sy, ctx.conn_color, ctx.conn_width));
             }
         }
+        Primitive::Image(img) => {
+            let x = (ctx.to_svg_x)(img.bbox.x);
+            let y = (ctx.to_svg_y)(img.bbox.y);
+            let href_safe = img.href.replace('"', "&quot;");
+            out.push_str(&format!(
+                "  <image x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
+                 href=\"{href_safe}\" preserveAspectRatio=\"none\"/>\n",
+                w = img.bbox.w,
+                h = img.bbox.h,
+            ));
+        }
         Primitive::FancyText(item) => {
             if item.highlighted {
                 if let Some(name_line) = item.lines.iter().find(|l| {
@@ -1094,6 +1105,17 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     prefs,
                 };
                 render_bc_primitive(prim, &ctx, &mut out);
+            }
+            crate::scene::Primitive::Image(img) => {
+                let href_safe = img.href.replace('"', "&quot;");
+                out.push_str(&format!(
+                    "  <image x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
+                     href=\"{href_safe}\" preserveAspectRatio=\"none\"/>\n",
+                    x = to_svg_x(img.bbox.x),
+                    y = to_svg_y(img.bbox.y),
+                    w = img.bbox.w,
+                    h = img.bbox.h,
+                ));
             }
         }
     }

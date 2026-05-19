@@ -71,6 +71,11 @@ impl LayoutOutput {
 }
 
 pub fn run_layout(genrep: &Genrep, prefs: &Prefs) -> Result<LayoutOutput> {
+    if prefs.show.photo && prefs.layout.layout_type.to_lowercase() != "boxes" {
+        eprintln!(
+            "warning: show.photo is only supported for the 'boxes' layout; photos will not be shown"
+        );
+    }
     match prefs.layout.layout_type.to_lowercase().as_str() {
         "simple" => {
             let result = simple::SimpleLayout.compute(genrep, prefs)?;

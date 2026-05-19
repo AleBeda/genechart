@@ -35,6 +35,8 @@ pub struct Prefs {
     #[serde(default)]
     pub show: ShowPrefs,
     #[serde(default)]
+    pub photos: PhotosPrefs,
+    #[serde(default)]
     pub format: FormatPrefs,
     #[serde(default)]
     pub layout: LayoutPrefs,
@@ -88,6 +90,46 @@ pub struct ShowPrefs {
     pub id: bool,
     #[serde(default)]
     pub duplicated_individual: bool,
+    #[serde(default)]
+    pub photo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PhotosPrefs {
+    #[serde(default)]
+    pub directory: String,
+    #[serde(default)]
+    pub index: String,
+    #[serde(default)]
+    pub embedded: bool,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub width: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub height: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub margin: f64,
+    #[serde(default)]
+    pub scale: String,
+    #[serde(default = "default_true")]
+    pub box_resize: bool,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub downsample: f64,
+}
+
+impl Default for PhotosPrefs {
+    fn default() -> Self {
+        PhotosPrefs {
+            directory: "photos".to_string(),
+            index: String::new(),
+            embedded: false,
+            width: 100.0,
+            height: 100.0,
+            margin: 2.0,
+            scale: "crop".to_string(),
+            box_resize: true,
+            downsample: 72.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

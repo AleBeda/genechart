@@ -16,6 +16,8 @@ svg2pdf = "0.13"
 pdf-writer = "0.12"
 ttf-parser = "0.25"
 fontdb = "0.23"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+base64 = "0.22"
 
 [profile.dev]
 opt-level = 0

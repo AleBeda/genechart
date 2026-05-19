@@ -3,6 +3,7 @@ mod cli;
 mod format;
 mod layout;
 mod parser;
+mod photos;
 mod preferences;
 mod scene;
 mod text_metrics;

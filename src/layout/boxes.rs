@@ -868,7 +868,12 @@ impl Layout for BoxesLayout {
 
         let bx = &prefs.layout.boxes;
         let box_w = bx.box_width;
-        let box_h = bx.box_height;
+        let photo_section_h = if prefs.show.photo && prefs.photos.box_resize {
+            prefs.photos.height + 2.0 * prefs.photos.margin
+        } else {
+            0.0
+        };
+        let box_h = bx.box_height + photo_section_h;
         let gap_w = bx.gap_width;
         let gap_h = bx.gap_height;
 
@@ -967,8 +972,8 @@ fn trim_id(id: &str) -> String {
 pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Scene {
     use crate::format::{format_event, format_name};
     use crate::scene::{
-        BoxPrimitive, BoxesSpouseConnector, ConnectorPrimitive, GroupPrimitive, Point, Primitive,
-        Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        BoxPrimitive, BoxesSpouseConnector, ConnectorPrimitive, GroupPrimitive, ImagePrimitive,
+        Point, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
     };
 
     let highlighted_ids = crate::layout::common::highlight_set(prefs);
@@ -1033,6 +1038,32 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
     let bx = &prefs.layout.boxes;
     let spacing = &prefs.output.style.spacing.boxed_couples;
 
+    let photo_section_h = if prefs.show.photo && prefs.photos.box_resize {
+        prefs.photos.height + 2.0 * prefs.photos.margin
+    } else {
+        0.0
+    };
+    let effective_box_h = bx.box_height + photo_section_h;
+
+    let is_pdf = prefs.output.output_type.to_lowercase() == "pdf";
+    let photo_map: crate::photos::PhotoMap = if prefs.show.photo {
+        let bare_ids: Vec<&str> = genrep
+            .individuals
+            .keys()
+            .filter(|id| !id.contains("##"))
+            .map(|s| s.as_str())
+            .collect();
+        crate::photos::build_photo_map(
+            &bare_ids,
+            &prefs.files.gedcom,
+            &prefs.photos,
+            is_pdf,
+            &prefs.output.path,
+        )
+    } else {
+        crate::photos::PhotoMap::new()
+    };
+
     let is_ancestors = matches_direction(&prefs.scope.direction.to_lowercase(), "ancestors");
 
     let mut box_groups: Vec<Primitive> = Vec::new();
@@ -1040,6 +1071,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
     // ── Helper: emit one individual box (shared between ancestors and descendants) ──
     let emit_individual_box = |id_trimmed: &str,
+                               bare_id: &str,
                                is_dup: bool,
                                is_highlighted: bool,
                                ind: &Individual<BoxesGeo>,
@@ -1074,8 +1106,37 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
             }));
         }
 
+        // Photo (boxes layout only)
+        let actual_photo_h = if prefs.show.photo {
+            if let Some(href) = photo_map.get(bare_id) {
+                let fits = prefs.photos.box_resize || {
+                    let min_text_h = spacing.name_above + font_size;
+                    prefs.photos.height + 2.0 * prefs.photos.margin + min_text_h <= box_h
+                };
+                if fits && !href.is_empty() {
+                    let ph_w = prefs.photos.width.min(box_w - 2.0 * prefs.photos.margin);
+                    children.push(Primitive::Image(ImagePrimitive {
+                        bbox: Rect {
+                            x: cx_display - box_w / 2.0 + prefs.photos.margin,
+                            y: box_display_top + prefs.photos.margin,
+                            w: ph_w,
+                            h: prefs.photos.height,
+                        },
+                        href: href.clone(),
+                    }));
+                    prefs.photos.height + 2.0 * prefs.photos.margin
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
         // Name (wrapped in name sub-group)
-        let name_baseline = box_display_top + spacing.name_above + font_size;
+        let name_baseline = box_display_top + actual_photo_h + spacing.name_above + font_size;
         children.push(Primitive::Group(GroupPrimitive {
             id: format!("{id_trimmed}-name"),
             children: vec![Primitive::Text(TextPrimitive {
@@ -1171,6 +1232,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         // ── Ancestors: emit one box per placed individual ────────────────────────
         for (ind_id, geo) in &placed {
             let ind_id_trimmed = trim_id(ind_id);
+            let bare_id = ind_id.split("##").next().unwrap_or(ind_id);
             let is_dup = ind_id.contains("##");
             let is_highlighted = highlighted_ids.contains(*ind_id);
 
@@ -1183,6 +1245,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
             let box_children = emit_individual_box(
                 &ind_id_trimmed,
+                bare_id,
                 is_dup,
                 is_highlighted,
                 ind,
@@ -1257,6 +1320,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         // ── Descendants: emit individual boxes ───────────────────────────────────
         for (ind_id, geo) in &placed {
             let ind_id_trimmed = trim_id(ind_id);
+            let bare_id = ind_id.split("##").next().unwrap_or(ind_id);
             let is_dup = ind_id.contains("##");
             let is_highlighted = highlighted_ids.contains(*ind_id);
 
@@ -1269,6 +1333,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
             let box_children = emit_individual_box(
                 &ind_id_trimmed,
+                bare_id,
                 is_dup,
                 is_highlighted,
                 ind,
@@ -1342,13 +1407,14 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
                 let sp_box_children = emit_individual_box(
                     &sp_id_trimmed,
-                    false, // spouses are never consanguinity duplicates in this pass
+                    sp_id.as_str(), // spouses are never consanguinity duplicates in this pass
+                    false,
                     is_highlighted,
                     sp_ind,
                     sp_box_display_top,
                     sp_x_display,
                     bx.box_width,
-                    bx.box_height,
+                    effective_box_h,
                 );
 
                 box_groups.push(Primitive::Group(GroupPrimitive {
@@ -1370,7 +1436,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                 let sp_exit_y = if root_pos_bottom {
                     sp_box_display_top // top of spouse box faces upward children
                 } else {
-                    sp_box_display_top + bx.box_height // bottom of spouse box faces downward children
+                    sp_box_display_top + effective_box_h // bottom of spouse box faces downward children
                 };
                 let child_points: Vec<Point> = children_ids
                     .iter()
@@ -1455,7 +1521,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         x: 0.0,
         y: 0.0,
         w: content_w,
-        h: content_h + bx.couple_y_offset + bx.box_height, // extra room for spouse boxes
+        h: content_h + bx.couple_y_offset + effective_box_h, // extra room for spouse boxes
     };
 
     let mut primitives = box_groups;
@@ -1718,6 +1784,57 @@ mod tests {
         assert!(
             !scene_has_attr(&scene, &TextAttr::MarriageData),
             "descendants mode must not emit MarriageData"
+        );
+    }
+
+    #[test]
+    fn boxes_compute_photo_section_increases_height() {
+        let raw = parse_ged(SIMPLE_DESC_GED, "descendants", "I1");
+
+        let mut no_photo = make_prefs_desc();
+        no_photo.show.photo = false;
+        let base_h = no_photo.layout.boxes.box_height;
+        let r = BoxesLayout.compute(&raw, &no_photo).unwrap();
+        assert_eq!(
+            get_geo(&r, "I1").height,
+            base_h,
+            "without photo, height should equal box_height"
+        );
+
+        let mut with_photo = make_prefs_desc();
+        with_photo.show.photo = true;
+        with_photo.photos.box_resize = true;
+        with_photo.photos.height = 80.0;
+        with_photo.photos.margin = 4.0;
+        let r2 = BoxesLayout.compute(&raw, &with_photo).unwrap();
+        let expected = base_h + 80.0 + 2.0 * 4.0;
+        assert_eq!(
+            get_geo(&r2, "I1").height,
+            expected,
+            "with photo+box_resize, height should equal box_height + photo_section_h"
+        );
+    }
+
+    #[test]
+    fn boxes_emit_scene_no_crash_no_images_when_photo_map_empty() {
+        let raw = parse_ged(SIMPLE_DESC_GED, "descendants", "I1");
+        let mut prefs = make_prefs_desc();
+        prefs.show.photo = true;
+        prefs.photos.box_resize = true;
+        // gedcom_path is empty → no photos directory → photo_map will be empty
+        let result = BoxesLayout.compute(&raw, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        fn has_image(prims: &[Primitive]) -> bool {
+            prims.iter().any(|p| match p {
+                Primitive::Image(_) => true,
+                Primitive::Group(g) => has_image(&g.children),
+                _ => false,
+            })
+        }
+        assert!(
+            !has_image(&scene.primitives),
+            "no photos found should produce no Image primitives"
         );
     }
 }

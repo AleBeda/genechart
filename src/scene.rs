@@ -99,6 +99,16 @@ pub struct BoxPrimitive {
     pub bbox: Rect,
 }
 
+/// An image primitive (boxes layout photos).
+///
+/// `href` is a base64 data URI (`data:image/jpeg;base64,...`) for embedded photos,
+/// or a relative/absolute path string for linked photos.
+#[derive(Debug, Clone)]
+pub struct ImagePrimitive {
+    pub bbox: Rect,
+    pub href: String,
+}
+
 /// A connector primitive: vertical lines from parents, a horizontal bar, and
 /// vertical drops to each child.
 ///
@@ -200,6 +210,7 @@ pub enum Primitive {
     FancyConn(FancyConnector),
     Group(GroupPrimitive),
     BoxesSpouseConnector(BoxesSpouseConnector),
+    Image(ImagePrimitive),
 }
 
 /// The complete IR emitted by a layout algorithm.
