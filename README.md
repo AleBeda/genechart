@@ -396,3 +396,12 @@ cargo test              # run all tests
 ## License
 
 MIT — see `LICENSE`.
+
+## Author's Note
+This is my first attempt at a non-trivial project that is almost completely vibe-coded. I am not proficient in Rust, which I can read but can't (yet) write fluently. I am aware that the LLM-generated code is baroque and often more complicated than necessary. However, using AI allowed me to get the job done, the alternative being no project at all, as I don't have the time to hand-code it myself.
+
+For this project, I used mostly *Claude Sonnet 4.6*, with some tasks delegated to *Haiku 4.5* for more efficient use of the token budget. I also used *qwen3.6:27b-coding-nvfp4* running on Ollama locally on my MacBook Pro M3 (40-core GPU with 400GB/s memory bandwidth) with 36GB of RAM. The local model ran surprisingly well, but it is orders of magnitude slower than Claude and sometimes gets stuck because of context rot. Qwen also had problems with the Edit tool, so I had to vibe-code alternative file-editing tools. In either case, I ran the models from *Claude Code* launched in a terminal inside Visual Studio Code.
+
+During the course of the project I improved my prompting. My initial prompts were more terse and attempted to tackle larger problems. Over time I learned to make smaller incremental changes and to provide detailed descriptions, often supplemented with bug duplication instructions. It is an ongoing journey of learning to interact with non-human intelligence.
+
+*A.B.*
