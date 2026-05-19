@@ -109,6 +109,14 @@ pub struct ImagePrimitive {
     pub href: String,
 }
 
+/// A filled rectangle primitive (e.g. photo placeholder).
+#[derive(Debug, Clone)]
+pub struct FilledRectPrimitive {
+    pub bbox: Rect,
+    /// CSS color string, e.g. `"#e8e8e8"`.
+    pub fill: String,
+}
+
 /// A connector primitive: vertical lines from parents, a horizontal bar, and
 /// vertical drops to each child.
 ///
@@ -211,6 +219,7 @@ pub enum Primitive {
     Group(GroupPrimitive),
     BoxesSpouseConnector(BoxesSpouseConnector),
     Image(ImagePrimitive),
+    FilledRect(FilledRectPrimitive),
 }
 
 /// The complete IR emitted by a layout algorithm.

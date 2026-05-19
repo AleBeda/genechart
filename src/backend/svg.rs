@@ -581,6 +581,17 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 h = img.bbox.h,
             ));
         }
+        Primitive::FilledRect(r) => {
+            let x = (ctx.to_svg_x)(r.bbox.x);
+            let y = (ctx.to_svg_y)(r.bbox.y);
+            let fill_safe = r.fill.replace('"', "&quot;");
+            out.push_str(&format!(
+                "  <rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
+                 fill=\"{fill_safe}\"/>\n",
+                w = r.bbox.w,
+                h = r.bbox.h,
+            ));
+        }
         Primitive::FancyText(item) => {
             if item.highlighted {
                 if let Some(name_line) = item.lines.iter().find(|l| {
@@ -1115,6 +1126,17 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     y = to_svg_y(img.bbox.y),
                     w = img.bbox.w,
                     h = img.bbox.h,
+                ));
+            }
+            crate::scene::Primitive::FilledRect(r) => {
+                let fill_safe = r.fill.replace('"', "&quot;");
+                out.push_str(&format!(
+                    "  <rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
+                     fill=\"{fill_safe}\"/>\n",
+                    x = to_svg_x(r.bbox.x),
+                    y = to_svg_y(r.bbox.y),
+                    w = r.bbox.w,
+                    h = r.bbox.h,
                 ));
             }
         }

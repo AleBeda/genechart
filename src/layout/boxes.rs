@@ -972,8 +972,9 @@ fn trim_id(id: &str) -> String {
 pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Scene {
     use crate::format::{format_event, format_name};
     use crate::scene::{
-        BoxPrimitive, BoxesSpouseConnector, ConnectorPrimitive, GroupPrimitive, ImagePrimitive,
-        Point, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
+        BoxPrimitive, BoxesSpouseConnector, ConnectorPrimitive, FilledRectPrimitive,
+        GroupPrimitive, ImagePrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr,
+        TextPrimitive,
     };
 
     let highlighted_ids = crate::layout::common::highlight_set(prefs);
@@ -1108,26 +1109,33 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
         // Photo (boxes layout only)
         let actual_photo_h = if prefs.show.photo {
-            if let Some(href) = photo_map.get(bare_id) {
-                let fits = prefs.photos.box_resize || {
-                    let min_text_h = spacing.name_above + font_size;
-                    prefs.photos.height + 2.0 * prefs.photos.margin + min_text_h <= box_h
+            let fits = prefs.photos.box_resize || {
+                let min_text_h = spacing.name_above + font_size;
+                prefs.photos.height + 2.0 * prefs.photos.margin + min_text_h <= box_h
+            };
+            if fits {
+                let ph_w = prefs.photos.width.min(box_w - 2.0 * prefs.photos.margin);
+                let photo_bbox = Rect {
+                    x: cx_display - ph_w / 2.0,
+                    y: box_display_top + prefs.photos.margin,
+                    w: ph_w,
+                    h: prefs.photos.height,
                 };
-                if fits && !href.is_empty() {
-                    let ph_w = prefs.photos.width.min(box_w - 2.0 * prefs.photos.margin);
-                    children.push(Primitive::Image(ImagePrimitive {
-                        bbox: Rect {
-                            x: cx_display - ph_w / 2.0,
-                            y: box_display_top + prefs.photos.margin,
-                            w: ph_w,
-                            h: prefs.photos.height,
-                        },
-                        href: href.clone(),
-                    }));
-                    prefs.photos.height + 2.0 * prefs.photos.margin
-                } else {
-                    0.0
+                match photo_map.get(bare_id).filter(|h| !h.is_empty()) {
+                    Some(href) => {
+                        children.push(Primitive::Image(ImagePrimitive {
+                            bbox: photo_bbox,
+                            href: href.clone(),
+                        }));
+                    }
+                    None => {
+                        children.push(Primitive::FilledRect(FilledRectPrimitive {
+                            bbox: photo_bbox,
+                            fill: "#e8e8e8".to_string(),
+                        }));
+                    }
                 }
+                prefs.photos.height + 2.0 * prefs.photos.margin
             } else {
                 0.0
             }
@@ -1812,6 +1820,47 @@ mod tests {
             get_geo(&r2, "I1").height,
             expected,
             "with photo+box_resize, height should equal box_height + photo_section_h"
+        );
+    }
+
+    #[test]
+    fn boxes_emit_scene_placeholder_when_no_photo() {
+        let raw = parse_ged(SIMPLE_DESC_GED, "descendants", "I1");
+        let mut prefs = make_prefs_desc();
+        prefs.show.photo = true;
+        prefs.photos.box_resize = true;
+        // No gedcom_path → photo_map is empty → every individual gets a placeholder
+        let result = BoxesLayout.compute(&raw, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        fn count_filled_rects(prims: &[Primitive]) -> usize {
+            prims
+                .iter()
+                .map(|p| match p {
+                    Primitive::FilledRect(_) => 1,
+                    Primitive::Group(g) => count_filled_rects(&g.children),
+                    _ => 0,
+                })
+                .sum()
+        }
+        fn count_images(prims: &[Primitive]) -> usize {
+            prims
+                .iter()
+                .map(|p| match p {
+                    Primitive::Image(_) => 1,
+                    Primitive::Group(g) => count_images(&g.children),
+                    _ => 0,
+                })
+                .sum()
+        }
+        assert!(
+            count_filled_rects(&scene.primitives) > 0,
+            "should have placeholders when no photos found"
+        );
+        assert_eq!(
+            count_images(&scene.primitives),
+            0,
+            "should have no Image primitives when photo_map is empty"
         );
     }
 

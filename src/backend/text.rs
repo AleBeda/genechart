@@ -680,7 +680,8 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
             | Primitive::FancyConn(_)
             | Primitive::Group(_)
             | Primitive::BoxesSpouseConnector(_)
-            | Primitive::Image(_) => {}
+            | Primitive::Image(_)
+            | Primitive::FilledRect(_) => {}
         }
     }
 
