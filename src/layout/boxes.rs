@@ -150,6 +150,49 @@ fn shift_anc_subtree(
     }
 }
 
+/// Places a single known parent in the ancestors layout and returns `(x, parent_keys)`.
+///
+/// Shared by the `(Some(pid), None)` and `(None, Some(pid))` match arms of `place_ancestors`;
+/// both arms are identical — only the source of `pid` differs.
+#[allow(clippy::too_many_arguments)]
+fn place_single_parent_anc<G>(
+    genrep: &Genrep<G>,
+    pid: &str,
+    env_left: &[f64],
+    generation: u32,
+    box_w: f64,
+    box_h: f64,
+    gap_w: f64,
+    gap_h: f64,
+    out: &mut HashMap<String, Individual<BoxesGeo>>,
+    global_right: &mut Vec<f64>,
+    visit_count: &mut HashMap<String, usize>,
+    x_default: f64,
+) -> (f64, Vec<String>) {
+    let pkey = place_ancestors(
+        genrep,
+        pid,
+        &env_left[1..],
+        generation + 1,
+        box_w,
+        box_h,
+        gap_w,
+        gap_h,
+        out,
+        global_right,
+        visit_count,
+    );
+    if pkey.is_empty() {
+        (x_default, vec![])
+    } else {
+        let px = get_x_of(&pkey, out);
+        if px < x_default {
+            shift_anc_subtree(&pkey, x_default - px, generation + 1, out, global_right);
+        }
+        (x_default.max(get_x_of(&pkey, out)), vec![pkey])
+    }
+}
+
 /// Recursively places `ind_id` and its in-scope ancestors.
 /// Returns the instance key assigned (empty string if not placed).
 #[allow(clippy::too_many_arguments)]
@@ -183,55 +226,35 @@ fn place_ancestors<G>(
     let (x, parent_keys) = match (father_id, mother_id) {
         (None, None) => (x_default, vec![]),
 
-        (Some(pid), None) => {
-            let pkey = place_ancestors(
-                genrep,
-                &pid,
-                &env_left[1..],
-                generation + 1,
-                box_w,
-                box_h,
-                gap_w,
-                gap_h,
-                out,
-                global_right,
-                visit_count,
-            );
-            if pkey.is_empty() {
-                (x_default, vec![])
-            } else {
-                let px = get_x_of(&pkey, out);
-                if px < x_default {
-                    shift_anc_subtree(&pkey, x_default - px, generation + 1, out, global_right);
-                }
-                (x_default.max(get_x_of(&pkey, out)), vec![pkey])
-            }
-        }
+        (Some(pid), None) => place_single_parent_anc(
+            genrep,
+            &pid,
+            env_left,
+            generation,
+            box_w,
+            box_h,
+            gap_w,
+            gap_h,
+            out,
+            global_right,
+            visit_count,
+            x_default,
+        ),
 
-        (None, Some(pid)) => {
-            let pkey = place_ancestors(
-                genrep,
-                &pid,
-                &env_left[1..],
-                generation + 1,
-                box_w,
-                box_h,
-                gap_w,
-                gap_h,
-                out,
-                global_right,
-                visit_count,
-            );
-            if pkey.is_empty() {
-                (x_default, vec![])
-            } else {
-                let px = get_x_of(&pkey, out);
-                if px < x_default {
-                    shift_anc_subtree(&pkey, x_default - px, generation + 1, out, global_right);
-                }
-                (x_default.max(get_x_of(&pkey, out)), vec![pkey])
-            }
-        }
+        (None, Some(pid)) => place_single_parent_anc(
+            genrep,
+            &pid,
+            env_left,
+            generation,
+            box_w,
+            box_h,
+            gap_w,
+            gap_h,
+            out,
+            global_right,
+            visit_count,
+            x_default,
+        ),
 
         (Some(fid), Some(mid)) => {
             let fkey = place_ancestors(

@@ -369,25 +369,18 @@ fn emit_desc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let d_lh = data_lh(prefs);
     let nfs = name_font_size(prefs);
 
-    let root_id = {
-        let r = prefs.scope.root.trim();
-        if !r.is_empty() && genrep.individuals.contains_key(r) {
-            r.to_string()
-        } else {
-            match genrep.first_individual_id.as_deref() {
-                Some(id) if !id.is_empty() => id.to_string(),
-                _ => {
-                    return Scene {
-                        primitives: vec![],
-                        canvas_bounds: Rect {
-                            x: 0.0,
-                            y: 0.0,
-                            w: 0.0,
-                            h: 0.0,
-                        },
-                    };
-                }
-            }
+    let root_id = match resolve_root_id(genrep, prefs) {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Scene {
+                primitives: vec![],
+                canvas_bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 0.0,
+                    h: 0.0,
+                },
+            };
         }
     };
 
@@ -441,25 +434,18 @@ fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let d_lh = data_lh(prefs);
     let nfs = name_font_size(prefs);
 
-    let root_id = {
-        let r = prefs.scope.root.trim();
-        if !r.is_empty() && genrep.individuals.contains_key(r) {
-            r.to_string()
-        } else {
-            match genrep.first_individual_id.as_deref() {
-                Some(id) if !id.is_empty() => id.to_string(),
-                _ => {
-                    return Scene {
-                        primitives: vec![],
-                        canvas_bounds: Rect {
-                            x: 0.0,
-                            y: 0.0,
-                            w: 0.0,
-                            h: 0.0,
-                        },
-                    };
-                }
-            }
+    let root_id = match resolve_root_id(genrep, prefs) {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Scene {
+                primitives: vec![],
+                canvas_bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 0.0,
+                    h: 0.0,
+                },
+            };
         }
     };
 
@@ -512,37 +498,34 @@ fn hex_color_fancy(val: i64) -> String {
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
 }
 
+/// Font metrics and text lines computed by [`build_ind_text_lines`].
+struct IndTextResult {
+    lines: Vec<FancyLine>,
+    name_family: String,
+    data_family: String,
+    dfs: f64,
+    id_family: String,
+    id_sz: f64,
+    name_start_x: f64,
+    name_text_w: f64,
+    xv: f64,
+}
+
+/// Build text lines for one individual: name, optional ID, birth, and death.
+///
+/// Also updates `*max_x` / `*max_y` canvas bounds based on rendered line widths.
 #[allow(clippy::too_many_arguments)]
-fn emit_anc_subtree(
-    id: &str,
-    genrep: &Genrep<FancyGeo>,
+fn build_ind_text_lines(
+    ind: &Individual<FancyGeo>,
+    geo: &FancyGeo,
     prefs: &Prefs,
-    highlighted_ids: &HashSet<String>,
-    conn_color: &str,
-    conn_width: f64,
+    highlighted: bool,
+    nfs: f64,
     n_lh: f64,
     d_lh: f64,
-    nfs: f64,
-    primitives: &mut Vec<Primitive>,
-    anc_conns: &mut Vec<FancyConnector>,
     max_x: &mut f64,
     max_y: &mut f64,
-    visit_count: &mut HashMap<String, usize>,
-) {
-    let count = *visit_count.get(id).unwrap_or(&0);
-    *visit_count.entry(id.to_string()).or_insert(0) += 1;
-    let my_key = anc_instance_key(id, count);
-
-    let ind = match genrep.individuals.get(&my_key) {
-        Some(i) if i.in_scope => i,
-        _ => return,
-    };
-    let geo = match ind.geo.as_ref() {
-        Some(g) => g,
-        None => return,
-    };
-
-    let highlighted = highlighted_ids.contains(&ind.id);
+) -> IndTextResult {
     let base_name = format_name(ind, prefs);
     let name_text = if prefs.show.generation_num {
         format!("{}. {}", geo.generation, base_name)
@@ -585,9 +568,23 @@ fn emit_anc_subtree(
     } else {
         0.0
     };
-    let ind_data_x = geo.x + gen_prefix_w + IND_DATA_OFFSET;
+    let name_start_x = geo.x + gen_prefix_w;
+    let first_char_half_w = base_name
+        .chars()
+        .next()
+        .and_then(|c| {
+            crate::backend::font_metrics::measure_text_w(
+                &c.to_string(),
+                &name_family,
+                nfs,
+                is_desc_bold,
+            )
+        })
+        .map(|w| w / 2.0)
+        .unwrap_or(nfs * CHAR_WIDTH_RATIO / 2.0);
+    let xv = name_start_x + first_char_half_w;
+    let ind_data_x = name_start_x + IND_DATA_OFFSET;
 
-    // ── Build text lines ─────────────────────────────────────────────────────
     let mut lines: Vec<FancyLine> = Vec::new();
     lines.push(FancyLine {
         x: geo.x,
@@ -645,7 +642,6 @@ fn emit_anc_subtree(
         }
     }
 
-    // Update canvas bounds.
     for line in &lines {
         let is_name = line.attrs.contains(&TextAttr::IndividualName);
         let is_id = line.attrs.contains(&TextAttr::IndividualId);
@@ -662,6 +658,52 @@ fn emit_anc_subtree(
     }
     *max_y = f64::max(*max_y, geo.y + ind_height(prefs));
 
+    IndTextResult {
+        lines,
+        name_family,
+        data_family,
+        dfs,
+        id_family,
+        id_sz,
+        name_start_x,
+        name_text_w,
+        xv,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_anc_subtree(
+    id: &str,
+    genrep: &Genrep<FancyGeo>,
+    prefs: &Prefs,
+    highlighted_ids: &HashSet<String>,
+    conn_color: &str,
+    conn_width: f64,
+    n_lh: f64,
+    d_lh: f64,
+    nfs: f64,
+    primitives: &mut Vec<Primitive>,
+    anc_conns: &mut Vec<FancyConnector>,
+    max_x: &mut f64,
+    max_y: &mut f64,
+    visit_count: &mut HashMap<String, usize>,
+) {
+    let count = *visit_count.get(id).unwrap_or(&0);
+    *visit_count.entry(id.to_string()).or_insert(0) += 1;
+    let my_key = anc_instance_key(id, count);
+
+    let ind = match genrep.individuals.get(&my_key) {
+        Some(i) if i.in_scope => i,
+        _ => return,
+    };
+    let geo = match ind.geo.as_ref() {
+        Some(g) => g,
+        None => return,
+    };
+
+    let highlighted = highlighted_ids.contains(&ind.id);
+    let r = build_ind_text_lines(ind, geo, prefs, highlighted, nfs, n_lh, d_lh, max_x, max_y);
+
     // ── Emit text group ──────────────────────────────────────────────────────
     // For duplicate instances, the group id uses "-dup-N" suffix (e.g. "anc-text-I5-dup-1").
     let group_id = format!(
@@ -676,7 +718,7 @@ fn emit_anc_subtree(
         children: vec![Primitive::Group(GroupPrimitive {
             id: String::new(),
             children: vec![Primitive::FancyText(FancyTextItem {
-                lines,
+                lines: r.lines,
                 individual_id: ind.id.clone(),
                 highlighted,
             })],
@@ -710,7 +752,7 @@ fn emit_anc_subtree(
             .and_then(|k| genrep.individuals.get(k).and_then(|i| i.geo.as_ref()));
 
         if father_geo.is_some() || mother_geo.is_some() {
-            let name_end_x = geo.x + name_text_w;
+            let name_end_x = geo.x + r.name_text_w;
             let parent_conn_end_x = geo.x + gen_width;
             let x_spine = parent_conn_end_x - CHILD_SHORT_H - ARC_R;
             let child_mid_y = geo.y + n_lh / 2.0;
@@ -930,138 +972,19 @@ fn emit_subtree(
 
     // ── Text for main individual ──────────────────────────────────────────────
     let highlighted = highlighted_ids.contains(&ind.id);
-    let base_name = format_name(ind, prefs);
-    let name_text = if prefs.show.generation_num {
-        format!("{}. {}", geo.generation, base_name)
-    } else {
-        base_name.clone()
-    };
-
-    // Compute x positions anchored to actual name start (after gen-num prefix).
-    let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
-    let is_desc_bold = matches!(
-        prefs.output.style.fonts.descendant.trim(),
-        "bold" | "bolder"
-    );
-    let (data_family, dfs) = {
-        let (fam, sz) = parsed_font(&prefs.output.style.fonts.dates);
-        let fam = if fam.is_empty() {
-            name_family.clone()
-        } else {
-            fam
-        };
-        let sz = if sz <= 0.0 { nfs } else { sz };
-        (fam, sz)
-    };
-    let (id_family, id_sz) = {
-        let (fam, sz) = parsed_font(&prefs.output.style.fonts.id);
-        let fam = if fam.is_empty() {
-            "Courier New, monospace".to_string()
-        } else {
-            fam
-        };
-        let sz = if sz <= 0.0 { 8.0 } else { sz };
-        (fam, sz)
-    };
-    let name_text_w =
-        crate::backend::font_metrics::measure_text_w(&name_text, &name_family, nfs, is_desc_bold)
-            .unwrap_or_else(|| name_text.chars().count() as f64 * nfs * CHAR_WIDTH_RATIO);
-    let gen_prefix_w = if prefs.show.generation_num {
-        let prefix = format!("{}. ", geo.generation);
-        crate::backend::font_metrics::measure_text_w(&prefix, &name_family, nfs, is_desc_bold)
-            .unwrap_or(0.0)
-    } else {
-        0.0
-    };
-    let name_start_x = geo.x + gen_prefix_w;
-    let first_char_half_w = base_name
-        .chars()
-        .next()
-        .and_then(|c| {
-            crate::backend::font_metrics::measure_text_w(
-                &c.to_string(),
-                &name_family,
-                nfs,
-                is_desc_bold,
-            )
-        })
-        .map(|w| w / 2.0)
-        .unwrap_or(nfs * CHAR_WIDTH_RATIO / 2.0);
-    let xv = name_start_x + first_char_half_w;
+    let r = build_ind_text_lines(ind, geo, prefs, highlighted, nfs, n_lh, d_lh, max_x, max_y);
+    let IndTextResult {
+        lines,
+        name_family,
+        data_family,
+        dfs,
+        id_family,
+        id_sz,
+        name_start_x,
+        xv,
+        ..
+    } = r;
     let ind_data_x = name_start_x + IND_DATA_OFFSET;
-    let mut lines: Vec<FancyLine> = Vec::new();
-    lines.push(FancyLine {
-        x: geo.x,
-        y: geo.y,
-        text: name_text.clone(),
-        attrs: label_attrs(TextAttr::IndividualName, highlighted),
-    });
-    if prefs.show.id {
-        let ind_id_str = ind
-            .id
-            .trim_start_matches('@')
-            .trim_end_matches('@')
-            .to_string();
-        lines.push(FancyLine {
-            x: geo.x + name_text_w + 4.0,
-            y: geo.y,
-            text: ind_id_str,
-            attrs: vec![TextAttr::IndividualId],
-        });
-    }
-    let mut y_off = n_lh;
-
-    if prefs.show.birth {
-        if let Some(ev) = &ind.birth {
-            if let Some(s) = format_event(
-                &prefs.format.birth,
-                ev.date.as_ref(),
-                ev.place.as_deref(),
-                &prefs.format.date_qualifiers,
-            ) {
-                lines.push(FancyLine {
-                    x: ind_data_x,
-                    y: geo.y + y_off,
-                    text: s,
-                    attrs: vec![TextAttr::BirthData],
-                });
-            }
-        }
-        y_off += d_lh;
-    }
-    if prefs.show.death {
-        if let Some(ev) = &ind.death {
-            if let Some(s) = format_event(
-                &prefs.format.death,
-                ev.date.as_ref(),
-                ev.place.as_deref(),
-                &prefs.format.date_qualifiers,
-            ) {
-                lines.push(FancyLine {
-                    x: ind_data_x,
-                    y: geo.y + y_off,
-                    text: s,
-                    attrs: vec![TextAttr::DeathData],
-                });
-            }
-        }
-    }
-
-    for line in &lines {
-        let is_name = line.attrs.contains(&TextAttr::IndividualName);
-        let is_id = line.attrs.contains(&TextAttr::IndividualId);
-        let (mfam, msz, mbold) = if is_id {
-            (id_family.as_str(), id_sz, false)
-        } else if is_name {
-            (name_family.as_str(), nfs, is_desc_bold)
-        } else {
-            (data_family.as_str(), dfs, false)
-        };
-        let w = crate::backend::font_metrics::measure_text_w(&line.text, mfam, msz, mbold)
-            .unwrap_or_else(|| line.text.chars().count() as f64 * msz * CHAR_WIDTH_RATIO);
-        *max_x = f64::max(*max_x, line.x + w);
-    }
-    *max_y = f64::max(*max_y, geo.y + ind_height(prefs));
 
     primitives.push(Primitive::FancyText(FancyTextItem {
         lines,
