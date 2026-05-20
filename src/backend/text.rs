@@ -263,6 +263,131 @@ fn bar_char(
     }
 }
 
+fn draw_single_child_connector(
+    grid: &mut TextGrid,
+    parent_col: usize,
+    parent_row: usize,
+    child_col: usize,
+    child_row: usize,
+    downward: bool,
+) {
+    if parent_row < grid.rows {
+        grid.set(
+            parent_row,
+            parent_col,
+            endpoint_char(true, downward),
+            PRIORITY_T_JUNCTION,
+        );
+    }
+    if child_row < grid.rows {
+        grid.set(
+            child_row,
+            child_col,
+            endpoint_char(false, downward),
+            PRIORITY_T_JUNCTION,
+        );
+    }
+    let (r_start, r_end) = if downward {
+        (parent_row.saturating_add(1), child_row)
+    } else {
+        (child_row.saturating_add(1), parent_row)
+    };
+    for r in r_start..r_end {
+        if r < grid.rows {
+            grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+        }
+    }
+}
+
+fn draw_multi_child_connector_bar(
+    grid: &mut TextGrid,
+    parent_col: usize,
+    parent_row: usize,
+    child_cols: &[usize],
+    child_rows: &[usize],
+    downward: bool,
+) {
+    let mut all_cols = vec![parent_col];
+    all_cols.extend(child_cols);
+    let bar_left = *all_cols.iter().min().unwrap();
+    let bar_right = *all_cols.iter().max().unwrap();
+
+    let extreme_child_row = if downward {
+        child_rows.iter().copied().min().unwrap_or(0)
+    } else {
+        child_rows.iter().copied().max().unwrap_or(0)
+    };
+    let bar_row = (parent_row + extreme_child_row) / 2;
+    if bar_row >= grid.rows {
+        return;
+    }
+
+    if parent_row < grid.rows {
+        grid.set(
+            parent_row,
+            parent_col,
+            endpoint_char(true, downward),
+            PRIORITY_T_JUNCTION,
+        );
+    }
+
+    if downward {
+        for r in (parent_row + 1)..bar_row {
+            if r < grid.rows {
+                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
+    } else {
+        for r in (bar_row + 1)..parent_row {
+            if r < grid.rows {
+                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
+            }
+        }
+    }
+
+    for c in bar_left..=bar_right {
+        if c < grid.cols {
+            grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
+        }
+    }
+
+    for (i, &cc) in child_cols.iter().enumerate() {
+        let cr = child_rows[i];
+        if cr < grid.rows {
+            grid.set(cr, cc, endpoint_char(false, downward), PRIORITY_T_JUNCTION);
+        }
+        if downward {
+            for r in (bar_row + 1)..cr {
+                if r < grid.rows {
+                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
+            }
+        } else {
+            for r in (cr + 1)..bar_row {
+                if r < grid.rows {
+                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
+                }
+            }
+        }
+    }
+
+    let child_set: HashSet<usize> = child_cols.iter().copied().collect();
+    for c in bar_left..=bar_right {
+        if c >= grid.cols {
+            continue;
+        }
+        let is_parent = c == parent_col;
+        let is_child = child_set.contains(&c);
+        if !is_parent && !is_child {
+            continue;
+        }
+        let is_left = c == bar_left;
+        let is_right = c == bar_right;
+        let ch = bar_char(is_parent, is_child, is_left, is_right, downward);
+        grid.set(bar_row, c, ch, PRIORITY_INTERSECTION);
+    }
+}
+
 fn draw_connector_on_grid(
     grid: &mut TextGrid,
     conn: &crate::scene::ConnectorPrimitive,
@@ -297,133 +422,120 @@ fn draw_connector_on_grid(
         })
         .collect();
 
-    // Single child: straight vertical line only, no horizontal bar
     if child_cols.len() == 1 {
-        let child_col = child_cols[0];
-        let child_row = child_rows[0];
-
-        // T-junctions at the box borders (overwrite with PRIORITY_T_JUNCTION)
-        if parent_row < grid.rows {
-            grid.set(
-                parent_row,
-                parent_col,
-                endpoint_char(true, downward),
-                PRIORITY_T_JUNCTION,
-            );
-        }
-        if child_row < grid.rows {
-            grid.set(
-                child_row,
-                child_col,
-                endpoint_char(false, downward),
-                PRIORITY_T_JUNCTION,
-            );
-        }
-
-        // Vertical between the two endpoint rows (exclusive at both ends)
-        let (r_start, r_end) = if downward {
-            (parent_row.saturating_add(1), child_row)
-        } else {
-            (child_row.saturating_add(1), parent_row)
-        };
-        for r in r_start..r_end {
-            if r < grid.rows {
-                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
-            }
-        }
-        return;
-    }
-
-    // Multiple children: bar at midpoint
-    let mut all_cols = vec![parent_col];
-    all_cols.extend(&child_cols);
-    let bar_left = *all_cols.iter().min().unwrap();
-    let bar_right = *all_cols.iter().max().unwrap();
-
-    let extreme_child_row = if downward {
-        child_rows.iter().copied().min().unwrap_or(0)
-    } else {
-        child_rows.iter().copied().max().unwrap_or(0)
-    };
-    let bar_row = (parent_row + extreme_child_row) / 2;
-    if bar_row >= grid.rows {
-        return;
-    }
-
-    // T-junction at parent box border
-    if parent_row < grid.rows {
-        grid.set(
-            parent_row,
+        draw_single_child_connector(
+            grid,
             parent_col,
-            endpoint_char(true, downward),
-            PRIORITY_T_JUNCTION,
+            parent_row,
+            child_cols[0],
+            child_rows[0],
+            downward,
         );
-    }
-
-    // Parent vertical (between parent endpoint and bar, exclusive at both ends)
-    if downward {
-        for r in (parent_row + 1)..bar_row {
-            if r < grid.rows {
-                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
-            }
-        }
     } else {
-        for r in (bar_row + 1)..parent_row {
-            if r < grid.rows {
-                grid.set(r, parent_col, '\u{2502}', PRIORITY_CONNECTOR); // │
-            }
-        }
-    }
-
-    // Horizontal bar
-    for c in bar_left..=bar_right {
-        if c < grid.cols {
-            grid.set(bar_row, c, '\u{2500}', PRIORITY_CONNECTOR); // ─
-        }
-    }
-
-    // Child verticals + T-junctions at child box borders
-    for (i, &cc) in child_cols.iter().enumerate() {
-        let cr = child_rows[i];
-
-        // T-junction at child box border
-        if cr < grid.rows {
-            grid.set(cr, cc, endpoint_char(false, downward), PRIORITY_T_JUNCTION);
-        }
-
-        if downward {
-            for r in (bar_row + 1)..cr {
-                if r < grid.rows {
-                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
-                }
-            }
-        } else {
-            for r in (cr + 1)..bar_row {
-                if r < grid.rows {
-                    grid.set(r, cc, '\u{2502}', PRIORITY_CONNECTOR); // │
-                }
-            }
-        }
-    }
-
-    // Intersection characters at bar row
-    let child_set: HashSet<usize> = child_cols.iter().copied().collect();
-    for c in bar_left..=bar_right {
-        if c >= grid.cols {
-            continue;
-        }
-        let is_parent = c == parent_col;
-        let is_child = child_set.contains(&c);
-        if !is_parent && !is_child {
-            continue;
-        }
-        let is_left = c == bar_left;
-        let is_right = c == bar_right;
-        let ch = bar_char(is_parent, is_child, is_left, is_right, downward);
-        grid.set(bar_row, c, ch, PRIORITY_INTERSECTION);
+        draw_multi_child_connector_bar(
+            grid,
+            parent_col,
+            parent_row,
+            &child_cols,
+            &child_rows,
+            downward,
+        );
     }
 }
 // ── Scene → text-grid rendering ───────────────────────────────────────────────
+
+fn render_bc_text_pass(
+    grid: &mut TextGrid,
+    flat: &[&Primitive],
+    boxes: &[&crate::scene::BoxPrimitive],
+    line_height_px: f64,
+    char_width_px: f64,
+    prefs: &Prefs,
+) {
+    for box_prim in boxes {
+        let bbox = &box_prim.bbox;
+        let box_row0 = display_to_row(bbox.y, line_height_px);
+        let box_row1 = display_to_row(bbox.y + bbox.h, line_height_px);
+        let box_col0 = display_to_col(bbox.x, char_width_px);
+        let box_col1 = display_to_col(bbox.x + bbox.w, char_width_px);
+
+        let texts: Vec<&crate::scene::TextPrimitive> = flat
+            .iter()
+            .filter_map(|p| {
+                if let Primitive::Text(t) = p {
+                    if t.bbox.x >= bbox.x
+                        && t.bbox.y >= bbox.y
+                        && (t.bbox.x + t.bbox.w) <= (bbox.x + bbox.w)
+                        && (t.bbox.y + t.bbox.h) <= (bbox.y + bbox.h)
+                    {
+                        Some(t)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Group texts by pixel-exact Y position. Texts at the same Y (within 0.5 px) share a
+        // row — handles wide boxes where two spouses have the same Y for each data slot, while
+        // keeping same-column texts (differing by ≥ date_font_size ≈ 10 px) separate.
+        let mut y_groups: BTreeMap<i64, Vec<&crate::scene::TextPrimitive>> = BTreeMap::new();
+        for text in &texts {
+            let key = text.bbox.y.round() as i64;
+            y_groups.entry(key).or_default().push(text);
+        }
+
+        // Assign text rows sequentially from box_row0 + 1.
+        // MarriageData gets a blank row before and after it.
+        let mut current_row = box_row0 + 1;
+        for (_key, group) in &y_groups {
+            if current_row >= grid.rows || current_row >= box_row1 {
+                break;
+            }
+
+            let has_marriage = group
+                .iter()
+                .any(|t| t.attrs.contains(&TextAttr::MarriageData));
+
+            if has_marriage {
+                current_row += 1; // blank row before marriage
+                if current_row >= grid.rows {
+                    break;
+                }
+            }
+
+            clear_row_segment(grid, current_row, box_col0 + 1, box_col1.saturating_sub(1));
+
+            for text in group {
+                let mut content = text.content.clone();
+                if text.attrs.contains(&TextAttr::MarriageData) && content.starts_with("⚭ ") {
+                    content = content[3..].to_string();
+                }
+                if text.attrs.contains(&TextAttr::Highlighted)
+                    && prefs.output.style.text.highlights.fallback == "uppercase"
+                {
+                    content = content.to_uppercase();
+                }
+                draw_text_on_grid(
+                    grid,
+                    text,
+                    line_height_px,
+                    char_width_px,
+                    &content,
+                    current_row,
+                );
+            }
+
+            current_row += 1;
+
+            if has_marriage {
+                current_row += 1; // blank row after marriage
+            }
+        }
+    }
+}
 
 fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
     if scene.primitives.is_empty() {
@@ -458,99 +570,15 @@ fn render_boxed_couples_text(scene: &Scene, prefs: &Prefs) -> String {
         draw_box(&mut grid, &box_prim.bbox, line_height_px, char_width_px);
     }
 
-    // Pass 2: place text per box, grouping by Y band so same-height texts share a row
-    for box_prim in &boxes {
-        let bbox = &box_prim.bbox;
-        let box_row0 = display_to_row(bbox.y, line_height_px);
-        let box_row1 = display_to_row(bbox.y + bbox.h, line_height_px);
-        let box_col0 = display_to_col(bbox.x, char_width_px);
-        let box_col1 = display_to_col(bbox.x + bbox.w, char_width_px);
-
-        // Find text primitives contained within this box
-        let texts: Vec<&crate::scene::TextPrimitive> = flat
-            .iter()
-            .filter_map(|p| {
-                if let Primitive::Text(t) = p {
-                    if t.bbox.x >= bbox.x
-                        && t.bbox.y >= bbox.y
-                        && (t.bbox.x + t.bbox.w) <= (bbox.x + bbox.w)
-                        && (t.bbox.y + t.bbox.h) <= (bbox.y + bbox.h)
-                    {
-                        Some(t)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Group texts by Y band: texts at the same Y (within line_height_px) share a row.
-        // This handles wide boxes where two spouses have the same Y for each data slot.
-        // Group by pixel-exact Y position. Texts at the same Y (within 0.5 px) share a row.
-        // This handles wide boxes where two spouses have the same Y for each data slot,
-        // while keeping same-column texts (which differ by ≥ date_font_size ≈ 10 px) separate.
-        let mut y_groups: BTreeMap<i64, Vec<&crate::scene::TextPrimitive>> = BTreeMap::new();
-        for text in &texts {
-            let key = text.bbox.y.round() as i64;
-            y_groups.entry(key).or_default().push(text);
-        }
-
-        // Assign text rows sequentially from box_row0 + 1.
-        // MarriageData gets a blank row before and after it.
-        let mut current_row = box_row0 + 1;
-        for (_key, group) in &y_groups {
-            if current_row >= grid.rows || current_row >= box_row1 {
-                break;
-            }
-
-            let has_marriage = group
-                .iter()
-                .any(|t| t.attrs.contains(&TextAttr::MarriageData));
-
-            if has_marriage {
-                current_row += 1; // blank row before marriage
-                if current_row >= grid.rows {
-                    break;
-                }
-            }
-
-            // Clear interior of this row once, preserving left/right border columns
-            clear_row_segment(
-                &mut grid,
-                current_row,
-                box_col0 + 1,
-                box_col1.saturating_sub(1),
-            );
-
-            for text in group {
-                let mut content = text.content.clone();
-                if text.attrs.contains(&TextAttr::MarriageData) && content.starts_with("⚭ ") {
-                    content = content[3..].to_string();
-                }
-                if text.attrs.contains(&TextAttr::Highlighted)
-                    && prefs.output.style.text.highlights.fallback == "uppercase"
-                {
-                    content = content.to_uppercase();
-                }
-                draw_text_on_grid(
-                    &mut grid,
-                    text,
-                    line_height_px,
-                    char_width_px,
-                    &content,
-                    current_row,
-                );
-            }
-
-            current_row += 1;
-
-            if has_marriage {
-                current_row += 1; // blank row after marriage
-            }
-        }
-    }
+    // Pass 2: place text per box
+    render_bc_text_pass(
+        &mut grid,
+        &flat,
+        &boxes,
+        line_height_px,
+        char_width_px,
+        prefs,
+    );
 
     // Pass 3: draw connectors
     // Direction is derived from root_pos (the single source of truth), not from row positions.
@@ -583,6 +611,51 @@ fn flatten_primitives(prims: &[Primitive]) -> Vec<&Primitive> {
     result
 }
 
+fn collect_highlighted_lines(
+    primitives: &[Primitive],
+    line_height_px: f64,
+    total_lines: usize,
+) -> HashSet<usize> {
+    let mut set = HashSet::new();
+    for prim in primitives {
+        if let Primitive::Text(t) = prim {
+            if t.attrs.contains(&TextAttr::Highlighted) {
+                let li = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+                set.insert(li);
+            }
+        }
+    }
+    set
+}
+
+/// Writes `IndividualId` text before the main pass so connector characters cannot displace it from column 0.
+fn write_individual_id_lines(
+    lines: &mut Vec<String>,
+    primitives: &[Primitive],
+    line_height_px: f64,
+    char_width_px: f64,
+    total_lines: usize,
+    fallback_shift: usize,
+    highlight_fallback: &str,
+) {
+    for prim in primitives {
+        if let Primitive::Text(t) = prim {
+            if !t.attrs.contains(&TextAttr::IndividualId) {
+                continue;
+            }
+            let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+            let col = (t.bbox.x / char_width_px).round() as usize + fallback_shift;
+            let is_highlighted = t.attrs.contains(&TextAttr::Highlighted);
+            let content = if is_highlighted && highlight_fallback == "uppercase" {
+                t.content.to_uppercase()
+            } else {
+                t.content.clone()
+            };
+            write_at_col(&mut lines[line_idx], col, &content, false);
+        }
+    }
+}
+
 fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> String {
     let (_, font_size) = parsed_font(&prefs.output.style.fonts.names);
     let line_height_px = font_size * (LINE_HEIGHT / FONT_SIZE);
@@ -592,39 +665,17 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
 
     let dot_leaders = prefs.output.style.dot_leaders;
 
-    // First pass: identify lines that contain highlighted text.
-    let highlighted_lines: std::collections::HashSet<usize> = {
-        let mut set = std::collections::HashSet::new();
-        for prim in &scene.primitives {
-            if let Primitive::Text(t) = prim {
-                if t.attrs.contains(&TextAttr::Highlighted) {
-                    let li = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
-                    set.insert(li);
-                }
-            }
-        }
-        set
-    };
-
-    // Pre-pass: write IndividualId primitives first so connectors from ancestor rows
-    // cannot displace them — IDs must always appear at column 0 (or fallback_shift).
-    for prim in &scene.primitives {
-        if let Primitive::Text(t) = prim {
-            if !t.attrs.contains(&TextAttr::IndividualId) {
-                continue;
-            }
-            let line_idx = ((t.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
-            let col = (t.bbox.x / char_width_px).round() as usize + fallback_shift;
-            let is_highlighted = t.attrs.contains(&TextAttr::Highlighted);
-            let content =
-                if is_highlighted && prefs.output.style.text.highlights.fallback == "uppercase" {
-                    t.content.to_uppercase()
-                } else {
-                    t.content.clone()
-                };
-            write_at_col(&mut lines[line_idx], col, &content, false);
-        }
-    }
+    let highlighted_lines =
+        collect_highlighted_lines(&scene.primitives, line_height_px, total_lines);
+    write_individual_id_lines(
+        &mut lines,
+        &scene.primitives,
+        line_height_px,
+        char_width_px,
+        total_lines,
+        fallback_shift,
+        &prefs.output.style.text.highlights.fallback,
+    );
 
     // Main pass: all remaining primitives in emission order (preserving the
     // interleaved connector / non-ID text ordering that the simple layout relies on).

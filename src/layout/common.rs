@@ -180,7 +180,7 @@ pub(crate) fn sort_families_by_date<G>(ind: &Individual<G>, genrep: &Genrep<G>) 
 ///
 /// Validates the root ID against the genrep and warns on stderr if not found,
 /// falling back to the first individual encountered during parsing.
-pub(crate) fn resolve_root_id(genrep: &Genrep, prefs: &Prefs) -> Option<String> {
+pub(crate) fn resolve_root_id<G>(genrep: &Genrep<G>, prefs: &Prefs) -> Option<String> {
     let r = prefs.scope.root.trim();
     if !r.is_empty() {
         if genrep.individuals.contains_key(r) {

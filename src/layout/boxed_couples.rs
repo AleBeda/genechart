@@ -837,10 +837,8 @@ fn spouse_id_from_family_bc<G>(
 /// y increases downward) and assembles `Primitive`s in the order:
 /// boxes, text, connectors.
 pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::scene::Scene {
-    use crate::format::{format_event, format_name};
     use crate::scene::{
-        BoxPrimitive, ConnectorPrimitive, GroupPrimitive, Point, Primitive, Rect, Scene, TextAlign,
-        TextAttr, TextPrimitive,
+        BoxPrimitive, ConnectorPrimitive, GroupPrimitive, Point, Primitive, Rect, Scene,
     };
     // ── 4a: load highlights ──────────────────────────────────────────────────
     // ── 4a: load highlights ──────────────────────────────────────────────────
@@ -966,96 +964,21 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             let ind_cx = to_display_x(geo.x);
             let box_display_left = to_display_x(geo.x - geo.width / 2.0);
 
-            // Individual name (centered in wide box) — wrapped in name sub-group
             let name_baseline = ind_section_top + spacing.name_above + font_size;
-            let name_bbox = Rect {
-                x: box_display_left,
-                y: name_baseline - font_size,
-                w: geo.width,
-                h: font_size,
-            };
-            // Override: center on ind_cx (use full width bbox but centered on ind_cx)
-            let name_bbox = Rect {
-                x: ind_cx - geo.width / 2.0,
-                ..name_bbox
-            };
-            box_children.push(Primitive::Group(GroupPrimitive {
-                id: format!("{ind_id_trimmed}-name"),
-                children: vec![Primitive::Text(TextPrimitive {
-                    content: format_name(ind, prefs),
-                    bbox: name_bbox,
-                    align: TextAlign::Center,
-                    attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
-                })],
-            }));
-
-            if prefs.show.id {
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: ind_id_trimmed.clone(),
-                    bbox: Rect {
-                        x: box_display_left + 2.0,
-                        y: name_baseline - font_size,
-                        w: geo.width,
-                        h: font_size,
-                    },
-                    align: TextAlign::Left,
-                    attrs: vec![TextAttr::IndividualId],
-                }));
-            }
-
-            let mut y_pos = name_baseline;
-            if prefs.show.birth {
-                y_pos += spacing.date_above + date_font_size;
-                let birth_content = ind
-                    .birth
-                    .as_ref()
-                    .and_then(|b| {
-                        format_event(
-                            &prefs.format.birth,
-                            b.date.as_ref(),
-                            b.place.as_deref(),
-                            &prefs.format.date_qualifiers,
-                        )
-                    })
-                    .unwrap_or_default();
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: birth_content,
-                    bbox: Rect {
-                        x: ind_cx - geo.width / 2.0,
-                        y: y_pos - date_font_size,
-                        w: geo.width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::BirthData],
-                }));
-            }
-            if prefs.show.death {
-                y_pos += spacing.date_above + date_font_size;
-                let death_content = ind
-                    .death
-                    .as_ref()
-                    .and_then(|d| {
-                        format_event(
-                            &prefs.format.death,
-                            d.date.as_ref(),
-                            d.place.as_deref(),
-                            &prefs.format.date_qualifiers,
-                        )
-                    })
-                    .unwrap_or_default();
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: death_content,
-                    bbox: Rect {
-                        x: ind_cx - geo.width / 2.0,
-                        y: y_pos - date_font_size,
-                        w: geo.width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::DeathData],
-                }));
-            }
+            emit_individual_section(
+                &mut box_children,
+                ind,
+                &ind_id_trimmed,
+                ind_cx,
+                box_display_left + 2.0,
+                geo.width,
+                name_baseline,
+                font_size,
+                date_font_size,
+                spacing,
+                prefs,
+                is_highlighted,
+            );
 
             // First spouse in left section
             if let Some((fam1_id, fam1)) = spouses.first() {
@@ -1111,88 +1034,20 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             let box_display_left = to_display_x(geo.x - geo.width / 2.0);
             let name_baseline = ind_section_top + spacing.name_above + font_size;
 
-            // Individual name — wrapped in name sub-group
-            box_children.push(Primitive::Group(GroupPrimitive {
-                id: format!("{ind_id_trimmed}-name"),
-                children: vec![Primitive::Text(TextPrimitive {
-                    content: format_name(ind, prefs),
-                    bbox: Rect {
-                        x: section_cx - geo.width / 2.0,
-                        y: name_baseline - font_size,
-                        w: geo.width,
-                        h: font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
-                })],
-            }));
-            if prefs.show.id {
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: ind_id_trimmed.clone(),
-                    bbox: Rect {
-                        x: box_display_left + 2.0,
-                        y: name_baseline - font_size,
-                        w: geo.width,
-                        h: font_size,
-                    },
-                    align: TextAlign::Left,
-                    attrs: vec![TextAttr::IndividualId],
-                }));
-            }
-
-            let mut y_pos = name_baseline;
-            if prefs.show.birth {
-                y_pos += spacing.date_above + date_font_size;
-                let birth_content = ind
-                    .birth
-                    .as_ref()
-                    .and_then(|b| {
-                        format_event(
-                            &prefs.format.birth,
-                            b.date.as_ref(),
-                            b.place.as_deref(),
-                            &prefs.format.date_qualifiers,
-                        )
-                    })
-                    .unwrap_or_default();
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: birth_content,
-                    bbox: Rect {
-                        x: section_cx - geo.width / 2.0,
-                        y: y_pos - date_font_size,
-                        w: geo.width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::BirthData],
-                }));
-            }
-            if prefs.show.death {
-                y_pos += spacing.date_above + date_font_size;
-                let death_content = ind
-                    .death
-                    .as_ref()
-                    .and_then(|d| {
-                        format_event(
-                            &prefs.format.death,
-                            d.date.as_ref(),
-                            d.place.as_deref(),
-                            &prefs.format.date_qualifiers,
-                        )
-                    })
-                    .unwrap_or_default();
-                box_children.push(Primitive::Text(TextPrimitive {
-                    content: death_content,
-                    bbox: Rect {
-                        x: section_cx - geo.width / 2.0,
-                        y: y_pos - date_font_size,
-                        w: geo.width,
-                        h: date_font_size,
-                    },
-                    align: TextAlign::Center,
-                    attrs: vec![TextAttr::DeathData],
-                }));
-            }
+            emit_individual_section(
+                &mut box_children,
+                ind,
+                &ind_id_trimmed,
+                section_cx,
+                box_display_left + 2.0,
+                geo.width,
+                name_baseline,
+                font_size,
+                date_font_size,
+                spacing,
+                prefs,
+                is_highlighted,
+            );
 
             let spouse_emitted = if let Some((fam_id, fam)) = spouses.first() {
                 if let Some(sp_id) = spouse_id_from_family_bc(ind_id, fam) {
@@ -1362,6 +1217,112 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
     Scene {
         primitives,
         canvas_bounds,
+    }
+}
+
+/// Emit name, optional ID, and optional birth/death text primitives for one individual section.
+///
+/// Used for both the center section of a two-spouse box and the full width of a single-spouse
+/// box — callers differ only in `center_x`, `id_left_x`, and `width`.
+#[allow(clippy::too_many_arguments)]
+fn emit_individual_section(
+    children: &mut Vec<crate::scene::Primitive>,
+    ind: &crate::parser::genrep::Individual<BoxedCouplesGeo>,
+    ind_id_trimmed: &str,
+    center_x: f64,
+    id_left_x: f64,
+    width: f64,
+    name_baseline: f64,
+    font_size: f64,
+    date_font_size: f64,
+    spacing: &crate::preferences::BoxedCouplesSpacingPrefs,
+    prefs: &Prefs,
+    is_highlighted: bool,
+) {
+    use crate::format::{format_event, format_name};
+    use crate::scene::{GroupPrimitive, Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
+
+    children.push(Primitive::Group(GroupPrimitive {
+        id: format!("{ind_id_trimmed}-name"),
+        children: vec![Primitive::Text(TextPrimitive {
+            content: format_name(ind, prefs),
+            bbox: Rect {
+                x: center_x - width / 2.0,
+                y: name_baseline - font_size,
+                w: width,
+                h: font_size,
+            },
+            align: TextAlign::Center,
+            attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+        })],
+    }));
+
+    if prefs.show.id {
+        children.push(Primitive::Text(TextPrimitive {
+            content: ind_id_trimmed.to_string(),
+            bbox: Rect {
+                x: id_left_x,
+                y: name_baseline - font_size,
+                w: width,
+                h: font_size,
+            },
+            align: TextAlign::Left,
+            attrs: vec![TextAttr::IndividualId],
+        }));
+    }
+
+    let mut y_pos = name_baseline;
+    if prefs.show.birth {
+        y_pos += spacing.date_above + date_font_size;
+        let birth_content = ind
+            .birth
+            .as_ref()
+            .and_then(|b| {
+                format_event(
+                    &prefs.format.birth,
+                    b.date.as_ref(),
+                    b.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
+            .unwrap_or_default();
+        children.push(Primitive::Text(TextPrimitive {
+            content: birth_content,
+            bbox: Rect {
+                x: center_x - width / 2.0,
+                y: y_pos - date_font_size,
+                w: width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::BirthData],
+        }));
+    }
+    if prefs.show.death {
+        y_pos += spacing.date_above + date_font_size;
+        let death_content = ind
+            .death
+            .as_ref()
+            .and_then(|d| {
+                format_event(
+                    &prefs.format.death,
+                    d.date.as_ref(),
+                    d.place.as_deref(),
+                    &prefs.format.date_qualifiers,
+                )
+            })
+            .unwrap_or_default();
+        children.push(Primitive::Text(TextPrimitive {
+            content: death_content,
+            bbox: Rect {
+                x: center_x - width / 2.0,
+                y: y_pos - date_font_size,
+                w: width,
+                h: date_font_size,
+            },
+            align: TextAlign::Center,
+            attrs: vec![TextAttr::DeathData],
+        }));
     }
 }
 

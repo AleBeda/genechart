@@ -75,6 +75,14 @@ fn font_weight_from_pref(pref: &str) -> &str {
     }
 }
 
+fn base_font_from_css(css_family: &str) -> &str {
+    css_family
+        .split(',')
+        .next()
+        .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
+        .unwrap_or("monospace")
+}
+
 // ── Preference helpers ────────────────────────────────────────────────────────
 
 /// Return paper dimensions `(width_mm, height_mm)` from preferences,
@@ -117,13 +125,7 @@ pub(crate) fn hex_color(val: i64) -> String {
     format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
 }
 
-/// Render text with symbol/non-symbol segmentation. When `split` is false,
-/// renders the entire text as a single `<text>` element (used for names with
-/// sex symbols to avoid positioning gaps). When `split` is true, separates
-/// Unicode symbol runs (codepoint >= U+2000) into distinct elements with
-/// SYMBOL_FONT_FAMILY. Uses exact font metrics for Latin segments.
-///
-/// `anchor_x` means: left edge for Left, center for Center, right edge for Right.
+/// Renders text split at U+2000 into Latin/symbol segments; `anchor_x` is the left/center/right edge per `align`.
 #[allow(clippy::too_many_arguments)]
 fn render_mixed_text(
     out: &mut String,
@@ -143,18 +145,7 @@ fn render_mixed_text(
     }
 
     // Split text into (slice, is_symbol) segments at U+2000 boundary.
-    let mut segments: Vec<(&str, bool)> = Vec::new();
-    let mut seg_start = 0usize;
-    let mut in_symbol = text.chars().next().is_some_and(|c| (c as u32) >= 0x2000);
-    for (byte_pos, c) in text.char_indices() {
-        let is_sym = (c as u32) >= 0x2000;
-        if is_sym != in_symbol {
-            segments.push((&text[seg_start..byte_pos], in_symbol));
-            seg_start = byte_pos;
-            in_symbol = is_sym;
-        }
-    }
-    segments.push((&text[seg_start..], in_symbol));
+    let segments = split_at_u2000(text);
 
     // Strip CSS fallback list to get the bare font name for font_metrics.
     let base_font = primary_family
@@ -226,18 +217,7 @@ fn render_mixed_text_rotated(
     let cw = font_size * CHAR_WIDTH_RATIO;
 
     // Split at U+2000 boundary.
-    let mut segments: Vec<(&str, bool)> = Vec::new();
-    let mut seg_start = 0usize;
-    let mut in_symbol = text.chars().next().is_some_and(|c| (c as u32) >= 0x2000);
-    for (byte_pos, c) in text.char_indices() {
-        let is_sym = (c as u32) >= 0x2000;
-        if is_sym != in_symbol {
-            segments.push((&text[seg_start..byte_pos], in_symbol));
-            seg_start = byte_pos;
-            in_symbol = is_sym;
-        }
-    }
-    segments.push((&text[seg_start..], in_symbol));
+    let segments = split_at_u2000(text);
 
     let base_font = primary_family
         .split(',')
@@ -276,6 +256,23 @@ fn render_mixed_text_rotated(
         ));
         cur_x += w;
     }
+}
+
+/// Splits `text` into `(slice, is_symbol)` segments at U+2000 — required because svg2pdf cannot do per-character font fallback within a single `<text>` element.
+fn split_at_u2000(text: &str) -> Vec<(&str, bool)> {
+    let mut segments: Vec<(&str, bool)> = Vec::new();
+    let mut seg_start = 0usize;
+    let mut in_symbol = text.chars().next().is_some_and(|c| (c as u32) >= 0x2000);
+    for (byte_pos, c) in text.char_indices() {
+        let is_sym = (c as u32) >= 0x2000;
+        if is_sym != in_symbol {
+            segments.push((&text[seg_start..byte_pos], in_symbol));
+            seg_start = byte_pos;
+            in_symbol = is_sym;
+        }
+    }
+    segments.push((&text[seg_start..], in_symbol));
+    segments
 }
 
 fn svg_header(canvas_w: &str, canvas_h: &str, viewbox: &str) -> String {
@@ -419,6 +416,60 @@ struct BcSvgCtx<'a> {
     conn_color: &'a str,
     conn_width: f64,
     prefs: &'a Prefs,
+}
+
+fn render_fancy_highlight_rect(
+    out: &mut String,
+    name_line: &crate::scene::FancyLine,
+    svg_x: f64,
+    svg_y: f64,
+    prefs: &Prefs,
+) {
+    let (font_family, font_size) = font_for_attr(&name_line.attrs, prefs);
+    let bold = weight_for_attr(&name_line.attrs, prefs) == "bold";
+    let lh = font_size * 1.2;
+    let base_font = base_font_from_css(&font_family);
+    let w = font_metrics::measure_text_w(&name_line.text, base_font, font_size, bold)
+        .unwrap_or_else(|| name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO);
+    let bg = hex_color(prefs.output.style.text.highlights.background_color);
+    let pad = 1.0;
+    let rx = svg_x - pad;
+    let ry = svg_y - pad;
+    out.push_str(&format!(
+        "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+        w + 2.0 * pad,
+        lh + 2.0 * pad
+    ));
+}
+
+fn render_fancy_conn_group(
+    out: &mut String,
+    group_id: &str,
+    offset_x: f64,
+    offset_y: f64,
+    conns: &[&crate::scene::FancyConnector],
+) {
+    out.push_str(&format!(
+        "  <g id=\"{group_id}\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
+    ));
+    for c in conns {
+        if !c.id.is_empty() {
+            out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
+        }
+        let dash = if c.stroke_dasharray.is_empty() {
+            String::new()
+        } else {
+            format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
+        };
+        out.push_str(&format!(
+            "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
+            c.d, c.stroke, c.stroke_width, dash
+        ));
+        if !c.id.is_empty() {
+            out.push_str("    </g>\n");
+        }
+    }
+    out.push_str("  </g>\n");
 }
 
 /// Recursively render a `Primitive::Group` and its children to SVG.
@@ -598,28 +649,13 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     l.attrs.contains(&TextAttr::IndividualName)
                         || l.attrs.contains(&TextAttr::SpouseName)
                 }) {
-                    let (font_family, font_size) = font_for_attr(&name_line.attrs, ctx.prefs);
-                    let bold = weight_for_attr(&name_line.attrs, ctx.prefs) == "bold";
-                    let lh = font_size * 1.2;
-                    let base_font = font_family
-                        .split(',')
-                        .next()
-                        .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
-                        .unwrap_or("monospace");
-                    let w =
-                        font_metrics::measure_text_w(&name_line.text, base_font, font_size, bold)
-                            .unwrap_or_else(|| {
-                                name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO
-                            });
-                    let bg = hex_color(ctx.prefs.output.style.text.highlights.background_color);
-                    let pad = 1.0;
-                    let rx = (ctx.to_svg_x)(name_line.x) - pad;
-                    let ry = (ctx.to_svg_y)(name_line.y) - pad;
-                    out.push_str(&format!(
-                        "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
-                        w + 2.0 * pad,
-                        lh + 2.0 * pad
-                    ));
+                    render_fancy_highlight_rect(
+                        out,
+                        name_line,
+                        (ctx.to_svg_x)(name_line.x),
+                        (ctx.to_svg_y)(name_line.y),
+                        ctx.prefs,
+                    );
                 }
             }
             for line in &item.lines {
@@ -710,6 +746,19 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let to_svg_x = |dx: f64| dx + MARGIN;
     let to_svg_y = |dy: f64| dy + MARGIN + chart_top_offset;
 
+    // Shared rendering context (used for boxed_couples groups and all non-fan primitives)
+    let ctx = BcSvgCtx {
+        to_svg_x: &to_svg_x,
+        to_svg_y: &to_svg_y,
+        box_fill: &box_fill,
+        box_stroke: &box_stroke,
+        box_sw,
+        box_radius,
+        conn_color: &conn_color,
+        conn_width,
+        prefs,
+    };
+
     // SVG dimensions
     let total_w = scene.canvas_bounds.w + 2.0 * MARGIN;
     let total_h = scene.canvas_bounds.h + 2.0 * MARGIN + chart_top_offset + copy_line_h;
@@ -748,112 +797,6 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     // Render primitives
     for prim in &scene.primitives {
         match prim {
-            crate::scene::Primitive::Box(b) => {
-                let x = to_svg_x(b.bbox.x);
-                let y = to_svg_y(b.bbox.y);
-                out.push_str(&svg_rect(
-                    x,
-                    y,
-                    b.bbox.w,
-                    b.bbox.h,
-                    &box_fill,
-                    &box_stroke,
-                    box_sw,
-                    box_radius,
-                ));
-            }
-            crate::scene::Primitive::Text(t) => {
-                let (font_family, font_size) = font_for_attr(&t.attrs, prefs);
-                let weight = weight_for_attr(&t.attrs, prefs);
-                let color = color_for_attr(&t.attrs, prefs);
-                let bg_color: Option<String> = if is_highlighted(&t.attrs) {
-                    Some(hex_color(
-                        prefs.output.style.text.highlights.background_color,
-                    ))
-                } else {
-                    None
-                };
-                // baseline = bbox.y + bbox.h converted to SVG
-                let baseline_svg = to_svg_y(t.bbox.y + t.bbox.h);
-                let cw = font_size * CHAR_WIDTH_RATIO;
-
-                let anchor_x = match t.align {
-                    TextAlign::Left => to_svg_x(t.bbox.x),
-                    TextAlign::Center => to_svg_x(t.bbox.x + t.bbox.w / 2.0),
-                    TextAlign::Right => to_svg_x(t.bbox.x + t.bbox.w),
-                };
-
-                render_mixed_text(
-                    &mut out,
-                    anchor_x,
-                    baseline_svg,
-                    &t.content,
-                    &font_family,
-                    font_size,
-                    weight,
-                    cw,
-                    &color,
-                    bg_color.as_deref(),
-                    &t.align,
-                );
-            }
-            crate::scene::Primitive::Connector(c) => {
-                if c.child_points.is_empty() {
-                    continue;
-                }
-
-                let parent_svgs: Vec<(f64, f64)> = c
-                    .parent_points
-                    .iter()
-                    .map(|p| (to_svg_x(p.x), to_svg_y(p.y)))
-                    .collect();
-                let child_svgs: Vec<(f64, f64)> = c
-                    .child_points
-                    .iter()
-                    .map(|p| (to_svg_x(p.x), to_svg_y(p.y)))
-                    .collect();
-
-                // Bar y = midpoint between parent exit and first child entry
-                let bar_y = (parent_svgs[0].1 + child_svgs[0].1) / 2.0;
-
-                // Bar x spans all parent and child x values
-                let all_x: Vec<f64> = parent_svgs
-                    .iter()
-                    .map(|p| p.0)
-                    .chain(child_svgs.iter().map(|p| p.0))
-                    .collect();
-                let bar_x_min = all_x.iter().cloned().fold(f64::INFINITY, f64::min);
-                let bar_x_max = all_x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
-                // Vertical drops from parents to bar
-                for (px, py) in &parent_svgs {
-                    out.push_str(&svg_line(*px, *py, *px, bar_y, &conn_color, conn_width));
-                }
-
-                // Horizontal bar
-                if (bar_x_max - bar_x_min).abs() > 0.1 {
-                    out.push_str(&svg_line(
-                        bar_x_min,
-                        bar_y,
-                        bar_x_max,
-                        bar_y,
-                        &conn_color,
-                        conn_width,
-                    ));
-                }
-
-                // Vertical drops from bar to children
-                for (cx_svg, cy_svg) in &child_svgs {
-                    out.push_str(&svg_line(
-                        *cx_svg,
-                        bar_y,
-                        *cx_svg,
-                        *cy_svg,
-                        &conn_color,
-                        conn_width,
-                    ));
-                }
-            }
             crate::scene::Primitive::Wedge(w) => {
                 let cx_svg = to_svg_x(w.cx);
                 let cy_svg = to_svg_y(w.cy);
@@ -962,12 +905,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     if is_highlighted(&w.label_attrs) {
                         let name_line = &lines[0];
                         let name_lh = name_line.font_size * 1.2;
-                        let base_font = name_line
-                            .font_family
-                            .split(',')
-                            .next()
-                            .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
-                            .unwrap_or("monospace");
+                        let base_font = base_font_from_css(&name_line.font_family);
                         let name_w = font_metrics::measure_text_w(
                             &name_line.text,
                             base_font,
@@ -1006,62 +944,6 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     out.push_str("  </g>\n");
                 }
             }
-            crate::scene::Primitive::FancyText(item) => {
-                if item.highlighted {
-                    if let Some(name_line) = item.lines.iter().find(|l| {
-                        l.attrs.contains(&TextAttr::IndividualName)
-                            || l.attrs.contains(&TextAttr::SpouseName)
-                    }) {
-                        let (font_family, font_size) = font_for_attr(&name_line.attrs, prefs);
-                        let bold = weight_for_attr(&name_line.attrs, prefs) == "bold";
-                        let lh = font_size * 1.2;
-                        let base_font = font_family
-                            .split(',')
-                            .next()
-                            .map(|s| s.trim().trim_matches('\'').trim_matches('"'))
-                            .unwrap_or("monospace");
-                        let w = font_metrics::measure_text_w(
-                            &name_line.text,
-                            base_font,
-                            font_size,
-                            bold,
-                        )
-                        .unwrap_or_else(|| {
-                            name_line.text.chars().count() as f64 * font_size * CHAR_WIDTH_RATIO
-                        });
-                        let bg = hex_color(prefs.output.style.text.highlights.background_color);
-                        let pad = 1.0;
-                        let rx = to_svg_x(name_line.x) - pad;
-                        let ry = to_svg_y(name_line.y) - pad;
-                        out.push_str(&format!(
-                            "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
-                            w + 2.0 * pad,
-                            lh + 2.0 * pad
-                        ));
-                    }
-                }
-                for line in &item.lines {
-                    let (font_family, font_size) = font_for_attr(&line.attrs, prefs);
-                    let weight = weight_for_attr(&line.attrs, prefs);
-                    let color = color_for_attr(&line.attrs, prefs);
-                    let cw = font_size * CHAR_WIDTH_RATIO;
-                    let x_svg = to_svg_x(line.x);
-                    let y_svg = to_svg_y(line.y + font_size * 0.85);
-                    render_mixed_text(
-                        &mut out,
-                        x_svg,
-                        y_svg,
-                        &line.text,
-                        &font_family,
-                        font_size,
-                        weight,
-                        cw,
-                        &color,
-                        None,
-                        &TextAlign::Left,
-                    );
-                }
-            }
             crate::scene::Primitive::FancyConn(conn) => {
                 use crate::scene::FancyConnKind;
                 match &conn.kind {
@@ -1069,75 +951,8 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     FancyConnKind::SpouseToChildren => spouse_conns.push(conn),
                 }
             }
-            crate::scene::Primitive::BoxesSpouseConnector(c) => {
-                if c.spouse_entries.is_empty() {
-                    continue;
-                }
-                let exit_x = to_svg_x(c.individual_exit.x);
-                let exit_y = to_svg_y(c.individual_exit.y);
-                let bar_y = (exit_y + to_svg_y(c.spouse_entries[0].y)) / 2.0;
-                let last_x = c
-                    .spouse_entries
-                    .iter()
-                    .map(|p| to_svg_x(p.x))
-                    .fold(f64::NEG_INFINITY, f64::max);
-                out.push_str(&svg_line(
-                    exit_x,
-                    exit_y,
-                    exit_x,
-                    bar_y,
-                    &conn_color,
-                    conn_width,
-                ));
-                out.push_str(&svg_line(
-                    exit_x,
-                    bar_y,
-                    last_x,
-                    bar_y,
-                    &conn_color,
-                    conn_width,
-                ));
-                for sp in &c.spouse_entries {
-                    let sx = to_svg_x(sp.x);
-                    let sy = to_svg_y(sp.y);
-                    out.push_str(&svg_line(sx, bar_y, sx, sy, &conn_color, conn_width));
-                }
-            }
-            crate::scene::Primitive::Group(_) => {
-                let ctx = BcSvgCtx {
-                    to_svg_x: &to_svg_x,
-                    to_svg_y: &to_svg_y,
-                    box_fill: &box_fill,
-                    box_stroke: &box_stroke,
-                    box_sw,
-                    box_radius,
-                    conn_color: &conn_color,
-                    conn_width,
-                    prefs,
-                };
+            _ => {
                 render_bc_primitive(prim, &ctx, &mut out);
-            }
-            crate::scene::Primitive::Image(img) => {
-                let href_safe = img.href.replace('"', "&quot;");
-                out.push_str(&format!(
-                    "  <image x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
-                     href=\"{href_safe}\" preserveAspectRatio=\"none\"/>\n",
-                    x = to_svg_x(img.bbox.x),
-                    y = to_svg_y(img.bbox.y),
-                    w = img.bbox.w,
-                    h = img.bbox.h,
-                ));
-            }
-            crate::scene::Primitive::FilledRect(r) => {
-                let fill_safe = r.fill.replace('"', "&quot;");
-                out.push_str(&format!(
-                    "  <rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
-                     fill=\"{fill_safe}\"/>\n",
-                    x = to_svg_x(r.bbox.x),
-                    y = to_svg_y(r.bbox.y),
-                    w = r.bbox.w,
-                    h = r.bbox.h,
-                ));
             }
         }
     }
@@ -1146,48 +961,20 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     if !indiv_conns.is_empty() || !spouse_conns.is_empty() {
         let offset_x = MARGIN;
         let offset_y = MARGIN + chart_top_offset;
-        out.push_str(&format!(
-            "  <g id=\"fancy-connectors-1\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
-        ));
-        for c in &indiv_conns {
-            if !c.id.is_empty() {
-                out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
-            }
-            let dash = if c.stroke_dasharray.is_empty() {
-                String::new()
-            } else {
-                format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
-            };
-            out.push_str(&format!(
-                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
-                c.d, c.stroke, c.stroke_width, dash
-            ));
-            if !c.id.is_empty() {
-                out.push_str("    </g>\n");
-            }
-        }
-        out.push_str("  </g>\n");
-        out.push_str(&format!(
-            "  <g id=\"fancy-connectors-2\" transform=\"translate({offset_x:.1},{offset_y:.1})\">\n"
-        ));
-        for c in &spouse_conns {
-            if !c.id.is_empty() {
-                out.push_str(&format!("    <g id=\"{}\">\n", xml_escape(&c.id)));
-            }
-            let dash = if c.stroke_dasharray.is_empty() {
-                String::new()
-            } else {
-                format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
-            };
-            out.push_str(&format!(
-                "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
-                c.d, c.stroke, c.stroke_width, dash
-            ));
-            if !c.id.is_empty() {
-                out.push_str("    </g>\n");
-            }
-        }
-        out.push_str("  </g>\n");
+        render_fancy_conn_group(
+            &mut out,
+            "fancy-connectors-1",
+            offset_x,
+            offset_y,
+            &indiv_conns,
+        );
+        render_fancy_conn_group(
+            &mut out,
+            "fancy-connectors-2",
+            offset_x,
+            offset_y,
+            &spouse_conns,
+        );
     }
 
     // ── Row-rule underlines (simple layout only, replaces dotted leaders) ──
