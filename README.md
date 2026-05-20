@@ -74,7 +74,7 @@ genechart family.ged --preff ~/projects/genealogy/style.toml
 
 ### simple
 
-Text-like layout with indented generations. Suitable for terminal output or simple SVG/PDF charts. Supports all directions (descendants, ancestors, forest).
+Text-like layout with indented generations. Suitable for terminal output or simple SVG/PDF charts. Supports descendants and ancestors directions. Forest direction is not yet implemented.
 
 ```sh
 genechart family.ged -r I1 --type simple -o chart.svg
@@ -100,7 +100,7 @@ Half-circle pedigree fan (180°). Places ancestors in concentric rings, with the
 genechart family.ged -r I1 --type fan -o chart.svg
 ```
 
-Configuration: `[layout.fan]` — `ring_height`, `ring_gap`.
+Configuration: `[layout.fan]` — `ring_height` (radial thickness of each inner ring), `ring_gap` (gap between rings), `outer_ring_height` (radial thickness of outer radial-text rings), `radial_gen` (generation index at which to switch to radial text; 0 = all radial).
 
 ### fancy
 
@@ -213,7 +213,7 @@ sex = true
 birth = true
 death = true
 marriage = true
-notes = false
+notes = false           # reserved — not yet implemented
 last_gen_spouses = false
 id = false
 duplicated_individual = false
@@ -255,6 +255,8 @@ box_width_2_spouses = 520.0
 [layout.fan]
 ring_height = 90
 ring_gap = 10
+outer_ring_height = 200
+radial_gen = 3
 
 [layout.fancy]
 gen_width = 300.0

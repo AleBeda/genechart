@@ -30,7 +30,7 @@ marriage = "⚭ {date:%d %b %Y}, {location}"
 date_qualifiers = "compact" # Valid values: "none", "gedcom", "compact"
 
 [layout]
-type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy"
+type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy", "boxes"
 root_pos = "bottom" # Valid values: "bot[tom]", "top"
 
 [layout.simple]
@@ -121,10 +121,6 @@ spouse = "regular"
 title = "Georgia 24"
 copyright = "Arial 8"
 id = "Courier 8"
-
-[output.style.alignment]
-name = "center"
-date = "center"
 
 [output.style.spacing]
 

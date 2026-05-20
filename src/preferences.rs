@@ -83,7 +83,7 @@ pub struct ShowPrefs {
     #[serde(default)]
     pub marriage: bool,
     #[serde(default)]
-    pub notes: bool,
+    pub notes: bool, // reserved — not yet implemented; accepted without error
     #[serde(default)]
     pub last_gen_spouses: bool,
     #[serde(default)]
@@ -315,8 +315,6 @@ pub struct StylePrefs {
     #[serde(default)]
     pub fonts: FontPrefs,
     #[serde(default)]
-    pub alignment: AlignmentPrefs,
-    #[serde(default)]
     pub spacing: SpacingPrefs,
     #[serde(default)]
     pub text: TextStylePrefs,
@@ -358,14 +356,6 @@ pub struct FontPrefs {
     pub copyright: String,
     #[serde(default)]
     pub id: String,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct AlignmentPrefs {
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub date: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
