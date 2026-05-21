@@ -19,19 +19,171 @@ pub struct SimpleGeo {
     pub connectors_below: Vec<usize>,
 }
 
-fn count_note_lines(notes: &[String]) -> usize {
+fn word_wrap(text: &str, width: usize) -> Vec<String> {
+    if width == 0 || text.chars().count() <= width {
+        return vec![text.to_string()];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let word_chars = word.chars().count();
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.chars().count() + 1 + word_chars <= width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(std::mem::take(&mut current));
+            current.push_str(word);
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn count_note_lines(notes: &[String], available_chars: usize) -> usize {
     notes
         .iter()
         .filter(|n| !n.trim().is_empty())
-        .map(|n| n.lines().count().max(1))
+        .map(|n| {
+            n.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| word_wrap(l, available_chars).len())
+                .sum::<usize>()
+                .max(1)
+        })
         .sum()
+}
+
+/// Conservative lower bound on chart width in chars (ignores indentation).
+/// Used to pre-allocate note lines before the actual max_x_px is known.
+fn estimate_max_x_chars(genrep: &Genrep, prefs: &Prefs) -> usize {
+    use crate::format::{format_event, format_name};
+
+    let id_col: usize = if prefs.show.id { 6 } else { 0 };
+    let gen_pfx: usize = if prefs.show.generation_num { 4 } else { 0 };
+    let gap = 2usize;
+
+    let max_name: usize = genrep
+        .individuals
+        .values()
+        .filter(|i| i.in_scope)
+        .map(|i| format_name(i, prefs).chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let max_birth: usize = if prefs.show.birth {
+        genrep
+            .individuals
+            .values()
+            .filter(|i| i.in_scope)
+            .filter_map(|i| {
+                i.birth.as_ref().and_then(|e| {
+                    format_event(
+                        &prefs.format.birth,
+                        e.date.as_ref(),
+                        e.place.as_deref(),
+                        &prefs.format.date_qualifiers,
+                    )
+                })
+            })
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    let max_death: usize = if prefs.show.death {
+        genrep
+            .individuals
+            .values()
+            .filter(|i| i.in_scope)
+            .filter_map(|i| {
+                i.death.as_ref().and_then(|e| {
+                    format_event(
+                        &prefs.format.death,
+                        e.date.as_ref(),
+                        e.place.as_deref(),
+                        &prefs.format.date_qualifiers,
+                    )
+                })
+            })
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    let max_marr: usize = if prefs.show.marriage {
+        genrep
+            .individuals
+            .values()
+            .filter(|i| i.in_scope)
+            .filter_map(|i| {
+                i.fams.iter().find_map(|fid| {
+                    genrep.families.get(fid.as_str()).and_then(|fam| {
+                        fam.marriage.as_ref().and_then(|e| {
+                            format_event(
+                                &prefs.format.marriage,
+                                e.date.as_ref(),
+                                e.place.as_deref(),
+                                &prefs.format.date_qualifiers,
+                            )
+                        })
+                    })
+                })
+            })
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    let name_end = id_col + gen_pfx + max_name;
+    let mut total = name_end;
+    if max_birth > 0 {
+        total += gap + max_birth;
+    }
+    if max_death > 0 {
+        total += gap + max_death;
+    }
+    if max_marr > 0 {
+        total += gap + max_marr;
+    }
+    total
+}
+
+/// Configuration for note line allocation in the layout phase.
+#[derive(Copy, Clone)]
+struct NoteWrap {
+    show: bool,
+    max_x_chars: usize,
+    id_col_chars: usize,
+    indent_chars: usize,
+}
+
+impl NoteWrap {
+    /// Available chars for note text content at the given depth
+    /// (after subtracting indentation and the `| ` prefix).
+    fn avail(&self, depth: usize) -> usize {
+        self.max_x_chars
+            .saturating_sub(self.id_col_chars + depth * self.indent_chars + 6)
+    }
 }
 
 fn visit(
     id: &str,
     depth: usize,
     spacing: usize,
-    show_notes: bool,
+    note_wrap: NoteWrap,
     line: &mut usize,
     geo_map: &mut HashMap<String, SimpleGeo>,
     visited: &mut HashSet<String>,
@@ -61,8 +213,8 @@ fn visit(
             ..Default::default()
         },
     );
-    let note_lines = if show_notes {
-        count_note_lines(&indi.notes)
+    let note_lines = if note_wrap.show {
+        count_note_lines(&indi.notes, note_wrap.avail(depth))
     } else {
         0
     };
@@ -103,8 +255,8 @@ fn visit(
                                 ..Default::default()
                             },
                         );
-                        let spouse_note_lines = if show_notes {
-                            count_note_lines(&s.notes)
+                        let spouse_note_lines = if note_wrap.show {
+                            count_note_lines(&s.notes, note_wrap.avail(depth))
                         } else {
                             0
                         };
@@ -120,7 +272,7 @@ fn visit(
                 child_id,
                 depth + 1,
                 spacing,
-                show_notes,
+                note_wrap,
                 line,
                 geo_map,
                 visited,
@@ -134,7 +286,7 @@ fn layout_descendants(
     genrep: &Genrep,
     root: &str,
     spacing: usize,
-    show_notes: bool,
+    note_wrap: NoteWrap,
     geo_map: &mut HashMap<String, SimpleGeo>,
 ) {
     let mut visited: HashSet<String> = HashSet::new();
@@ -143,7 +295,7 @@ fn layout_descendants(
         root,
         0,
         spacing,
-        show_notes,
+        note_wrap,
         &mut line,
         geo_map,
         &mut visited,
@@ -193,7 +345,7 @@ fn layout_ancestors(
     genrep: &Genrep,
     root: &str,
     spacing: usize,
-    show_notes: bool,
+    note_wrap: NoteWrap,
     geo_map: &mut HashMap<String, SimpleGeo>,
 ) {
     let mut visited = HashSet::new();
@@ -217,11 +369,11 @@ fn layout_ancestors(
                 connectors_below: Vec::new(),
             },
         );
-        let note_lines = if show_notes {
+        let note_lines = if note_wrap.show {
             genrep
                 .individuals
                 .get(id.as_str())
-                .map_or(0, |i| count_note_lines(&i.notes))
+                .map_or(0, |i| count_note_lines(&i.notes, note_wrap.avail(*depth)))
         } else {
             0
         };
@@ -271,16 +423,21 @@ impl Layout for SimpleLayout {
         let mut geo_map: HashMap<String, SimpleGeo> = HashMap::new();
 
         let spacing = prefs.layout.simple.vert_spacing as usize;
-        let show_notes = prefs.show.notes;
+        let note_wrap = NoteWrap {
+            show: prefs.show.notes,
+            max_x_chars: estimate_max_x_chars(genrep, prefs),
+            id_col_chars: if prefs.show.id { 6 } else { 0 },
+            indent_chars: prefs.layout.simple.indent as usize,
+        };
         match dir {
             d if matches_direction(d, "descendants") => {
                 if let Some(root) = resolve_root_id(genrep, prefs) {
-                    layout_descendants(genrep, &root, spacing, show_notes, &mut geo_map);
+                    layout_descendants(genrep, &root, spacing, note_wrap, &mut geo_map);
                 }
             }
             d if matches_direction(d, "ancestors") || matches_direction(d, "pedigree") => {
                 if let Some(root) = resolve_root_id(genrep, prefs) {
-                    layout_ancestors(genrep, &root, spacing, show_notes, &mut geo_map);
+                    layout_ancestors(genrep, &root, spacing, note_wrap, &mut geo_map);
                 }
             }
             d if matches_direction(d, "forest") => {
@@ -289,7 +446,7 @@ impl Layout for SimpleLayout {
             other => {
                 eprintln!("warning: unknown direction {other:?}, falling back to descendants");
                 if let Some(root) = resolve_root_id(genrep, prefs) {
-                    layout_descendants(genrep, &root, spacing, show_notes, &mut geo_map);
+                    layout_descendants(genrep, &root, spacing, note_wrap, &mut geo_map);
                 }
             }
         }
@@ -390,19 +547,6 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         };
     }
 
-    let max_line = entries
-        .iter()
-        .map(|(_, indi, g)| {
-            let nl = if prefs.show.notes {
-                count_note_lines(&indi.notes)
-            } else {
-                0
-            };
-            g.line + nl
-        })
-        .max()
-        .unwrap_or(0);
-
     // ── Compute pixel column positions (mirror render_simple column logic) ────
     let max_name_end_px: f64 = entries
         .iter()
@@ -490,6 +634,24 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
     } else {
         max_name_end_px
     };
+
+    let max_x_chars = (max_x_px / char_width_px).floor() as usize;
+
+    let max_line = entries
+        .iter()
+        .map(|(_, indi, g)| {
+            let nl = if prefs.show.notes && !indi.notes.is_empty() {
+                let x_note = id_col_px + g.indent as f64 * indent_px + 4.0 * char_width_px;
+                let note_x_chars = (x_note / char_width_px) as usize;
+                let avail = max_x_chars.saturating_sub(note_x_chars + 2);
+                count_note_lines(&indi.notes, avail)
+            } else {
+                0
+            };
+            g.line + nl
+        })
+        .max()
+        .unwrap_or(0);
 
     // ── Build primitives ──────────────────────────────────────────────────────
     let mut primitives: Vec<Primitive> = Vec::new();
@@ -634,18 +796,25 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 
         // ── Note lines ────────────────────────────────────────────────────────
         if prefs.show.notes && !indi.notes.is_empty() {
-            let x_note = id_col_px + geo.indent as f64 * indent_px;
+            let x_note = id_col_px + geo.indent as f64 * indent_px + 4.0 * char_width_px;
+            let note_x_chars = (x_note / char_width_px) as usize;
+            let avail = max_x_chars.saturating_sub(note_x_chars + 2);
             let mut note_line_offset = 1usize;
             for note in &indi.notes {
                 if note.trim().is_empty() {
                     continue;
                 }
-                for note_sub in note.lines() {
-                    let note_y = (geo.line + note_line_offset) as f64 * line_height_px;
-                    if !note_sub.trim().is_empty() {
-                        let w = note_sub.chars().count() as f64 * char_width_px;
+                for raw_line in note.lines() {
+                    if raw_line.trim().is_empty() {
+                        note_line_offset += 1;
+                        continue;
+                    }
+                    for wrapped in word_wrap(raw_line, avail) {
+                        let note_y = (geo.line + note_line_offset) as f64 * line_height_px;
+                        let content = format!("| {wrapped}");
+                        let w = content.chars().count() as f64 * char_width_px;
                         primitives.push(Primitive::Text(TextPrimitive {
-                            content: note_sub.to_string(),
+                            content,
                             bbox: Rect {
                                 x: x_note,
                                 y: note_y,
@@ -655,8 +824,8 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                             align: TextAlign::Left,
                             attrs: vec![TextAttr::NoteText],
                         }));
+                        note_line_offset += 1;
                     }
-                    note_line_offset += 1;
                 }
             }
         }
@@ -985,6 +1154,7 @@ mod tests {
 
     /// GEDCOM with one root who has a 2-line note, and a child.
     /// With show.notes = true the child must be placed 2 lines lower than without notes.
+    /// Note lines are intentionally short so they never wrap regardless of chart width.
     const GEDCOM_WITH_NOTE: &str = "\
 0 HEAD
 1 GEDC
@@ -992,8 +1162,8 @@ mod tests {
 0 @I1@ INDI
 1 NAME Root /Person/
 1 SEX M
-1 NOTE First line of note
-2 CONT Second line of note
+1 NOTE Line one
+2 CONT Line two
 1 FAMS @F1@
 0 @I2@ INDI
 1 NAME Child /Person/
