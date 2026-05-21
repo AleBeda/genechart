@@ -95,15 +95,17 @@ Six Wikipedia portraits are included in `photos/` and mapped to individual IDs v
 ### `kennedy_forest.svg` / `kennedy_forest.txt` — forest, all individuals
 
 ```
-genechart kennedy.ged --dir forest --svg
-genechart kennedy.ged --dir forest --text
+genechart kennedy.ged --dir forest --pref 'show.last_gen_spouses = true' --svg
+genechart kennedy.ged --dir forest --pref 'show.last_gen_spouses = true' --text
 ```
 
 Forest direction places every individual in scope without a generation limit, then renders each
-disconnected family tree as an independent descendants sub-chart. In the Kennedy GEDCOM the
-data splits into several trees whose patriarchs/matriarchs have no recorded parents (Bridget
-Murphy, Mary Josephine Hannon, and others). Trees are sorted by individual ID and separated by
-blank lines.
+disconnected family tree as an independent descendants sub-chart. `show.last_gen_spouses = true`
+is set so that spouses at the leaf generation are shown; trees that would merely repeat a couple
+already shown in a previous tree are suppressed. In the Kennedy GEDCOM the data splits into
+several trees whose patriarchs/matriarchs have no recorded parents (Bridget Murphy, Mary
+Josephine Hannon, and others). Trees are sorted by size (largest first) and separated by blank
+lines.
 
 ## Highlights
 

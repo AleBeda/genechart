@@ -374,15 +374,46 @@ impl Layout for SimpleLayout {
                 // Each tree uses a fresh per-tree visited set. `global_shown` tracks
                 // canonical IDs of non-spouse individuals placed in all previous trees;
                 // when every child of a family is already in `global_shown`, the tree
-                // emits "..." instead of repeating the full subtree. Instance keys
-                // ("ID##N") are used when the same individual appears in more than one tree.
+                // emits "..." instead of repeating the full subtree. `global_shown_spouse`
+                // tracks who appeared as a spouse in a previous tree; when
+                // last_gen_spouses=true this is used to suppress fully redundant standalone
+                // trees (same couple already shown in a prior tree, no new children).
+                // Instance keys ("ID##N") are used when the same individual appears in
+                // more than one tree.
                 let tree_gap = 3;
                 let mut next_line: usize = 0;
                 let mut instance_count: HashMap<String, usize> = HashMap::new();
                 let mut global_shown: HashSet<String> = HashSet::new();
+                let mut global_shown_spouse: HashSet<String> = HashSet::new();
                 let mut ellipsis_count: usize = 0;
 
                 for root in &roots {
+                    // With last_gen_spouses=true, skip a root whose tree would be entirely
+                    // redundant: the root was already shown as a spouse in a prior tree AND
+                    // every family of theirs has all children already shown (or no children).
+                    if prefs.show.last_gen_spouses && global_shown_spouse.contains(root.as_str()) {
+                        let all_fam_children_shown =
+                            genrep.individuals.get(root.as_str()).map_or(false, |indi| {
+                                let fams: Vec<_> = indi
+                                    .fams
+                                    .iter()
+                                    .filter_map(|fid| genrep.families.get(fid))
+                                    .filter(|f| f.in_scope)
+                                    .collect();
+                                !fams.is_empty()
+                                    && fams.iter().all(|fam| {
+                                        fam.children_ids.is_empty()
+                                            || fam
+                                                .children_ids
+                                                .iter()
+                                                .all(|c| global_shown.contains(c.as_str()))
+                                    })
+                            });
+                        if all_fam_children_shown {
+                            continue;
+                        }
+                    }
+
                     let mut tree_visited: HashSet<String> = HashSet::new();
                     let mut tree_map: HashMap<String, SimpleGeo> = HashMap::new();
                     let mut line: usize = 0;
@@ -400,12 +431,15 @@ impl Layout for SimpleLayout {
                     if tree_map.is_empty() {
                         continue;
                     }
-                    // Update global_shown with non-spouse, non-ellipsis individuals from
-                    // this tree so subsequent trees can suppress already-shown subtrees.
+                    // Update tracking sets from this tree before merging into geo_map.
                     for (id, geo) in &tree_map {
-                        if !geo.is_spouse && !geo.is_ellipsis {
-                            let canonical = id.split("##").next().unwrap_or(id.as_str());
-                            global_shown.insert(canonical.to_string());
+                        let canonical = id.split("##").next().unwrap_or(id.as_str());
+                        if !geo.is_ellipsis {
+                            if geo.is_spouse {
+                                global_shown_spouse.insert(canonical.to_string());
+                            } else {
+                                global_shown.insert(canonical.to_string());
+                            }
                         }
                     }
                     let tree_max_line = tree_map.values().map(|g| g.line).max().unwrap_or(0);
@@ -660,9 +694,9 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
     for (id, indi, geo) in &entries {
         let top_y = geo.line as f64 * line_height_px;
 
-        // Ellipsis placeholder: show "..." at the right indent position.
+        // Ellipsis placeholder: show "..." aligned with where child names start.
         if geo.is_ellipsis {
-            let x = id_col_px + geo.indent as f64 * indent_px;
+            let x = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
             primitives.push(Primitive::Text(TextPrimitive {
                 content: "...".to_string(),
                 bbox: Rect {

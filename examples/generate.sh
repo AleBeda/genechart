@@ -26,6 +26,14 @@ echo "==> Kennedy: boxes SVG with photos (3 generations from Joseph Kennedy Sr.,
 genechart "$KENNEDY" --preff examples/kennedy/kennedy_boxes_photos.toml --svg \
   -o examples/kennedy/kennedy_boxes_photos.svg
 
+echo "==> Kennedy: forest SVG (all individuals, last-gen spouses shown)"
+genechart "$KENNEDY" --dir forest --pref 'show.last_gen_spouses = true' --svg \
+  -o examples/kennedy/kennedy_forest.svg
+
+echo "==> Kennedy: forest text (all individuals, last-gen spouses shown)"
+genechart "$KENNEDY" --dir forest --pref 'show.last_gen_spouses = true' --text \
+  -o examples/kennedy/kennedy_forest.txt
+
 echo "Done. Outputs written to examples/kennedy/"
 
 SHAKESPEARE=examples/shakespeare/shakespeare.ged
