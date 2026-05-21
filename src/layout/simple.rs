@@ -834,10 +834,13 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     }
                 }
                 if note_line_offset > bar_start_offset {
+                    let underline_extra = line_height_px * 0.16 + 1.0;
                     primitives.push(Primitive::NoteBar(crate::scene::NoteBarPrimitive {
                         x: bar_x,
-                        top_y: (geo.line + bar_start_offset) as f64 * line_height_px,
-                        bottom_y: (geo.line + note_line_offset) as f64 * line_height_px,
+                        top_y: (geo.line + bar_start_offset) as f64 * line_height_px
+                            + underline_extra,
+                        bottom_y: (geo.line + note_line_offset) as f64 * line_height_px
+                            + underline_extra,
                     }));
                 }
             }
