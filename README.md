@@ -2,7 +2,7 @@
 
 A command-line tool that reads a [GEDCOM 5.5.1](https://gedcom.io/) genealogical file and generates a family-tree chart as text, SVG, or PDF.
 
-**Version**: v0.3.1
+**Version**: v0.4.0
 
 ## Installation
 
