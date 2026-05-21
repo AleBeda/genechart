@@ -74,7 +74,7 @@ genechart family.ged --preff ~/projects/genealogy/style.toml
 
 ### simple
 
-Text-like layout with indented generations. Suitable for terminal output or simple SVG/PDF charts. Supports descendants and ancestors directions. Forest direction is not yet implemented.
+Text-like layout with indented generations. Suitable for terminal output or simple SVG/PDF charts. Supports descendants, ancestors, and forest directions.
 
 ```sh
 genechart family.ged -r I1 --type simple -o chart.svg

@@ -92,6 +92,19 @@ Six Wikipedia portraits are included in `photos/` and mapped to individual IDs v
 | `Robert_F._Kennedy.jpg` | I21 — Robert Francis Kennedy |
 | `Ethel_Kennedy_Smile_1968_(cropped).jpg` | I22 — Ethel Skakel Kennedy |
 
+### `kennedy_forest.svg` / `kennedy_forest.txt` — forest, all individuals
+
+```
+genechart kennedy.ged --dir forest --svg
+genechart kennedy.ged --dir forest --text
+```
+
+Forest direction places every individual in scope without a generation limit, then renders each
+disconnected family tree as an independent descendants sub-chart. In the Kennedy GEDCOM the
+data splits into several trees whose patriarchs/matriarchs have no recorded parents (Bridget
+Murphy, Mary Josephine Hannon, and others). Trees are sorted by individual ID and separated by
+blank lines.
+
 ## Highlights
 
 `kennedy_highlights.txt` marks three brothers for visual emphasis:

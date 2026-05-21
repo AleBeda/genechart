@@ -1,4 +1,4 @@
-//! Text-like layout: descendants, ancestors, forest (stub).
+//! Text-like layout: descendants, ancestors, forest.
 
 use super::Layout;
 use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
@@ -234,7 +234,136 @@ impl Layout for SimpleLayout {
                 }
             }
             d if matches_direction(d, "forest") => {
-                eprintln!("warning: forest direction is not yet implemented; output will be empty");
+                // Roots = in-scope individuals with no in-scope parent family.
+                let mut roots: Vec<String> = genrep
+                    .individuals
+                    .iter()
+                    .filter(|(_, i)| i.in_scope)
+                    .filter(|(_, i)| {
+                        !i.famc
+                            .iter()
+                            .any(|fam_id| genrep.families.get(fam_id).is_some_and(|f| f.in_scope))
+                    })
+                    .map(|(id, _)| id.clone())
+                    .collect();
+
+                // BFS reachable count from a root (via FAMS → spouse + children).
+                let tree_size = |root: &str| -> usize {
+                    let mut vis: HashSet<String> = HashSet::new();
+                    let mut stack = vec![root.to_string()];
+                    while let Some(id) = stack.pop() {
+                        if vis.contains(&id) {
+                            continue;
+                        }
+                        let indi = match genrep.individuals.get(&id) {
+                            Some(i) if i.in_scope => i,
+                            _ => continue,
+                        };
+                        vis.insert(id.clone());
+                        for fam_id in &indi.fams {
+                            let fam = match genrep.families.get(fam_id) {
+                                Some(f) if f.in_scope => f,
+                                _ => continue,
+                            };
+                            let spouse = if fam.husband_id.as_deref() == Some(id.as_str()) {
+                                fam.wife_id.as_deref()
+                            } else {
+                                fam.husband_id.as_deref()
+                            };
+                            if let Some(sp) = spouse {
+                                if !vis.contains(sp) {
+                                    stack.push(sp.to_string());
+                                }
+                            }
+                            for child in &fam.children_ids {
+                                if !vis.contains(child) {
+                                    stack.push(child.clone());
+                                }
+                            }
+                        }
+                    }
+                    vis.len()
+                };
+
+                // Largest trees first; ID as tiebreaker to ensure determinism.
+                roots.sort_by(|a, b| tree_size(b).cmp(&tree_size(a)).then(a.cmp(b)));
+
+                // Remove redundant roots: if two roots are married to each other, keep
+                // only the one with the larger tree. The removed spouse will still appear
+                // inside the kept tree. This prevents near-duplicate trees for couple-roots.
+                {
+                    let roots_set: HashSet<String> = roots.iter().cloned().collect();
+                    let sizes: HashMap<String, usize> =
+                        roots.iter().map(|r| (r.clone(), tree_size(r))).collect();
+                    roots.retain(|root| {
+                        let indi = match genrep.individuals.get(root.as_str()) {
+                            Some(i) => i,
+                            None => return false,
+                        };
+                        for fam_id in &indi.fams {
+                            let fam = match genrep.families.get(fam_id) {
+                                Some(f) if f.in_scope => f,
+                                _ => continue,
+                            };
+                            let spouse_opt = if fam.husband_id.as_deref() == Some(root.as_str()) {
+                                fam.wife_id.as_deref()
+                            } else {
+                                fam.husband_id.as_deref()
+                            };
+                            if let Some(sp) = spouse_opt {
+                                if roots_set.contains(sp) {
+                                    let my_size = sizes[root.as_str()];
+                                    let sp_size = sizes[sp];
+                                    if sp_size > my_size
+                                        || (sp_size == my_size && sp < root.as_str())
+                                    {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                        true
+                    });
+                }
+
+                // Each tree uses a fresh per-tree visited set so individuals that appear
+                // in multiple family contexts are rendered at every position they belong
+                // to. Instance keys ("ID##N") are used when the same individual appears
+                // in more than one tree.
+                let tree_gap = 3;
+                let mut next_line: usize = 0;
+                let mut instance_count: HashMap<String, usize> = HashMap::new();
+
+                for root in &roots {
+                    let mut tree_visited: HashSet<String> = HashSet::new();
+                    let mut tree_map: HashMap<String, SimpleGeo> = HashMap::new();
+                    let mut line: usize = 0;
+                    visit(
+                        root,
+                        0,
+                        spacing,
+                        &mut line,
+                        &mut tree_map,
+                        &mut tree_visited,
+                        genrep,
+                    );
+                    if tree_map.is_empty() {
+                        continue;
+                    }
+                    let tree_max_line = tree_map.values().map(|g| g.line).max().unwrap_or(0);
+                    for (id, mut geo) in tree_map {
+                        geo.line += next_line;
+                        let n = *instance_count.get(&id).unwrap_or(&0);
+                        let key = if n == 0 {
+                            id.clone()
+                        } else {
+                            format!("{}##{}", id, n)
+                        };
+                        instance_count.insert(id, n + 1);
+                        geo_map.insert(key, geo);
+                    }
+                    next_line += tree_max_line + 1 + tree_gap;
+                }
             }
             other => {
                 eprintln!("warning: unknown direction {other:?}, falling back to descendants");
@@ -254,10 +383,24 @@ impl Layout for SimpleLayout {
             geo_map.retain(|_, g| !(g.is_spouse && g.generation == max_non_spouse_gen));
         }
 
+        // Build out_individuals from geo_map entries. Instance keys ("ID##N") may
+        // be present when the forest layout places the same individual in multiple
+        // trees; strip the suffix to find the canonical individual data.
         let mut out_individuals = HashMap::new();
+        for (key, geo) in &geo_map {
+            let canonical = key.split("##").next().unwrap_or(key.as_str());
+            if let Some(indi) = genrep.individuals.get(canonical) {
+                out_individuals.insert(key.clone(), copy_individual(indi, Some(geo.clone())));
+            }
+        }
+        let placed_canonical: HashSet<&str> = geo_map
+            .keys()
+            .map(|k| k.split("##").next().unwrap_or(k.as_str()))
+            .collect();
         for (id, indi) in &genrep.individuals {
-            let geo = geo_map.get(id).cloned();
-            out_individuals.insert(id.clone(), copy_individual(indi, geo));
+            if !placed_canonical.contains(id.as_str()) {
+                out_individuals.insert(id.clone(), copy_individual(indi, None));
+            }
         }
 
         let out_families = copy_families(genrep, |_| None);
@@ -437,12 +580,13 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         let top_y = geo.line as f64 * line_height_px;
         let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
-        let is_highlighted = highlighted_ids.contains(*id);
+        let cid = id.split("##").next().unwrap_or(id);
+        let is_highlighted = highlighted_ids.contains(cid);
 
         // Individual ID — emitted first so the text backend writes it at col 0
         // before any other content fills the line.
         if prefs.show.id {
-            let id_str = format!("{id}");
+            let id_str = id.split("##").next().unwrap_or(id).to_string();
             let id_w = id_str.chars().count() as f64 * char_width_px;
             primitives.push(Primitive::Text(TextPrimitive {
                 content: id_str,
@@ -718,6 +862,84 @@ mod tests {
 
         let result = SimpleLayout.compute(&genrep, &prefs);
         assert!(result.is_ok());
+    }
+
+    /// Two completely disconnected family trees: Tree A (I1→I3) and Tree B (I4→I6).
+    const GEDCOM_FOREST: &str = "\
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Alice /Tree-A/
+1 SEX F
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Bob /Tree-A/
+1 SEX M
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Carol /Tree-A/
+1 SEX F
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 CHIL @I3@
+0 @I4@ INDI
+1 NAME Dan /Tree-B/
+1 SEX M
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Eve /Tree-B/
+1 SEX F
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME Frank /Tree-B/
+1 SEX M
+1 FAMC @F2@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I6@
+0 TRLR
+";
+
+    #[test]
+    fn test_forest_two_disconnected_trees() {
+        let mut genrep = parse_str(GEDCOM_FOREST).unwrap();
+        compute_scope(&mut genrep, None, "forest", None);
+
+        let mut prefs = Prefs::default();
+        prefs.scope.direction = "forest".to_string();
+        prefs.show.last_gen_spouses = true;
+
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+
+        // Every individual must be placed.
+        for id in &["I1", "I2", "I3", "I4", "I5", "I6"] {
+            assert!(
+                result.individuals[*id].geo.is_some(),
+                "{id} must have a geo"
+            );
+        }
+
+        // Tree A (roots I1 or I2, child I3) must all be on lower lines than tree B roots.
+        // Since roots are sorted by ID, tree A (I1/I2) appears before tree B (I4/I5).
+        let tree_a_lines: Vec<usize> = ["I1", "I2", "I3"]
+            .iter()
+            .map(|id| result.individuals[*id].geo.as_ref().unwrap().line)
+            .collect();
+        let tree_b_lines: Vec<usize> = ["I4", "I5", "I6"]
+            .iter()
+            .map(|id| result.individuals[*id].geo.as_ref().unwrap().line)
+            .collect();
+
+        let tree_a_max = *tree_a_lines.iter().max().unwrap();
+        let tree_b_min = *tree_b_lines.iter().min().unwrap();
+        assert!(
+            tree_a_max < tree_b_min,
+            "all of tree A must appear before all of tree B: max_A={tree_a_max} min_B={tree_b_min}"
+        );
     }
 
     const GEDCOM_3GEN: &str = "\
