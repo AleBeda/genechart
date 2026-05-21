@@ -2,7 +2,7 @@
 
 use super::Layout;
 use super::common::{copy_families, copy_individual, resolve_root_id, sort_families_by_date};
-use crate::parser::genrep::Genrep;
+use crate::parser::genrep::{Genrep, Individual};
 use crate::preferences::Prefs;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
@@ -15,6 +15,7 @@ pub struct SimpleGeo {
     pub indent: usize,
     pub generation: usize,
     pub is_spouse: bool,
+    pub is_ellipsis: bool,
     pub connectors_above: Vec<usize>,
     pub connectors_below: Vec<usize>,
 }
@@ -26,6 +27,8 @@ fn visit(
     line: &mut usize,
     geo_map: &mut HashMap<String, SimpleGeo>,
     visited: &mut HashSet<String>,
+    global_shown: &HashSet<String>,
+    ellipsis_count: &mut usize,
     genrep: &Genrep,
 ) {
     if visited.contains(id) {
@@ -96,8 +99,38 @@ fn visit(
         }
 
         let children = fam.children_ids.clone();
-        for child_id in &children {
-            visit(child_id, depth + 1, spacing, line, geo_map, visited, genrep);
+        // If every child was already shown as a non-spouse in a previous tree, emit
+        // "..." as a placeholder instead of repeating the whole subtree.
+        let all_children_shown =
+            !children.is_empty() && children.iter().all(|c| global_shown.contains(c.as_str()));
+        if all_children_shown {
+            let ekey = format!("...{}", *ellipsis_count);
+            *ellipsis_count += 1;
+            geo_map.insert(
+                ekey,
+                SimpleGeo {
+                    line: *line,
+                    indent: depth + 1,
+                    generation: depth + 2,
+                    is_ellipsis: true,
+                    ..Default::default()
+                },
+            );
+            *line += 1 + spacing;
+        } else {
+            for child_id in &children {
+                visit(
+                    child_id,
+                    depth + 1,
+                    spacing,
+                    line,
+                    geo_map,
+                    visited,
+                    global_shown,
+                    ellipsis_count,
+                    genrep,
+                );
+            }
         }
     }
 }
@@ -110,7 +143,19 @@ fn layout_descendants(
 ) {
     let mut visited: HashSet<String> = HashSet::new();
     let mut line: usize = 0;
-    visit(root, 0, spacing, &mut line, geo_map, &mut visited, genrep);
+    let global_shown: HashSet<String> = HashSet::new();
+    let mut ellipsis_count: usize = 0;
+    visit(
+        root,
+        0,
+        spacing,
+        &mut line,
+        geo_map,
+        &mut visited,
+        &global_shown,
+        &mut ellipsis_count,
+        genrep,
+    );
 }
 
 fn in_order(
@@ -172,9 +217,9 @@ fn layout_ancestors(
                 line: line_num,
                 indent: *depth,
                 generation: depth + 1,
-                is_spouse: false,
                 connectors_above: Vec::new(),
                 connectors_below: Vec::new(),
+                ..Default::default()
             },
         );
     }
@@ -326,13 +371,16 @@ impl Layout for SimpleLayout {
                     });
                 }
 
-                // Each tree uses a fresh per-tree visited set so individuals that appear
-                // in multiple family contexts are rendered at every position they belong
-                // to. Instance keys ("ID##N") are used when the same individual appears
-                // in more than one tree.
+                // Each tree uses a fresh per-tree visited set. `global_shown` tracks
+                // canonical IDs of non-spouse individuals placed in all previous trees;
+                // when every child of a family is already in `global_shown`, the tree
+                // emits "..." instead of repeating the full subtree. Instance keys
+                // ("ID##N") are used when the same individual appears in more than one tree.
                 let tree_gap = 3;
                 let mut next_line: usize = 0;
                 let mut instance_count: HashMap<String, usize> = HashMap::new();
+                let mut global_shown: HashSet<String> = HashSet::new();
+                let mut ellipsis_count: usize = 0;
 
                 for root in &roots {
                     let mut tree_visited: HashSet<String> = HashSet::new();
@@ -345,10 +393,20 @@ impl Layout for SimpleLayout {
                         &mut line,
                         &mut tree_map,
                         &mut tree_visited,
+                        &global_shown,
+                        &mut ellipsis_count,
                         genrep,
                     );
                     if tree_map.is_empty() {
                         continue;
+                    }
+                    // Update global_shown with non-spouse, non-ellipsis individuals from
+                    // this tree so subsequent trees can suppress already-shown subtrees.
+                    for (id, geo) in &tree_map {
+                        if !geo.is_spouse && !geo.is_ellipsis {
+                            let canonical = id.split("##").next().unwrap_or(id.as_str());
+                            global_shown.insert(canonical.to_string());
+                        }
                     }
                     let tree_max_line = tree_map.values().map(|g| g.line).max().unwrap_or(0);
                     for (id, mut geo) in tree_map {
@@ -376,7 +434,7 @@ impl Layout for SimpleLayout {
         if !prefs.show.last_gen_spouses {
             let max_non_spouse_gen = geo_map
                 .values()
-                .filter(|g| !g.is_spouse)
+                .filter(|g| !g.is_spouse && !g.is_ellipsis)
                 .map(|g| g.generation)
                 .max()
                 .unwrap_or(0);
@@ -385,9 +443,32 @@ impl Layout for SimpleLayout {
 
         // Build out_individuals from geo_map entries. Instance keys ("ID##N") may
         // be present when the forest layout places the same individual in multiple
-        // trees; strip the suffix to find the canonical individual data.
+        // trees; strip the suffix to find the canonical individual data. Ellipsis
+        // keys ("...N") get a minimal placeholder individual so emit_scene can
+        // render the "..." marker at the correct position.
         let mut out_individuals = HashMap::new();
         for (key, geo) in &geo_map {
+            if geo.is_ellipsis {
+                out_individuals.insert(
+                    key.clone(),
+                    Individual {
+                        id: key.clone(),
+                        given: None,
+                        surname: None,
+                        sex: None,
+                        birth: None,
+                        death: None,
+                        fams: vec![],
+                        famc: vec![],
+                        alt_name: None,
+                        name_heb: None,
+                        living: None,
+                        in_scope: true,
+                        geo: Some(geo.clone()),
+                    },
+                );
+                continue;
+            }
             let canonical = key.split("##").next().unwrap_or(key.as_str());
             if let Some(indi) = genrep.individuals.get(canonical) {
                 out_individuals.insert(key.clone(), copy_individual(indi, Some(geo.clone())));
@@ -578,6 +659,24 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 
     for (id, indi, geo) in &entries {
         let top_y = geo.line as f64 * line_height_px;
+
+        // Ellipsis placeholder: show "..." at the right indent position.
+        if geo.is_ellipsis {
+            let x = id_col_px + geo.indent as f64 * indent_px;
+            primitives.push(Primitive::Text(TextPrimitive {
+                content: "...".to_string(),
+                bbox: Rect {
+                    x,
+                    y: top_y,
+                    w: 3.0 * char_width_px,
+                    h: line_height_px,
+                },
+                align: TextAlign::Left,
+                attrs: vec![TextAttr::IndividualName],
+            }));
+            continue;
+        }
+
         let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
         let cid = id.split("##").next().unwrap_or(id);
