@@ -56,6 +56,8 @@ pub enum TextAttr {
     GenerationNum,
     /// Highlighted individual or family
     Highlighted,
+    /// A GEDCOM NOTE line.
+    NoteText,
 }
 
 /// Build a `Vec<TextAttr>` with `base` plus `Highlighted` when `highlighted` is true.

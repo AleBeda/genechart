@@ -76,11 +76,16 @@ genechart family.ged --preff ~/projects/genealogy/style.toml
 
 Text-like layout with indented generations. Suitable for terminal output or simple SVG/PDF charts. Supports descendants, ancestors, and forest directions.
 
+In **forest** mode every individual is in scope and each disconnected family tree is rendered as an independent sub-chart below the previous one (largest tree first). Sub-trees whose children were already shown in a prior tree are replaced by `...` to avoid repetition. With `show.last_gen_spouses = true`, redundant spouse-only trees (the couple already appeared in a larger tree and has no new children) are suppressed entirely.
+
 ```sh
 genechart family.ged -r I1 --type simple -o chart.svg
+genechart family.ged --dir forest --pref 'show.last_gen_spouses = true' --text
 ```
 
 Configuration: `[layout.simple]` — `indent` (columns per generation), `vert_spacing` (lines between generations).
+
+When `show.notes = true`, GEDCOM `NOTE` text is rendered as additional indented rows below each individual (simple layout only; descendants, ancestors, and forest directions).
 
 ### boxed_couples
 
@@ -213,7 +218,7 @@ sex = true
 birth = true
 death = true
 marriage = true
-notes = false           # reserved — not yet implemented
+notes = false           # simple layout: display GEDCOM NOTE text below each individual
 last_gen_spouses = false
 id = false
 duplicated_individual = false

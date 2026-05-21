@@ -53,6 +53,8 @@ enum TextSlot {
     DeathPlace,
     MarrDate,
     MarrPlace,
+    NoteIndi,
+    NoteFam,
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -196,6 +198,22 @@ fn apply_continuation(ctx: &mut RecordCtx, slot: TextSlot, prefix: &str, value: 
                 }
             }
         }
+        TextSlot::NoteIndi => {
+            if let RecordCtx::Indi { indi, .. } = ctx {
+                if let Some(last) = indi.notes.last_mut() {
+                    last.push_str(prefix);
+                    last.push_str(value);
+                }
+            }
+        }
+        TextSlot::NoteFam => {
+            if let RecordCtx::Fam(fam) = ctx {
+                if let Some(last) = fam.notes.last_mut() {
+                    last.push_str(prefix);
+                    last.push_str(value);
+                }
+            }
+        }
     }
 }
 
@@ -257,6 +275,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             alt_name: Option::None,
                             name_heb: Option::None,
                             living: Option::None,
+                            notes: Vec::new(),
                             in_scope: false,
                             geo: Option::None,
                         },
@@ -272,6 +291,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         children_ids: Vec::new(),
                         marriage: Option::None,
                         jmar: Option::None,
+                        notes: Vec::new(),
                         in_scope: false,
                         geo: Option::None,
                     });
@@ -363,7 +383,22 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                                 event_ctx = EventCtx::Marriage;
                             }
                         }
-                        "NOTE" | "CHAN" | "TEXT" => {} // silently skip
+                        "NOTE" => {
+                            if !value.starts_with('@') {
+                                match &mut ctx {
+                                    RecordCtx::Indi { indi, .. } => {
+                                        indi.notes.push(value.clone());
+                                        text_slot = TextSlot::NoteIndi;
+                                    }
+                                    RecordCtx::Fam(fam) => {
+                                        fam.notes.push(value.clone());
+                                        text_slot = TextSlot::NoteFam;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        "CHAN" | "TEXT" => {} // silently skip
                         "NAM2" => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
                                 indi.alt_name = Some(value.clone());
@@ -961,6 +996,24 @@ mod tests {
 
         let f1 = gr.get_family("F1").unwrap();
         assert_eq!(f1.jmar.as_deref(), Some("ref-12345"));
+    }
+
+    #[test]
+    fn test_note_parsed() {
+        let ged = "\
+0 @I1@ INDI
+1 NAME Test /Person/
+1 NOTE Some text
+2 CONT second line
+0 TRLR
+";
+        let gr = parse_str(ged).unwrap();
+        let i1 = gr.get_individual("I1").unwrap();
+        assert_eq!(i1.notes.len(), 1, "should have exactly one note");
+        assert_eq!(
+            i1.notes[0], "Some text\nsecond line",
+            "note should include CONT continuation"
+        );
     }
 
     #[test]

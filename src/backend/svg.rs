@@ -356,7 +356,10 @@ fn with_symbol_fallback(base: &str) -> String {
 /// Resolve (font_family, font_size) from a `[TextAttr]` slice and preferences.
 fn font_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> (String, f64) {
     match semantic_attr(attrs) {
-        TextAttr::IndividualName | TextAttr::SpouseName | TextAttr::GenerationNum => {
+        TextAttr::IndividualName
+        | TextAttr::SpouseName
+        | TextAttr::GenerationNum
+        | TextAttr::NoteText => {
             let (fam, sz) = parsed_font(&prefs.output.style.fonts.names);
             let sz = if sz <= 0.0 { FONT_SIZE } else { sz };
             (with_symbol_fallback(&fam), sz)

@@ -308,6 +308,7 @@ mod tests {
             alt_name: None,
             name_heb: None,
             living: None,
+            notes: vec![],
             in_scope: true,
             geo: None,
         }
@@ -321,6 +322,7 @@ mod tests {
             children_ids: vec![child.to_string()],
             marriage: None,
             jmar: None,
+            notes: vec![],
             in_scope: true,
             geo: None,
         }

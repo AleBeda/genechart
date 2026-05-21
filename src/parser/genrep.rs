@@ -31,6 +31,7 @@ pub struct Individual<G = ()> {
     pub alt_name: Option<String>, // NAM2: alternate name
     pub name_heb: Option<String>, // NAMH: Hebrew/transliterated name
     pub living: Option<bool>,     // _LIVING: living flag
+    pub notes: Vec<String>,
     pub in_scope: bool,
     pub geo: Option<G>,
 }
@@ -43,6 +44,7 @@ pub struct Family<G = ()> {
     pub children_ids: Vec<String>,
     pub marriage: Option<Event>,
     pub jmar: Option<String>, // JMAR: Jewish marriage record reference
+    pub notes: Vec<String>,
     pub in_scope: bool,
     pub geo: Option<G>,
 }
