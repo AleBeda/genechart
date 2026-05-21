@@ -797,6 +797,11 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // ── Note lines ────────────────────────────────────────────────────────
         if prefs.show.notes && !indi.notes.is_empty() {
             let x_note = id_col_px + geo.indent as f64 * indent_px + 4.0 * char_width_px;
+            // Vertical bar centered on the first character of the name (SVG backend only).
+            let bar_x = id_col_px
+                + geo.indent as f64 * indent_px
+                + gen_prefix_px(geo.generation)
+                + 0.5 * char_width_px;
             let note_x_chars = (x_note / char_width_px) as usize;
             let avail = max_x_chars.saturating_sub(note_x_chars + 2);
             let mut note_line_offset = 1usize;
@@ -804,6 +809,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                 if note.trim().is_empty() {
                     continue;
                 }
+                let bar_start_offset = note_line_offset;
                 for raw_line in note.lines() {
                     if raw_line.trim().is_empty() {
                         note_line_offset += 1;
@@ -826,6 +832,13 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                         }));
                         note_line_offset += 1;
                     }
+                }
+                if note_line_offset > bar_start_offset {
+                    primitives.push(Primitive::NoteBar(crate::scene::NoteBarPrimitive {
+                        x: bar_x,
+                        top_y: (geo.line + bar_start_offset) as f64 * line_height_px,
+                        bottom_y: (geo.line + note_line_offset) as f64 * line_height_px,
+                    }));
                 }
             }
         }

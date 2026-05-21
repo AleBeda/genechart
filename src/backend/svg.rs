@@ -506,16 +506,25 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             };
             let baseline_svg = (ctx.to_svg_y)(t.bbox.y + t.bbox.h);
             let cw = font_size * CHAR_WIDTH_RATIO;
-            let anchor_x = match t.align {
-                TextAlign::Left => (ctx.to_svg_x)(t.bbox.x),
-                TextAlign::Center => (ctx.to_svg_x)(t.bbox.x + t.bbox.w / 2.0),
-                TextAlign::Right => (ctx.to_svg_x)(t.bbox.x + t.bbox.w),
+            // NoteText: the "| " prefix is for the text backend; SVG uses a NoteBar line
+            // instead, so strip the prefix and shift text to start after the bar gap.
+            let (content, anchor_x) = if semantic_attr(&t.attrs) == &TextAttr::NoteText {
+                let stripped = t.content.strip_prefix("| ").unwrap_or(&t.content);
+                let x_shifted = (ctx.to_svg_x)(t.bbox.x) + 2.0 * cw;
+                (stripped.to_string(), x_shifted)
+            } else {
+                let ax = match t.align {
+                    TextAlign::Left => (ctx.to_svg_x)(t.bbox.x),
+                    TextAlign::Center => (ctx.to_svg_x)(t.bbox.x + t.bbox.w / 2.0),
+                    TextAlign::Right => (ctx.to_svg_x)(t.bbox.x + t.bbox.w),
+                };
+                (t.content.clone(), ax)
             };
             render_mixed_text(
                 out,
                 anchor_x,
                 baseline_svg,
-                &t.content,
+                &content,
                 &font_family,
                 font_size,
                 weight,
@@ -953,6 +962,18 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     FancyConnKind::IndivToSpouse => indiv_conns.push(conn),
                     FancyConnKind::SpouseToChildren => spouse_conns.push(conn),
                 }
+            }
+            crate::scene::Primitive::NoteBar(bar) => {
+                let x_svg = to_svg_x(bar.x);
+                let y1_svg = to_svg_y(bar.top_y);
+                let y2_svg = to_svg_y(bar.bottom_y);
+                out.push_str(&format!(
+                    "  <line x1=\"{x:.1}\" y1=\"{y1:.1}\" x2=\"{x:.1}\" y2=\"{y2:.1}\" \
+                     stroke=\"#cccccc\" stroke-width=\"2\" stroke-linecap=\"round\"/>\n",
+                    x = x_svg,
+                    y1 = y1_svg,
+                    y2 = y2_svg,
+                ));
             }
             _ => {
                 render_bc_primitive(prim, &ctx, &mut out);

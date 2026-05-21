@@ -209,6 +209,21 @@ pub struct WedgePrimitive {
     pub death_line: Option<String>,
 }
 
+/// A vertical sidebar bar for one GEDCOM NOTE block (simple layout, SVG backend).
+///
+/// The text backend renders the `"| "` prefix in the note's `TextPrimitive` content
+/// instead. SVG renders this primitive as a `<line>` and strips the prefix from the
+/// associated `NoteText` primitives.
+#[derive(Debug, Clone)]
+pub struct NoteBarPrimitive {
+    /// x position of the bar (horizontal centre of the first name character).
+    pub x: f64,
+    /// y of the top of the first note line's cell.
+    pub top_y: f64,
+    /// y of the bottom of the last note line's cell.
+    pub bottom_y: f64,
+}
+
 /// A single renderable element.
 #[derive(Debug, Clone)]
 pub enum Primitive {
@@ -222,6 +237,7 @@ pub enum Primitive {
     BoxesSpouseConnector(BoxesSpouseConnector),
     Image(ImagePrimitive),
     FilledRect(FilledRectPrimitive),
+    NoteBar(NoteBarPrimitive),
 }
 
 /// The complete IR emitted by a layout algorithm.

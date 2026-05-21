@@ -732,7 +732,8 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
             | Primitive::Group(_)
             | Primitive::BoxesSpouseConnector(_)
             | Primitive::Image(_)
-            | Primitive::FilledRect(_) => {}
+            | Primitive::FilledRect(_)
+            | Primitive::NoteBar(_) => {}
         }
     }
 
