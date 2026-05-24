@@ -1,4 +1,5 @@
 pub mod genrep;
+pub mod merge;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
@@ -224,6 +225,31 @@ pub fn parse(path: &Path) -> anyhow::Result<Genrep> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("cannot read {}: {}", path.display(), e))?;
     parse_str(&content)
+}
+
+/// Parse the main GEDCOM and merge further GEDCOMs into it.
+///
+/// `further` is a slice of `(gedcom_path, alias_path)` pairs in order.
+/// Prefix letters B–Z are assigned sequentially (max 25 further files).
+pub fn parse_and_merge(
+    main_path: &Path,
+    further: &[(std::path::PathBuf, std::path::PathBuf)],
+) -> anyhow::Result<Genrep> {
+    let mut genrep = parse(main_path)?;
+
+    const PREFIX_LETTERS: &[u8] = b"BCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (i, (ged_path, alias_path)) in further.iter().enumerate() {
+        if i >= PREFIX_LETTERS.len() {
+            anyhow::bail!("too many further GEDCOM files: maximum 25 supported");
+        }
+        let prefix = PREFIX_LETTERS[i] as char;
+        let alias = merge::read_alias_file(alias_path)?;
+        let further_genrep = parse(ged_path)?;
+        let remapped = merge::remap_genrep(further_genrep, &alias, prefix);
+        merge::merge_into(&mut genrep, remapped);
+    }
+
+    Ok(genrep)
 }
 
 pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {

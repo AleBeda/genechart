@@ -58,6 +58,10 @@ pub struct FilesPrefs {
     pub gedcom: String,
     #[serde(default)]
     pub highlights: String,
+    #[serde(default)]
+    pub merge: Vec<String>,
+    #[serde(default)]
+    pub merge_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
