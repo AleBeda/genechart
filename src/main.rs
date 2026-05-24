@@ -85,6 +85,11 @@ fn hexify_color_fields(toml: &str) -> String {
     out
 }
 
+fn resolve_rel_path(s: &str, base: &std::path::Path) -> std::path::PathBuf {
+    let p = std::path::PathBuf::from(s);
+    if p.is_absolute() { p } else { base.join(p) }
+}
+
 fn main() {
     if let Err(e) = run() {
         eprintln!("Error: {e:#}");
@@ -230,9 +235,47 @@ fn run() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 8. Parse GEDCOM
+    // 8. Parse GEDCOM (with optional merge from further files)
     parser::set_diagnostics(prefs.diagnostics.clone());
-    let mut genrep = parser::parse(&gedcom_path)?;
+
+    let gedcom_dir = gedcom_path.parent().unwrap_or(std::path::Path::new("."));
+    let mut further_pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+
+    if !args.merge.is_empty() {
+        // CLI --merge takes precedence over preferences; collect pairs
+        for chunk in args.merge.chunks(2) {
+            if chunk.len() == 2 {
+                further_pairs.push((
+                    resolve_rel_path(&chunk[0], gedcom_dir),
+                    resolve_rel_path(&chunk[1], gedcom_dir),
+                ));
+            }
+        }
+    } else {
+        // Fall back to preference-based merge pairs
+        let mfiles = &prefs.files.merge;
+        let maliases = &prefs.files.merge_aliases;
+        if mfiles.len() > maliases.len() {
+            anyhow::bail!(
+                "files.merge_aliases must have at least as many entries as files.merge \
+                 ({} merge files, {} alias files)",
+                mfiles.len(),
+                maliases.len()
+            );
+        }
+        for (ged_str, alias_str) in mfiles.iter().zip(maliases.iter()) {
+            further_pairs.push((
+                resolve_rel_path(ged_str, gedcom_dir),
+                resolve_rel_path(alias_str, gedcom_dir),
+            ));
+        }
+    }
+
+    let mut genrep = if further_pairs.is_empty() {
+        parser::parse(&gedcom_path)?
+    } else {
+        parser::parse_and_merge(&gedcom_path, &further_pairs)?
+    };
 
     // 9. Compute scope
     let root_id = (!prefs.scope.root.is_empty()).then_some(prefs.scope.root.as_str());

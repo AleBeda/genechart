@@ -1,0 +1,351 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 FILE kennedy_patrick.ged
+0 @I46@ INDI
+1 NAME Patrick /Kennedy/
+2 GIVN Patrick
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 16 FEB 1823
+2 PLAC Dunganstown, Ireland
+1 DEAT
+2 DATE 22 NOV 1858
+2 PLAC Boston, MA
+1 FAMS @F8@
+0 @I47@ INDI
+1 NAME Bridget /Murphy/
+2 GIVN Bridget
+2 SURN Murphy
+1 SEX F
+1 BIRT
+2 DATE 1821
+1 DEAT
+2 DATE 20 DEC 1888
+2 PLAC Boston, MA
+1 FAMS @F8@
+0 @I59@ INDI
+1 NAME Mary L /Kennedy/
+2 GIVN Mary L
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 9 AUG 1851
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 1926
+1 FAMC @F8@
+1 FAMS @F16@
+0 @I60@ INDI
+1 NAME Joanna L /Kennedy/
+2 GIVN Joanna L
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 4 DEC 1852
+1 DEAT
+2 DATE 1926
+1 FAMC @F8@
+1 FAMS @F17@
+0 @I61@ INDI
+1 NAME John /Kennedy/ III
+2 GIVN John
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 4 JAN 1854
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 24 SEP 1855
+1 FAMC @F8@
+0 @I62@ INDI
+1 NAME Margaret /Kennedy/
+2 GIVN Margaret
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 18 JUL 1855
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 1929
+1 FAMC @F8@
+1 FAMS @F18@
+0 @I44@ INDI
+1 NAME Patrick Joseph /Kennedy/
+2 GIVN Patrick Joseph
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 14 JAN 1858
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 18 MAY 1929
+1 FAMC @F8@
+1 FAMS @F1@
+0 @I65@ INDI
+1 NAME Laurence M /Kane/
+2 GIVN Laurence M
+2 SURN Kane
+1 SEX M
+1 BIRT
+2 DATE 1853
+1 DEAT
+2 DATE 1924
+1 FAMS @F16@
+0 @I63@ INDI
+1 NAME Humphrey Charles /Mahoney/
+2 GIVN Humphrey Charles
+2 SURN Mahoney
+1 SEX M
+1 BIRT
+2 DATE 1854
+1 DEAT
+2 DATE 1923
+1 FAMS @F17@
+0 @I64@ INDI
+1 NAME John T. /Caulfield/
+2 GIVN John T.
+2 SURN Caulfield
+1 SEX M
+1 BIRT
+2 DATE 1856
+1 DEAT
+2 DATE 1928
+1 FAMS @F18@
+0 @I45@ INDI
+1 NAME Mary Augusta /Hickey/
+2 GIVN Mary Augusta
+2 SURN Hickey
+1 SEX F
+1 BIRT
+2 DATE 6 DEC 1857
+1 DEAT
+2 DATE 6 MAY 1923
+1 FAMS @F1@
+0 @I1@ INDI
+1 NAME Joseph Patrick /Kennedy/ Sr
+2 GIVN Joseph Patrick
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 6 SEP 1888
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 18 NOV 1969
+2 PLAC Hyannis Port, MA
+1 FAMC @F1@
+1 FAMS @F0@
+0 @I56@ INDI
+1 NAME Margaret Louise /Kennedy/
+2 GIVN Margaret Louise
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 22 OCT 1898
+1 DEAT
+2 DATE 14 NOV 1974
+1 FAMC @F1@
+1 FAMS @F15@
+0 @I66@ INDI
+1 NAME Mary Loretta /Kennedy/
+2 GIVN Mary Loretta
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 6 AUG 1892
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 18 NOV 1972
+1 FAMC @F1@
+0 @I68@ INDI
+1 NAME Francis Benedict /Kennedy/
+2 GIVN Francis Benedict
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 11 MAR 1891
+1 DEAT
+2 DATE 14 JUN 1892
+1 FAMC @F1@
+0 @I57@ INDI
+1 NAME Charles Joseph /Burke/
+2 GIVN Charles Joseph
+2 SURN Burke
+1 SEX M
+1 BIRT
+2 DATE 23 AUG 1899
+1 DEAT
+2 DATE 5 APR 1967
+1 FAMS @F15@
+0 @I2@ INDI
+1 NAME Rose Elizabeth /Fitzgerald/
+2 GIVN Rose Elizabeth
+2 SURN Fitzgerald
+1 SEX F
+1 BIRT
+2 DATE 22 JUL 1890
+2 PLAC North End, Boston, MA
+1 DEAT
+2 DATE 22 JAN 1995
+2 PLAC Hyannis Port, MA
+1 FAMS @F0@
+0 @I0@ INDI
+1 NAME John Fitzgerald /Kennedy/
+2 GIVN John Fitzgerald
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 29 MAY 1917
+2 PLAC Brookline, MA
+1 DEAT
+2 DATE 22 NOV 1963
+2 PLAC Dallas, TX
+1 FAMC @F0@
+0 @I3@ INDI
+1 NAME Joseph Patrick /Kennedy/
+2 GIVN Joseph Patrick
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 1 JUL 1915
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 2 AUG 1944
+2 PLAC Suffolk, England
+1 FAMC @F0@
+0 @I4@ INDI
+1 NAME Rose Marie /Kennedy/
+2 GIVN Rose Marie
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 13 SEP 1918
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 7 JAN 2005
+1 FAMC @F0@
+0 @I6@ INDI
+1 NAME Kathleen Angus /Kennedy/
+2 GIVN Kathleen Angus
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 20 FEB 1920
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 13 MAY 1948
+2 PLAC France
+1 FAMC @F0@
+0 @I8@ INDI
+1 NAME Eunice Mary /Kennedy/
+2 GIVN Eunice Mary
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 10 JUL 1921
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 11 AUG 2009
+1 FAMC @F0@
+0 @I16@ INDI
+1 NAME Patricia Helen /Kennedy/
+2 GIVN Patricia Helen
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 6 MAY 1924
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 17 SEP 2006
+2 PLAC Manhattan, New York, U.S.
+1 FAMC @F0@
+0 @I21@ INDI
+1 NAME Robert Francis /Kennedy/
+2 GIVN Robert Francis
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 20 NOV 1925
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 6 JUN 1968
+2 PLAC Los Angeles, CA
+1 FAMC @F0@
+0 @I35@ INDI
+1 NAME Jean Ann /Kennedy/
+2 GIVN Jean Ann
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 20 FEB 1928
+2 PLAC Boston, MA
+1 FAMC @F0@
+0 @I39@ INDI
+1 NAME Edward Moore /Kennedy/
+2 GIVN Edward Moore
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 22 FEB 1932
+2 PLAC Brookline, MA
+1 DEAT
+2 DATE 25 AUG 2009
+2 PLAC Hyannis Port, MA
+1 FAMC @F0@
+0 @F8@ FAM
+1 HUSB @I46@
+1 WIFE @I47@
+1 MARR
+2 DATE 28 SEP 1849
+1 CHIL @I59@
+1 CHIL @I60@
+1 CHIL @I61@
+1 CHIL @I62@
+1 CHIL @I44@
+0 @F16@ FAM
+1 HUSB @I65@
+1 WIFE @I59@
+1 MARR
+2 DATE 1 JAN 1883
+0 @F17@ FAM
+1 HUSB @I63@
+1 WIFE @I60@
+1 MARR
+2 DATE 22 SEP 1872
+0 @F18@ FAM
+1 HUSB @I64@
+1 WIFE @I62@
+1 MARR
+2 DATE 1 JAN 1882
+0 @F1@ FAM
+1 HUSB @I44@
+1 WIFE @I45@
+1 MARR
+2 DATE 23 NOV 1887
+1 CHIL @I1@
+1 CHIL @I56@
+1 CHIL @I66@
+1 CHIL @I68@
+0 @F15@ FAM
+1 HUSB @I57@
+1 WIFE @I56@
+1 MARR
+2 DATE 14 JUN 1924
+0 @F0@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 7 OCT 1914
+1 CHIL @I3@
+1 CHIL @I0@
+1 CHIL @I4@
+1 CHIL @I6@
+1 CHIL @I8@
+1 CHIL @I16@
+1 CHIL @I21@
+1 CHIL @I35@
+1 CHIL @I39@
+0 TRLR

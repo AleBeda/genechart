@@ -1,0 +1,81 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 FILE kennedy_ph.ged
+0 @I16@ INDI
+1 NAME Patricia Helen /Kennedy/
+2 GIVN Patricia Helen
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 6 MAY 1924
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 17 SEP 2006
+2 PLAC Manhattan, New York, U.S.
+1 FAMS @F4@
+0 @I15@ INDI
+1 NAME Peter /Lawford/
+2 GIVN Peter
+2 SURN Lawford
+1 SEX M
+1 BIRT
+2 DATE 7 SEP 1923
+2 PLAC London, England
+1 DEAT
+2 DATE 24 DEC 1984
+2 PLAC Los Angeles, California
+1 FAMS @F4@
+0 @I17@ INDI
+1 NAME Christopher /Lawford/
+2 GIVN Christopher
+2 SURN Lawford
+1 SEX M
+1 BIRT
+2 DATE 29 MAR 1955
+2 PLAC Santa Monica, California
+1 DEAT
+2 DATE 4 SEP 2018
+2 PLAC Vancouver, British Columbia, Canada
+1 FAMC @F4@
+0 @I19@ INDI
+1 NAME Sydney Maleia Kennedy /Lawford/
+2 GIVN Sydney Maleia Kennedy
+2 SURN Lawford
+1 SEX F
+1 BIRT
+2 DATE 25 AUG 1956
+2 PLAC Santa Monica, California
+1 FAMC @F4@
+0 @I18@ INDI
+1 NAME Victoria /Lawford/
+2 GIVN Victoria
+2 SURN Lawford
+1 SEX F
+1 BIRT
+2 DATE 4 NOV 1958
+2 PLAC Santa Monica, California
+1 FAMC @F4@
+0 @I20@ INDI
+1 NAME Robin Elizabeth /Lawford/
+2 GIVN Robin Elizabeth
+2 SURN Lawford
+1 SEX F
+1 BIRT
+2 DATE 2 JUL 1961
+1 FAMC @F4@
+0 @F4@ FAM
+1 HUSB @I15@
+1 WIFE @I16@
+1 MARR
+2 DATE 24 APR 1954
+2 PLAC Church of St. Thomas More, New York City
+1 DIV
+2 DATE 1966
+1 CHIL @I17@
+1 CHIL @I19@
+1 CHIL @I18@
+1 CHIL @I20@
+0 TRLR

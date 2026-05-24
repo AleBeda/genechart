@@ -1,0 +1,71 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 FILE kennedy_jf.ged
+0 @I0@ INDI
+1 NAME John Fitzgerald /Kennedy/
+2 GIVN John Fitzgerald
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 29 MAY 1917
+2 PLAC Brookline, MA
+1 DEAT
+2 DATE 22 NOV 1963
+2 PLAC Dallas, TX
+1 FAMS @F10@
+0 @I52@ INDI
+1 NAME Jacqueline Lee Kennedy /Bouvier/
+2 GIVN Jacqueline Lee Kennedy
+2 SURN Bouvier
+1 SEX F
+1 BIRT
+2 DATE 28 JUL 1929
+2 PLAC Southampton, Long Island, NY
+1 DEAT
+2 DATE 19 MAY 1994
+2 PLAC New York
+1 FAMS @F10@
+0 @I53@ INDI
+1 NAME Caroline Bouvier /Kennedy/
+2 GIVN Caroline Bouvier
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 27 NOV 1957
+2 PLAC New York
+1 FAMC @F10@
+0 @I54@ INDI
+1 NAME John Fitzgerald /Kennedy/ Jr
+2 GIVN John Fitzgerald
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 25 NOV 1960
+2 PLAC Washington, DC
+1 DEAT
+2 DATE 16 JUL 1999
+1 FAMC @F10@
+0 @I55@ INDI
+1 NAME Patrick Bouvier /Kennedy/
+2 GIVN Patrick Bouvier
+2 SURN Kennedy
+1 SEX M
+1 BIRT
+2 DATE 7 AUG 1963
+2 PLAC Otis Air Force Base, MA
+1 DEAT
+2 DATE 9 AUG 1963
+2 PLAC Boston, MA
+1 FAMC @F10@
+0 @F10@ FAM
+1 HUSB @I0@
+1 WIFE @I52@
+1 MARR
+2 DATE 12 SEP 1953
+1 CHIL @I53@
+1 CHIL @I54@
+1 CHIL @I55@
+0 TRLR

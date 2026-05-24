@@ -1,0 +1,3 @@
+# Alias file for kennedy_ph.ged
+# Format: main_id  further_id  [optional label]
+I16  I16  Patricia Helen Kennedy

@@ -4,6 +4,8 @@ title = "Default preferences"
 [files]
 gedcom = "{gedcom}" # First *.ged file in the working directory
 highlights = ""
+merge = []          # Further GEDCOM files to merge: ["second.ged", "third.ged", ...]
+merge_aliases = []  # Alias files, one per merge entry: ["alias2.txt", "alias3.txt", ...]
 
 [scope]
 root = "" # If empty, the first individual in the GEDCOM file is used as root

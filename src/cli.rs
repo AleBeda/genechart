@@ -63,6 +63,15 @@ pub struct Args {
     #[arg(long = "prpref")]
     pub prpref: bool,
 
+    /// Further GEDCOM file + alias file to merge into the main GEDCOM (repeatable; order matters).
+    /// Example: --merge second.ged alias2.txt --merge third.ged alias3.txt
+    #[arg(
+        long = "merge",
+        num_args = 2,
+        value_names = ["GEDCOM", "ALIAS"],
+    )]
+    pub merge: Vec<String>,
+
     /// Enable structured trace output for the named component (repeatable).
     /// Known component: "prefs".  Bare --trace enables all components.
     #[arg(

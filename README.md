@@ -34,6 +34,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `--svg` | Output as SVG |
 | `--pdf` | Output as PDF |
 | `-o` / `--output <FILE>` | Output file (extension infers type if no `--text`/`--svg`/`--pdf` flag) |
+| `--merge <GEDCOM> <ALIAS>` | Merge a further GEDCOM file using an alias file (repeatable; order matters) |
 | `--pref '<key name="val">'` | Override any preference inline (TOML syntax, repeatable) |
 | `--pref` | Bare `--pref` (no value): dump merged preferences to stdout and exit |
 | `--prpref` | Print the fully-resolved preferences as TOML and exit; combine with `-o` to see type inference |
@@ -68,6 +69,9 @@ genechart family.ged -r I1 -g 5 --trace prefs 2>&1 | head
 
 # Use a shared preferences file for a project-specific style
 genechart family.ged --preff ~/projects/genealogy/style.toml
+
+# Merge a second GEDCOM (paternal ancestry) into the main file
+genechart maternal.ged -r I1 --merge paternal.ged mat_to_pat_aliases.txt --dir ancestors -o chart.svg
 ```
 
 ## Layout Types
@@ -206,6 +210,8 @@ Unknown preference keys in `--pref` are a hard error (the command aborts with a 
 [files]
 gedcom = "{gedcom}"
 highlights = ""
+merge = []          # further GEDCOM files to merge: ["paternal.ged", "maternal.ged", ...]
+merge_aliases = []  # alias files, one per merge entry: ["aliases_pat.txt", "aliases_mat.txt", ...]
 
 [scope]
 root = ""
@@ -405,6 +411,60 @@ I12 Paul Smith # emigrated 1900
 ```
 
 Highlighted individuals are visually distinguished in SVG/PDF output. They are rendered in a different text color, configurable via `output.style.text.highlights.color`, and with a different background color, configurable via `output.style.text.highlights.background_color`. The text backend supports two fallback modes, controlled by `output.style.text.highlights.fallback`: when set to `"uppercase"`, the highlighted individual's name is capitalized; when set to any other value (e.g. `"->"`), that literal string is prepended to the left of the line (even before the ID column, if shown), and all content on that line is shifted right to make room.
+
+## Multi-GEDCOM Merge
+
+When genealogical data is split across several GEDCOM files (e.g. paternal and maternal ancestries maintained separately), genechart can merge them into a single chart.
+
+### How it works
+
+Each further GEDCOM is parsed separately and merged into the main GEDCOM's `Genrep` structure. An *alias file* identifies individuals that appear in both the main and a further GEDCOM (with different IDs in each), so they are treated as a single person. All other IDs from the further GEDCOM are disambiguated by inserting a prefix letter (`B` for the 2nd file, `C` for the 3rd, etc.) after the first character of the ID — e.g. `I45` → `IB45`.
+
+When an aliased individual exists in both GEDCOMs, the main GEDCOM's record wins for all non-empty fields; gaps are filled from the further GEDCOM; family links (`FAMS`/`FAMC`) and notes are always unioned.
+
+### Alias file format
+
+```
+# main_id  further_id  optional name (ignored)
+I1  I99  John Smith
+F3  F201
+```
+
+- First field: ID in the **main** GEDCOM (without `@`)
+- Second field: ID in the **further** GEDCOM (without `@`)
+- `#` comments and blank lines are ignored
+- Family IDs (`F…`) may also be aliased
+
+### Specifying further GEDCOMs
+
+**CLI** (repeatable; order matters):
+
+```sh
+genechart main.ged --merge second.ged aliases2.txt --merge third.ged aliases3.txt
+```
+
+Paths are resolved relative to `main.ged`'s directory.
+
+**Preferences** (`genechart.toml` or `--pref`):
+
+```toml
+[files]
+merge         = ["second.ged", "third.ged"]
+merge_aliases = ["aliases2.txt", "aliases3.txt"]
+```
+
+`merge_aliases` must have at least as many entries as `merge`. CLI `--merge` takes precedence over preference-based merge pairs when both are present.
+
+Maximum 25 further GEDCOM files (prefix letters B–Z).
+
+### Example
+
+```sh
+# Pedigree chart combining paternal and maternal ancestry files
+genechart maternal.ged -r I1 \
+  --merge paternal.ged mat_to_pat_aliases.txt \
+  --dir ancestors --type fan -o chart.svg
+```
 
 ## Photos
 
