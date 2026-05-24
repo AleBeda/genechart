@@ -34,6 +34,17 @@ echo "==> Kennedy: forest text (all individuals, last-gen spouses shown)"
 genechart "$KENNEDY" --dir forest --pref 'show.last_gen_spouses = true' --text \
   -o examples/kennedy/kennedy_forest.txt
 
+echo "==> Kennedy: multi-GEDCOM merge boxes SVG (all descendants from patriarch Patrick Kennedy)"
+genechart examples/kennedy/kennedy_patrick.ged \
+  --merge kennedy_jf.ged kennedy_jf_aliases.txt \
+  --merge kennedy_em.ged kennedy_em_aliases.txt \
+  --merge kennedy_ph.ged kennedy_ph_aliases.txt \
+  --merge kennedy_rf.ged kennedy_rf_aliases.txt \
+  --root I46 --dir descendants --type boxes --gen 7 \
+  --pref 'layout.root_pos = "top"' \
+  --svg \
+  -o examples/kennedy/kennedy_merge_boxes.svg
+
 echo "Done. Outputs written to examples/kennedy/"
 
 SHAKESPEARE=examples/shakespeare/shakespeare.ged

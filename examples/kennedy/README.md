@@ -107,6 +107,34 @@ several trees whose patriarchs/matriarchs have no recorded parents (Bridget Murp
 Josephine Hannon, and others). Trees are sorted by size (largest first) and separated by blank
 lines.
 
+### `kennedy_merge_boxes.svg` — multi-GEDCOM merge, boxes layout, all descendants from patriarch
+
+```
+genechart kennedy_patrick.ged \
+  --merge kennedy_jf.ged kennedy_jf_aliases.txt \
+  --merge kennedy_em.ged kennedy_em_aliases.txt \
+  --merge kennedy_ph.ged kennedy_ph_aliases.txt \
+  --merge kennedy_rf.ged kennedy_rf_aliases.txt \
+  --root I46 --dir descendants --type boxes --gen 7 \
+  --pref 'layout.root_pos = "top"' --svg
+```
+
+Demonstrates the multi-GEDCOM merge feature. The main file (`kennedy_patrick.ged`) covers
+Patrick Kennedy and Bridget Murphy, their children, grandchildren, and the nine children of
+Joseph Sr. as leaf nodes. Each further GEDCOM adds one branch of that generation's descendants:
+
+| File | Branch |
+|------|--------|
+| `kennedy_jf.ged` + `kennedy_jf_aliases.txt` | John Fitzgerald Kennedy (I0) and family |
+| `kennedy_em.ged` + `kennedy_em_aliases.txt` | Eunice Mary Kennedy (I8) and family |
+| `kennedy_ph.ged` + `kennedy_ph_aliases.txt` | Patricia Helen Kennedy (I16) and family |
+| `kennedy_rf.ged` + `kennedy_rf_aliases.txt` | Robert Francis Kennedy (I21) and family |
+
+Each alias file maps a single shared individual (the Kennedy child who is a leaf in the main
+file and the root of the further file) by listing their ID twice — once as the main-file ID and
+once as the further-file ID. IDs that are not aliased get a prefix letter inserted after the
+first character (`F10` → `FB10`, etc.) to avoid collisions.
+
 ## Highlights
 
 `kennedy_highlights.txt` marks three brothers for visual emphasis:

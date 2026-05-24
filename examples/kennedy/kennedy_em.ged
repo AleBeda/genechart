@@ -1,0 +1,102 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 FILE kennedy_em.ged
+0 @I8@ INDI
+1 NAME Eunice Mary /Kennedy/
+2 GIVN Eunice Mary
+2 SURN Kennedy
+1 SEX F
+1 BIRT
+2 DATE 10 JUL 1921
+2 PLAC Boston, MA
+1 DEAT
+2 DATE 11 AUG 2009
+1 FAMS @F3@
+0 @I7@ INDI
+1 NAME Robert Sargent /Shriver/ Jr
+2 GIVN Robert Sargent
+2 SURN Shriver
+1 SEX M
+1 BIRT
+2 DATE 9 NOV 1915
+2 PLAC Westminster, MD
+1 DEAT
+2 DATE 18 JAN 2011
+2 PLAC Bethesda, MD
+1 FAMS @F3@
+0 @I9@ INDI
+1 NAME Robert Sargent /Shriver/ III
+2 GIVN Robert Sargent
+2 SURN Shriver
+1 SEX M
+1 BIRT
+2 DATE 28 APR 1954
+2 PLAC Chicago, Illinois
+1 FAMC @F3@
+0 @I11@ INDI
+1 NAME Maria Owings /Shriver/
+2 GIVN Maria Owings
+2 SURN Shriver
+1 SEX F
+1 BIRT
+2 DATE 6 NOV 1955
+2 PLAC Chicago, Illinois
+1 FAMC @F3@
+1 FAMS @F12@
+0 @I12@ INDI
+1 NAME Timothy /Shriver/
+2 GIVN Timothy
+2 SURN Shriver
+1 SEX M
+1 BIRT
+2 DATE 29 AUG 1959
+2 PLAC Boston, MA
+1 FAMC @F3@
+0 @I13@ INDI
+1 NAME Mark Kennedy /Shriver/
+2 GIVN Mark Kennedy
+2 SURN Shriver
+1 SEX M
+1 BIRT
+2 DATE 17 FEB 1964
+2 PLAC Washington, DC
+1 FAMC @F3@
+0 @I14@ INDI
+1 NAME Anthony Paul Kennedy /Shriver/
+2 GIVN Anthony Paul Kennedy
+2 SURN Shriver
+1 SEX M
+1 BIRT
+2 DATE 20 JUL 1965
+2 PLAC Boston, MA
+1 FAMC @F3@
+0 @I10@ INDI
+1 NAME Arnold Alois /Schwarzenegger/
+2 GIVN Arnold Alois
+2 SURN Schwarzenegger
+1 SEX M
+1 BIRT
+2 DATE 30 JUL 1947
+2 PLAC Thal, Austria
+1 FAMS @F12@
+0 @F3@ FAM
+1 HUSB @I7@
+1 WIFE @I8@
+1 MARR
+2 DATE 23 MAY 1953
+1 CHIL @I9@
+1 CHIL @I11@
+1 CHIL @I12@
+1 CHIL @I13@
+1 CHIL @I14@
+0 @F12@ FAM
+1 HUSB @I10@
+1 WIFE @I11@
+1 MARR
+2 DATE 1986
+1 DIV
+2 DATE 2011
+0 TRLR
