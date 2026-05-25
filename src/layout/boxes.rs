@@ -909,7 +909,7 @@ impl Layout for BoxesLayout {
         let mut global_right: Vec<f64> = vec![0.0; max_gen as usize];
         let mut individuals: HashMap<String, Individual<BoxesGeo>> = HashMap::new();
 
-        if matches_direction(&dir, "ancestors") {
+        if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
             let mut visit_count: HashMap<String, usize> = HashMap::new();
             place_ancestors(
                 genrep,
@@ -1088,7 +1088,10 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         crate::photos::PhotoMap::new()
     };
 
-    let is_ancestors = matches_direction(&prefs.scope.direction.to_lowercase(), "ancestors");
+    let is_ancestors = {
+        let d = prefs.scope.direction.to_lowercase();
+        matches_direction(&d, "ancestors") || matches_direction(&d, "pedigree")
+    };
 
     let mut box_groups: Vec<Primitive> = Vec::new();
     let mut connector_groups: Vec<Primitive> = Vec::new();
