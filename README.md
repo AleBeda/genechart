@@ -225,7 +225,7 @@ birth = true
 death = true
 marriage = true
 notes = false           # simple layout: display GEDCOM NOTE text below each individual
-notes_html = false      # notes only: render <a href="..."> as SVG hyperlinks
+notes_html = false      # notes only: render <a href="..."> as clickable hyperlinks (SVG/PDF)
 last_gen_spouses = false
 id = false
 duplicated_individual = false

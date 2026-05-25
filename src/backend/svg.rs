@@ -698,11 +698,13 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
         Primitive::NoteHtmlLink(link) => {
             let (font_family, font_size) = font_for_attr(&link.attrs, ctx.prefs);
             let weight = weight_for_attr(&link.attrs, ctx.prefs);
-            let color = color_for_attr(&link.attrs, ctx.prefs);
             let cw = font_size * CHAR_WIDTH_RATIO;
             let anchor_x = (ctx.to_svg_x)(link.bbox.x);
             let baseline_svg = (ctx.to_svg_y)(link.bbox.y + link.bbox.h);
-            out.push_str(&format!("  <a href=\"{}\">\n", xml_escape(&link.href)));
+            out.push_str(&format!(
+                "  <a href=\"{}\" style=\"text-decoration:underline;\">\n",
+                xml_escape(&link.href)
+            ));
             render_mixed_text(
                 out,
                 anchor_x,
@@ -712,7 +714,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 font_size,
                 weight,
                 cw,
-                &color,
+                "#0066CC",
                 None,
                 &TextAlign::Left,
             );

@@ -155,7 +155,9 @@ fn html_word_wrap(segs: &[HtmlSeg], avail: usize) -> Vec<Vec<HtmlSeg>> {
                 }
             }
             HtmlSeg::Link { text, href } => {
-                tokens.push((text.clone(), Some(href.clone())));
+                for word in text.split_whitespace() {
+                    tokens.push((word.to_string(), Some(href.clone())));
+                }
             }
         }
     }

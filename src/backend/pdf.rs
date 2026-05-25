@@ -4,7 +4,8 @@ use crate::backend::Renderer;
 use crate::layout::LayoutOutput;
 use crate::preferences::Prefs;
 use anyhow::Result;
-use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref};
+use pdf_writer::types::{ActionType, AnnotationType};
+use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref, Str};
 
 pub struct PdfRenderer;
 
@@ -36,8 +37,23 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
     let columns = prefs.output.poster.columns.max(1) as usize;
 
     if rows == 1 && columns == 1 {
+        // Collect HTML link primitives (svg2pdf strips <a> tags, so we inject annotations manually).
+        let html_links: Vec<&crate::scene::NoteHtmlLinkPrimitive> = output
+            .scene()
+            .primitives
+            .iter()
+            .filter_map(|p| {
+                if let crate::scene::Primitive::NoteHtmlLink(l) = p {
+                    Some(l)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Apply paper sizing if specified.
-        let final_svg = if let Some((pw_mm, ph_mm)) = crate::backend::svg::paper_size_mm(prefs) {
+        let paper = crate::backend::svg::paper_size_mm(prefs);
+        let final_svg = if let Some((pw_mm, ph_mm)) = paper {
             const MM_TO_USER: f64 = 96.0 / 25.4;
             let (vbx, vby, vbw, vbh) = parse_viewbox(&svg_string).unwrap_or((
                 0.0,
@@ -53,9 +69,47 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
         };
         let tree = svg2pdf::usvg::Tree::from_str(&final_svg, &usvg_opts)
             .map_err(|e| anyhow::anyhow!("SVG parse error: {e}"))?;
-        let pdf = svg2pdf::to_pdf(&tree, conv_opts(), svg2pdf::PageOptions { dpi: 96.0 })
-            .map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
-        return Ok(pdf);
+
+        if html_links.is_empty() {
+            let pdf = svg2pdf::to_pdf(&tree, conv_opts(), svg2pdf::PageOptions { dpi: 96.0 })
+                .map_err(|e| anyhow::anyhow!("svg2pdf conversion failed: {e}"))?;
+            return Ok(pdf);
+        }
+
+        // Links present: use to_chunk + manual page assembly so we can add /Link annotations.
+        let (total_w, total_h, chart_top_offset) = chart_metrics(output, prefs);
+        const MM_TO_USER: f64 = 96.0 / 25.4;
+        const MM_TO_PT: f64 = 72.0 / 25.4;
+        const SVG_TO_PT: f64 = 72.0 / 96.0;
+        const MARGIN: f64 = 20.0;
+        let (tree_w, tree_h, page_w_pt, page_h_pt) = if let Some((pw_mm, ph_mm)) = paper {
+            (
+                pw_mm * MM_TO_USER,
+                ph_mm * MM_TO_USER,
+                (pw_mm * MM_TO_PT) as f32,
+                (ph_mm * MM_TO_PT) as f32,
+            )
+        } else {
+            (
+                total_w,
+                total_h,
+                (total_w * SVG_TO_PT) as f32,
+                (total_h * SVG_TO_PT) as f32,
+            )
+        };
+
+        return Ok(single_page_with_links(
+            &tree,
+            &html_links,
+            total_w,
+            total_h,
+            tree_w,
+            tree_h,
+            page_w_pt,
+            page_h_pt,
+            chart_top_offset,
+            MARGIN,
+        )?);
     }
 
     // Multi-page tiling — requires a known paper size.
@@ -322,6 +376,162 @@ fn assemble_multipage(
         page.finish();
 
         pdf.extend(&t.chunk);
+    }
+
+    Ok(pdf.finish())
+}
+
+/// Compute SVG canvas dimensions and chart_top_offset. Must mirror svg.rs::render_scene.
+fn chart_metrics(output: &LayoutOutput, prefs: &Prefs) -> (f64, f64, f64) {
+    use crate::text_metrics::{FONT_SIZE, LINE_HEIGHT, parsed_font};
+    const MARGIN: f64 = 20.0;
+    let scene = output.scene();
+    let title = crate::backend::expand_title_template(&prefs.output.text.title, prefs);
+    let (_, tfs) = parsed_font(&prefs.output.style.fonts.title);
+    let title_lh = if title.is_empty() {
+        0.0
+    } else {
+        tfs * (LINE_HEIGHT / FONT_SIZE)
+    };
+    let copy = crate::backend::expand_title_template(&prefs.output.text.copyright, prefs);
+    let (_, cfs) = parsed_font(&prefs.output.style.fonts.copyright);
+    let copy_lh = if copy.is_empty() {
+        0.0
+    } else {
+        cfs * (LINE_HEIGHT / FONT_SIZE)
+    };
+    let total_w = scene.canvas_bounds.w + 2.0 * MARGIN;
+    let total_h = scene.canvas_bounds.h + 2.0 * MARGIN + title_lh + copy_lh;
+    (total_w, total_h, title_lh)
+}
+
+/// Convert a NoteHtmlLink display-space bbox to a PDF annotation rect (llx, lly, urx, ury).
+///
+/// Maps display coordinates through viewBox→viewport (xMidYMid meet) and normalisation to
+/// [0,1]×[0,1], then scales to PDF page points. For the no-paper case tree_w = total_w and
+/// tree_h = total_h, which simplifies to a direct 0.75× scale.
+fn link_to_pdf_rect(
+    link: &crate::scene::NoteHtmlLinkPrimitive,
+    total_w: f64,
+    total_h: f64,
+    tree_w: f64,
+    tree_h: f64,
+    page_w_pt: f32,
+    page_h_pt: f32,
+    margin: f64,
+    chart_top_offset: f64,
+) -> (f32, f32, f32, f32) {
+    let svg_x1 = link.bbox.x + margin;
+    let svg_y1 = link.bbox.y + margin + chart_top_offset;
+    let svg_x2 = link.bbox.x + link.bbox.w + margin;
+    let svg_y2 = link.bbox.y + link.bbox.h + margin + chart_top_offset;
+
+    let scale = (tree_w / total_w).min(tree_h / total_h);
+    let tx = (tree_w - total_w * scale) / 2.0;
+    let ty = (tree_h - total_h * scale) / 2.0;
+
+    let vp_x1 = svg_x1 * scale + tx;
+    let vp_y1 = svg_y1 * scale + ty;
+    let vp_x2 = svg_x2 * scale + tx;
+    let vp_y2 = svg_y2 * scale + ty;
+
+    let xobj_x1 = vp_x1 / tree_w;
+    let xobj_y1 = (tree_h - vp_y2) / tree_h; // lower-left (PDF y-up)
+    let xobj_x2 = vp_x2 / tree_w;
+    let xobj_y2 = (tree_h - vp_y1) / tree_h; // upper-right
+
+    (
+        (xobj_x1 * page_w_pt as f64) as f32,
+        (xobj_y1 * page_h_pt as f64) as f32,
+        (xobj_x2 * page_w_pt as f64) as f32,
+        (xobj_y2 * page_h_pt as f64) as f32,
+    )
+}
+
+/// Build a single-page PDF with /Link annotations for every NoteHtmlLink primitive.
+///
+/// Uses svg2pdf::to_chunk rather than to_pdf so we control the page assembly and can
+/// inject annotation dictionaries. The XObject coordinate space matches the transform
+/// applied by assemble_multipage: the 1×1 unit XObject is scaled to fill the page via
+/// content.transform([page_w_pt, 0, 0, page_h_pt, 0, 0]).
+#[allow(clippy::too_many_arguments)]
+fn single_page_with_links(
+    tree: &svg2pdf::usvg::Tree,
+    html_links: &[&crate::scene::NoteHtmlLinkPrimitive],
+    total_w: f64,
+    total_h: f64,
+    tree_w: f64,
+    tree_h: f64,
+    page_w_pt: f32,
+    page_h_pt: f32,
+    chart_top_offset: f64,
+    margin: f64,
+) -> Result<Vec<u8>> {
+    let (chunk, xobj_orig) = svg2pdf::to_chunk(tree, conv_opts())
+        .map_err(|e| anyhow::anyhow!("svg2pdf chunk error: {e}"))?;
+
+    let mut alloc = Ref::new(1);
+    let catalog_ref = alloc.bump();
+    let page_tree_ref = alloc.bump();
+
+    let mut xobj_new = xobj_orig;
+    let mut map = std::collections::HashMap::new();
+    let renumbered = chunk.renumber(|old| {
+        let new = *map.entry(old).or_insert_with(|| alloc.bump());
+        if old == xobj_orig {
+            xobj_new = new;
+        }
+        new
+    });
+
+    let page_ref = alloc.bump();
+    let content_ref = alloc.bump();
+    let annot_refs: Vec<Ref> = html_links.iter().map(|_| alloc.bump()).collect();
+
+    let mut pdf = Pdf::new();
+    pdf.catalog(catalog_ref).pages(page_tree_ref);
+    pdf.pages(page_tree_ref).count(1).kids([page_ref]);
+
+    let mut content = Content::new();
+    content.transform([page_w_pt, 0.0, 0.0, page_h_pt, 0.0, 0.0]);
+    content.x_object(Name(b"S0"));
+    let content_data = content.finish();
+    pdf.stream(content_ref, &content_data);
+
+    {
+        let mut page = pdf.page(page_ref);
+        let mut res = page.resources();
+        res.x_objects().pair(Name(b"S0"), xobj_new);
+        res.finish();
+        page.media_box(Rect::new(0.0, 0.0, page_w_pt, page_h_pt));
+        page.parent(page_tree_ref);
+        page.contents(content_ref);
+        page.annotations(annot_refs.iter().copied());
+        page.finish();
+    }
+
+    pdf.extend(&renumbered);
+
+    for (link, &annot_ref) in html_links.iter().zip(annot_refs.iter()) {
+        let (llx, lly, urx, ury) = link_to_pdf_rect(
+            link,
+            total_w,
+            total_h,
+            tree_w,
+            tree_h,
+            page_w_pt,
+            page_h_pt,
+            margin,
+            chart_top_offset,
+        );
+        let mut annot = pdf.annotation(annot_ref);
+        annot.subtype(AnnotationType::Link);
+        annot.rect(Rect::new(llx, lly, urx, ury));
+        annot
+            .action()
+            .action_type(ActionType::Uri)
+            .uri(Str(link.href.as_bytes()));
+        annot.finish();
     }
 
     Ok(pdf.finish())
