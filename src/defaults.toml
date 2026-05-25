@@ -19,6 +19,7 @@ birth = true
 death = true
 marriage = true
 notes = false
+notes_html = false # notes only: render <a href="..."> as SVG hyperlinks
 last_gen_spouses = false # Show spouses of the last generation (only applies to descendants/forest)
 id = false # Show GEDCOM IDs of individuals and families (without the "@" chars, e.g. "I1", "F2") for debugging purposes
 duplicated_individual = false # Show duplicated individuals at each position (fancy ancestors only); connects instances with a dashed line
