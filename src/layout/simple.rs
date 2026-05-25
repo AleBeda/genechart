@@ -52,6 +52,7 @@ fn count_note_lines(notes: &[String], available_chars: usize, notes_html: bool) 
         .filter(|n| !n.trim().is_empty())
         .map(|n| {
             n.lines()
+                .flat_map(|l| l.split('\r'))
                 .filter(|l| !l.trim().is_empty())
                 .map(|l| {
                     let plain = if notes_html {
@@ -192,10 +193,27 @@ fn html_word_wrap(segs: &[HtmlSeg], avail: usize) -> Vec<Vec<HtmlSeg>> {
                     cur_line.push(HtmlSeg::Plain(text_to_push));
                 }
             }
-            Some(h) => cur_line.push(HtmlSeg::Link {
-                text: text_to_push,
-                href: h,
-            }),
+            Some(h) => {
+                if let Some(HtmlSeg::Link {
+                    text: prev_text,
+                    href: prev_href,
+                }) = cur_line.last_mut()
+                {
+                    if *prev_href == h {
+                        prev_text.push_str(&text_to_push);
+                    } else {
+                        cur_line.push(HtmlSeg::Link {
+                            text: text_to_push,
+                            href: h,
+                        });
+                    }
+                } else {
+                    cur_line.push(HtmlSeg::Link {
+                        text: text_to_push,
+                        href: h,
+                    });
+                }
+            }
         }
     }
 
@@ -957,7 +975,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     continue;
                 }
                 let bar_start_offset = note_line_offset;
-                for raw_line in note.lines() {
+                for raw_line in note.lines().flat_map(|l| l.split('\r')) {
                     if raw_line.trim().is_empty() {
                         note_line_offset += 1;
                         continue;
