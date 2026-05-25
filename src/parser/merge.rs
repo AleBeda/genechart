@@ -60,12 +60,22 @@ fn remap_id(id: &str, alias: &HashMap<String, String>, prefix: char) -> String {
 }
 
 /// Remap all IDs in a further `Genrep` — both the record's own ID and all cross-references.
-pub fn remap_genrep(genrep: Genrep, alias: &HashMap<String, String>, prefix: char) -> Genrep {
+///
+/// Returns the remapped `Genrep` and a map of `remapped_id → original_further_id` for
+/// individuals (used to reconstruct the original ID in warning messages).
+pub fn remap_genrep(
+    genrep: Genrep,
+    alias: &HashMap<String, String>,
+    prefix: char,
+) -> (Genrep, HashMap<String, String>) {
     let remap = |id: &str| remap_id(id, alias, prefix);
+    let mut orig_ids: HashMap<String, String> = HashMap::new();
 
     let mut new_individuals = HashMap::new();
     for (_, mut ind) in genrep.individuals {
+        let orig_id = ind.id.clone();
         let new_id = remap(&ind.id);
+        orig_ids.insert(new_id.clone(), orig_id);
         ind.id = new_id.clone();
         ind.fams = ind.fams.iter().map(|id| remap(id)).collect();
         ind.famc = ind.famc.iter().map(|id| remap(id)).collect();
@@ -82,11 +92,14 @@ pub fn remap_genrep(genrep: Genrep, alias: &HashMap<String, String>, prefix: cha
         new_families.insert(new_id, fam);
     }
 
-    Genrep {
-        individuals: new_individuals,
-        families: new_families,
-        first_individual_id: genrep.first_individual_id,
-    }
+    (
+        Genrep {
+            individuals: new_individuals,
+            families: new_families,
+            first_individual_id: genrep.first_individual_id,
+        },
+        orig_ids,
+    )
 }
 
 /// Merge a remapped further `Genrep` into the main `Genrep`.
@@ -96,7 +109,13 @@ pub fn remap_genrep(genrep: Genrep, alias: &HashMap<String, String>, prefix: cha
 ///   unioned. The main GEDCOM's non-`None` fields are never overwritten. A warning is
 ///   emitted to stderr when both records have a name but the names differ.
 /// - **New** individuals/families: inserted directly into `main`.
-pub fn merge_into(main: &mut Genrep, further: Genrep) {
+pub fn merge_into(
+    main: &mut Genrep,
+    further: Genrep,
+    main_filename: &str,
+    further_filename: &str,
+    orig_ids: &HashMap<String, String>,
+) {
     for (id, fi) in further.individuals {
         if let Some(mi) = main.individuals.get_mut(&id) {
             // Name mismatch warning
@@ -104,9 +123,10 @@ pub fn merge_into(main: &mut Genrep, further: Genrep) {
                 let ms = mi.surname.as_deref().unwrap_or("");
                 let fs = fi.surname.as_deref().unwrap_or("");
                 if mg.trim() != fg.trim() || ms.trim() != fs.trim() {
+                    let orig_id = orig_ids.get(&id).map(|s| s.as_str()).unwrap_or(&id);
                     eprintln!(
-                        "warning: name mismatch for {id}: \
-                         main=\"{mg} {ms}\" further=\"{fg} {fs}\""
+                        "warning: name mismatch: {main_filename} {id}=\"{mg} {ms}\", \
+                         {further_filename} {orig_id}=\"{fg} {fs}\""
                     );
                 }
             }
@@ -306,7 +326,7 @@ mod tests {
         fam.children_ids = vec!["I101".to_string()];
 
         let genrep = make_genrep(vec![ind], vec![fam]);
-        let remapped = remap_genrep(genrep, &alias, 'B');
+        let (remapped, _) = remap_genrep(genrep, &alias, 'B');
 
         // I99 → I1 (aliased)
         let i1 = remapped
@@ -340,7 +360,13 @@ mod tests {
             vec![make_individual("IB2", Some("Jane"), Some("Doe"))],
             vec![],
         );
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
         assert!(
             main.individuals.contains_key("IB2"),
             "IB2 should be inserted"
@@ -355,7 +381,13 @@ mod tests {
 
         let mut main = make_genrep(vec![main_ind], vec![]);
         let further = make_genrep(vec![further_ind], vec![]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let i1 = main.individuals.get("I1").unwrap();
         assert_eq!(i1.surname.as_deref(), Some("Main"), "main surname must win");
@@ -377,7 +409,13 @@ mod tests {
 
         let mut main = make_genrep(vec![main_ind], vec![]);
         let further = make_genrep(vec![further_ind], vec![]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let i1 = main.individuals.get("I1").unwrap();
         assert_eq!(
@@ -399,7 +437,13 @@ mod tests {
 
         let mut main = make_genrep(vec![main_ind], vec![]);
         let further = make_genrep(vec![further_ind], vec![]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let i1 = main.individuals.get("I1").unwrap();
         assert!(i1.fams.contains(&"F1".to_string()), "F1 preserved");
@@ -423,7 +467,13 @@ mod tests {
 
         let mut main = make_genrep(vec![main_ind], vec![]);
         let further = make_genrep(vec![further_ind], vec![]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let i1 = main.individuals.get("I1").unwrap();
         assert_eq!(i1.fams.len(), 1, "F1 must not be duplicated");
@@ -439,7 +489,13 @@ mod tests {
 
         let mut main = make_genrep(vec![main_ind], vec![]);
         let further = make_genrep(vec![further_ind], vec![]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let i1 = main.individuals.get("I1").unwrap();
         assert_eq!(i1.notes.len(), 2);
@@ -459,7 +515,13 @@ mod tests {
 
         let mut main = make_genrep(vec![], vec![main_fam]);
         let further = make_genrep(vec![], vec![further_fam]);
-        merge_into(&mut main, further);
+        merge_into(
+            &mut main,
+            further,
+            "main.ged",
+            "further.ged",
+            &HashMap::new(),
+        );
 
         let f1 = main.families.get("F1").unwrap();
         assert_eq!(f1.husband_id.as_deref(), Some("I1"), "husband preserved");

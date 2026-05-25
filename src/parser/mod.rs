@@ -236,6 +236,7 @@ pub fn parse_and_merge(
     further: &[(std::path::PathBuf, std::path::PathBuf)],
 ) -> anyhow::Result<Genrep> {
     let mut genrep = parse(main_path)?;
+    let main_filename = main_path.file_name().unwrap_or_default().to_string_lossy();
 
     const PREFIX_LETTERS: &[u8] = b"BCDEFGHIJKLMNOPQRSTUVWXYZ";
     for (i, (ged_path, alias_path)) in further.iter().enumerate() {
@@ -245,8 +246,15 @@ pub fn parse_and_merge(
         let prefix = PREFIX_LETTERS[i] as char;
         let alias = merge::read_alias_file(alias_path)?;
         let further_genrep = parse(ged_path)?;
-        let remapped = merge::remap_genrep(further_genrep, &alias, prefix);
-        merge::merge_into(&mut genrep, remapped);
+        let further_filename = ged_path.file_name().unwrap_or_default().to_string_lossy();
+        let (remapped, orig_ids) = merge::remap_genrep(further_genrep, &alias, prefix);
+        merge::merge_into(
+            &mut genrep,
+            remapped,
+            &main_filename,
+            &further_filename,
+            &orig_ids,
+        );
     }
 
     Ok(genrep)
