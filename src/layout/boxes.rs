@@ -1042,7 +1042,8 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
             .iter()
             .map(|(_, g)| g.y - g.height / 2.0)
             .fold(f64::INFINITY, f64::min);
-        Box::new(move |ly: f64| ly - cmin)
+        let co = prefs.layout.boxes.couple_y_offset;
+        Box::new(move |ly: f64| ly - cmin + co)
     } else {
         let cmax = placed
             .iter()
@@ -1426,7 +1427,11 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                 to_display_y(geo.y + geo.height / 2.0),
                 to_display_y(geo.y - geo.height / 2.0),
             );
-            let sp_box_display_top = ind_box_display_top + bx.couple_y_offset;
+            let sp_box_display_top = if root_pos_bottom {
+                ind_box_display_top - bx.couple_y_offset
+            } else {
+                ind_box_display_top + bx.couple_y_offset
+            };
 
             // Emit spouse boxes and collect their display positions
             let mut spouse_entries: Vec<Point> = Vec::new();
@@ -1463,7 +1468,11 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
                 spouse_entries.push(Point {
                     x: sp_x_display,
-                    y: sp_box_display_top,
+                    y: if root_pos_bottom {
+                        sp_box_display_top + effective_box_h
+                    } else {
+                        sp_box_display_top
+                    },
                 });
 
                 // Spouse → children connector
@@ -1528,7 +1537,11 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                         children: vec![Primitive::BoxesSpouseConnector(BoxesSpouseConnector {
                             individual_exit: Point {
                                 x: to_display_x(geo.x + geo.width / 2.0),
-                                y: ind_box_display_top,
+                                y: if root_pos_bottom {
+                                    ind_box_display_top + effective_box_h
+                                } else {
+                                    ind_box_display_top
+                                },
                             },
                             spouse_entries,
                         })],
@@ -1557,7 +1570,11 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         x: 0.0,
         y: 0.0,
         w: content_w,
-        h: content_h + bx.couple_y_offset + effective_box_h, // extra room for spouse boxes
+        h: if root_pos_bottom {
+            content_h // spouse boxes are above; to_display_y already shifted by couple_y_offset
+        } else {
+            content_h + bx.couple_y_offset + effective_box_h // extra room for spouse boxes below
+        },
     };
 
     let mut primitives = box_groups;
