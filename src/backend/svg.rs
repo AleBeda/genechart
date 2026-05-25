@@ -507,11 +507,14 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             let baseline_svg = (ctx.to_svg_y)(t.bbox.y + t.bbox.h);
             let cw = font_size * CHAR_WIDTH_RATIO;
             // NoteText: the "| " prefix is for the text backend; SVG uses a NoteBar line
-            // instead, so strip the prefix and shift text to start after the bar gap.
+            // instead. Only strip+shift when the prefix is actually present (plain-text mode);
+            // HTML-mode continuation segments have no prefix and a pre-shifted bbox.x.
             let (content, anchor_x) = if semantic_attr(&t.attrs) == &TextAttr::NoteText {
-                let stripped = t.content.strip_prefix("| ").unwrap_or(&t.content);
-                let x_shifted = (ctx.to_svg_x)(t.bbox.x) + 2.0 * cw;
-                (stripped.to_string(), x_shifted)
+                if let Some(stripped) = t.content.strip_prefix("| ") {
+                    (stripped.to_string(), (ctx.to_svg_x)(t.bbox.x) + 2.0 * cw)
+                } else {
+                    (t.content.clone(), (ctx.to_svg_x)(t.bbox.x))
+                }
             } else {
                 let ax = match t.align {
                     TextAlign::Left => (ctx.to_svg_x)(t.bbox.x),
@@ -691,6 +694,29 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     &TextAlign::Left,
                 );
             }
+        }
+        Primitive::NoteHtmlLink(link) => {
+            let (font_family, font_size) = font_for_attr(&link.attrs, ctx.prefs);
+            let weight = weight_for_attr(&link.attrs, ctx.prefs);
+            let color = color_for_attr(&link.attrs, ctx.prefs);
+            let cw = font_size * CHAR_WIDTH_RATIO;
+            let anchor_x = (ctx.to_svg_x)(link.bbox.x);
+            let baseline_svg = (ctx.to_svg_y)(link.bbox.y + link.bbox.h);
+            out.push_str(&format!("  <a href=\"{}\">\n", xml_escape(&link.href)));
+            render_mixed_text(
+                out,
+                anchor_x,
+                baseline_svg,
+                &link.content,
+                &font_family,
+                font_size,
+                weight,
+                cw,
+                &color,
+                None,
+                &TextAlign::Left,
+            );
+            out.push_str("  </a>\n");
         }
         _ => {}
     }

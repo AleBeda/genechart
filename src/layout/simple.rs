@@ -46,18 +46,161 @@ fn word_wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-fn count_note_lines(notes: &[String], available_chars: usize) -> usize {
+fn count_note_lines(notes: &[String], available_chars: usize, notes_html: bool) -> usize {
     notes
         .iter()
         .filter(|n| !n.trim().is_empty())
         .map(|n| {
             n.lines()
                 .filter(|l| !l.trim().is_empty())
-                .map(|l| word_wrap(l, available_chars).len())
+                .map(|l| {
+                    let plain = if notes_html {
+                        strip_html_tags(l)
+                    } else {
+                        l.to_string()
+                    };
+                    word_wrap(&plain, available_chars).len()
+                })
                 .sum::<usize>()
                 .max(1)
         })
         .sum()
+}
+
+fn strip_html_tags(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_tag = false;
+    for c in text.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
+}
+
+#[derive(Clone)]
+enum HtmlSeg {
+    Plain(String),
+    Link { text: String, href: String },
+}
+
+fn extract_href(tag: &str) -> Option<String> {
+    let lower = tag.to_lowercase();
+    let href_pos = lower.find("href=")?;
+    let after = &tag[href_pos + 5..];
+    let quote = after.chars().next()?;
+    if quote == '"' || quote == '\'' {
+        let inner = &after[1..];
+        let end = inner.find(quote)?;
+        Some(inner[..end].to_string())
+    } else {
+        let end = after
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(after.len());
+        Some(after[..end].to_string())
+    }
+}
+
+fn parse_html_segs(line: &str) -> Vec<HtmlSeg> {
+    let mut segs: Vec<HtmlSeg> = Vec::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        if let Some(a_start) = rest.find("<a ") {
+            if a_start > 0 {
+                let before = strip_html_tags(&rest[..a_start]);
+                if !before.is_empty() {
+                    segs.push(HtmlSeg::Plain(before));
+                }
+            }
+            rest = &rest[a_start..];
+            let href = if let Some(h) = extract_href(rest) {
+                h
+            } else {
+                let end = rest.find('>').map(|i| i + 1).unwrap_or(rest.len());
+                rest = &rest[end..];
+                continue;
+            };
+            let tag_end = rest.find('>').map(|i| i + 1).unwrap_or(rest.len());
+            rest = &rest[tag_end..];
+            let close = rest.find("</a>").unwrap_or(rest.len());
+            let inner = strip_html_tags(&rest[..close]);
+            if !inner.is_empty() {
+                segs.push(HtmlSeg::Link { text: inner, href });
+            }
+            rest = &rest[close..];
+            if rest.starts_with("</a>") {
+                rest = &rest[4..];
+            }
+        } else {
+            let plain = strip_html_tags(rest);
+            if !plain.is_empty() {
+                segs.push(HtmlSeg::Plain(plain));
+            }
+            break;
+        }
+    }
+    segs
+}
+
+fn html_word_wrap(segs: &[HtmlSeg], avail: usize) -> Vec<Vec<HtmlSeg>> {
+    let mut tokens: Vec<(String, Option<String>)> = Vec::new();
+    for seg in segs {
+        match seg {
+            HtmlSeg::Plain(s) => {
+                for word in s.split_whitespace() {
+                    tokens.push((word.to_string(), None));
+                }
+            }
+            HtmlSeg::Link { text, href } => {
+                tokens.push((text.clone(), Some(href.clone())));
+            }
+        }
+    }
+
+    let mut lines: Vec<Vec<HtmlSeg>> = Vec::new();
+    let mut cur_line: Vec<HtmlSeg> = Vec::new();
+    let mut cur_len = 0usize;
+
+    for (word, href) in tokens {
+        let wlen = word.chars().count();
+        let space = if cur_len > 0 { 1 } else { 0 };
+
+        if cur_len > 0 && cur_len + space + wlen > avail {
+            if !cur_line.is_empty() {
+                lines.push(std::mem::take(&mut cur_line));
+            }
+            cur_len = 0;
+        }
+
+        let text_to_push = if cur_len > 0 {
+            format!(" {word}")
+        } else {
+            word
+        };
+        cur_len += space + wlen;
+
+        match href {
+            None => {
+                if let Some(HtmlSeg::Plain(s)) = cur_line.last_mut() {
+                    s.push_str(&text_to_push);
+                } else {
+                    cur_line.push(HtmlSeg::Plain(text_to_push));
+                }
+            }
+            Some(h) => cur_line.push(HtmlSeg::Link {
+                text: text_to_push,
+                href: h,
+            }),
+        }
+    }
+
+    if !cur_line.is_empty() {
+        lines.push(cur_line);
+    }
+    lines
 }
 
 /// Conservative lower bound on chart width in chars (ignores indentation).
@@ -165,6 +308,7 @@ fn estimate_max_x_chars(genrep: &Genrep, prefs: &Prefs) -> usize {
 #[derive(Copy, Clone)]
 struct NoteWrap {
     show: bool,
+    notes_html: bool,
     max_x_chars: usize,
     id_col_chars: usize,
     indent_chars: usize,
@@ -214,7 +358,7 @@ fn visit(
         },
     );
     let note_lines = if note_wrap.show {
-        count_note_lines(&indi.notes, note_wrap.avail(depth))
+        count_note_lines(&indi.notes, note_wrap.avail(depth), note_wrap.notes_html)
     } else {
         0
     };
@@ -256,7 +400,7 @@ fn visit(
                             },
                         );
                         let spouse_note_lines = if note_wrap.show {
-                            count_note_lines(&s.notes, note_wrap.avail(depth))
+                            count_note_lines(&s.notes, note_wrap.avail(depth), note_wrap.notes_html)
                         } else {
                             0
                         };
@@ -370,10 +514,9 @@ fn layout_ancestors(
             },
         );
         let note_lines = if note_wrap.show {
-            genrep
-                .individuals
-                .get(id.as_str())
-                .map_or(0, |i| count_note_lines(&i.notes, note_wrap.avail(*depth)))
+            genrep.individuals.get(id.as_str()).map_or(0, |i| {
+                count_note_lines(&i.notes, note_wrap.avail(*depth), note_wrap.notes_html)
+            })
         } else {
             0
         };
@@ -425,6 +568,7 @@ impl Layout for SimpleLayout {
         let spacing = prefs.layout.simple.vert_spacing as usize;
         let note_wrap = NoteWrap {
             show: prefs.show.notes,
+            notes_html: prefs.show.notes_html,
             max_x_chars: estimate_max_x_chars(genrep, prefs),
             id_col_chars: if prefs.show.id { 6 } else { 0 },
             indent_chars: prefs.layout.simple.indent as usize,
@@ -644,7 +788,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                 let x_note = id_col_px + g.indent as f64 * indent_px + 4.0 * char_width_px;
                 let note_x_chars = (x_note / char_width_px) as usize;
                 let avail = max_x_chars.saturating_sub(note_x_chars + 2);
-                count_note_lines(&indi.notes, avail)
+                count_note_lines(&indi.notes, avail, prefs.show.notes_html)
             } else {
                 0
             };
@@ -804,6 +948,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                 + 0.5 * char_width_px;
             let note_x_chars = (x_note / char_width_px) as usize;
             let avail = max_x_chars.saturating_sub(note_x_chars + 2);
+            let x_text_start = x_note + 2.0 * char_width_px;
             let mut note_line_offset = 1usize;
             for note in &indi.notes {
                 if note.trim().is_empty() {
@@ -815,22 +960,85 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                         note_line_offset += 1;
                         continue;
                     }
-                    for wrapped in word_wrap(raw_line, avail) {
-                        let note_y = (geo.line + note_line_offset) as f64 * line_height_px;
-                        let content = format!("| {wrapped}");
-                        let w = content.chars().count() as f64 * char_width_px;
-                        primitives.push(Primitive::Text(TextPrimitive {
-                            content,
-                            bbox: Rect {
-                                x: x_note,
-                                y: note_y,
-                                w,
-                                h: line_height_px,
-                            },
-                            align: TextAlign::Left,
-                            attrs: vec![TextAttr::NoteText],
-                        }));
-                        note_line_offset += 1;
+                    if prefs.show.notes_html {
+                        let segs = parse_html_segs(raw_line);
+                        let visual_lines = if segs.is_empty() {
+                            vec![]
+                        } else {
+                            html_word_wrap(&segs, avail)
+                        };
+                        for vline in &visual_lines {
+                            let note_y = (geo.line + note_line_offset) as f64 * line_height_px;
+                            // "| " sentinel: text backend renders the pipe; SVG strips to ""
+                            // and render_mixed_text returns early on empty string.
+                            primitives.push(Primitive::Text(TextPrimitive {
+                                content: "| ".to_string(),
+                                bbox: Rect {
+                                    x: x_note,
+                                    y: note_y,
+                                    w: 2.0 * char_width_px,
+                                    h: line_height_px,
+                                },
+                                align: TextAlign::Left,
+                                attrs: vec![TextAttr::NoteText],
+                            }));
+                            let mut x_cursor = x_text_start;
+                            for seg in vline {
+                                match seg {
+                                    HtmlSeg::Plain(s) => {
+                                        let w = s.chars().count() as f64 * char_width_px;
+                                        primitives.push(Primitive::Text(TextPrimitive {
+                                            content: s.clone(),
+                                            bbox: Rect {
+                                                x: x_cursor,
+                                                y: note_y,
+                                                w,
+                                                h: line_height_px,
+                                            },
+                                            align: TextAlign::Left,
+                                            attrs: vec![TextAttr::NoteText],
+                                        }));
+                                        x_cursor += w;
+                                    }
+                                    HtmlSeg::Link { text, href } => {
+                                        let w = text.chars().count() as f64 * char_width_px;
+                                        primitives.push(Primitive::NoteHtmlLink(
+                                            crate::scene::NoteHtmlLinkPrimitive {
+                                                content: text.clone(),
+                                                href: href.clone(),
+                                                bbox: Rect {
+                                                    x: x_cursor,
+                                                    y: note_y,
+                                                    w,
+                                                    h: line_height_px,
+                                                },
+                                                attrs: vec![TextAttr::NoteText],
+                                            },
+                                        ));
+                                        x_cursor += w;
+                                    }
+                                }
+                            }
+                            note_line_offset += 1;
+                        }
+                    } else {
+                        for wrapped in word_wrap(raw_line, avail) {
+                            let note_y = (geo.line + note_line_offset) as f64 * line_height_px;
+                            let content = format!("| {wrapped}");
+                            let w = content.chars().count() as f64 * char_width_px;
+                            primitives.push(Primitive::Text(TextPrimitive {
+                                content,
+                                bbox: Rect {
+                                    x: x_note,
+                                    y: note_y,
+                                    w,
+                                    h: line_height_px,
+                                },
+                                align: TextAlign::Left,
+                                attrs: vec![TextAttr::NoteText],
+                            }));
+                            note_line_offset += 1;
+                        }
                     }
                 }
                 if note_line_offset > bar_start_offset {

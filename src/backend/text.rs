@@ -725,6 +725,12 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
                     }
                 }
             }
+            Primitive::NoteHtmlLink(link) => {
+                let line_idx =
+                    ((link.bbox.y / line_height_px).round() as usize).min(total_lines - 1);
+                let col = (link.bbox.x / char_width_px).round() as usize + fallback_shift;
+                write_at_col(&mut lines[line_idx], col, &link.content, false);
+            }
             Primitive::Box(_)
             | Primitive::Wedge(_)
             | Primitive::FancyText(_)

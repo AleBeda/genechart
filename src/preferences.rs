@@ -87,7 +87,9 @@ pub struct ShowPrefs {
     #[serde(default)]
     pub marriage: bool,
     #[serde(default)]
-    pub notes: bool, // reserved — not yet implemented; accepted without error
+    pub notes: bool,
+    #[serde(default)]
+    pub notes_html: bool,
     #[serde(default)]
     pub last_gen_spouses: bool,
     #[serde(default)]

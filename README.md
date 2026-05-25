@@ -89,7 +89,7 @@ genechart family.ged --dir forest --pref 'show.last_gen_spouses = true' --text
 
 Configuration: `[layout.simple]` — `indent` (columns per generation), `vert_spacing` (lines between generations).
 
-When `show.notes = true`, GEDCOM `NOTE` text is rendered as additional indented rows below each individual (simple layout only; descendants, ancestors, and forest directions).
+When `show.notes = true`, GEDCOM `NOTE` text is rendered as additional indented rows below each individual (simple layout only; descendants, ancestors, and forest directions). When `show.notes_html = true`, HTML anchor tags inside notes (`<a href="…">text</a>`) are rendered as clickable hyperlinks in SVG and PDF output; other HTML tags have their content shown as plain text.
 
 ### boxed_couples
 
@@ -225,6 +225,7 @@ birth = true
 death = true
 marriage = true
 notes = false           # simple layout: display GEDCOM NOTE text below each individual
+notes_html = false      # notes only: render <a href="..."> as SVG hyperlinks
 last_gen_spouses = false
 id = false
 duplicated_individual = false

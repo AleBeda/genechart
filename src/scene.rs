@@ -224,6 +224,18 @@ pub struct NoteBarPrimitive {
     pub bottom_y: f64,
 }
 
+/// An HTML-linked text run inside a note block (simple layout, SVG backend).
+///
+/// The SVG backend wraps this in `<a href="...">`. The text backend renders
+/// `content` as plain text and ignores `href`.
+#[derive(Debug, Clone)]
+pub struct NoteHtmlLinkPrimitive {
+    pub content: String,
+    pub href: String,
+    pub bbox: Rect,
+    pub attrs: Vec<TextAttr>,
+}
+
 /// A single renderable element.
 #[derive(Debug, Clone)]
 pub enum Primitive {
@@ -238,6 +250,7 @@ pub enum Primitive {
     Image(ImagePrimitive),
     FilledRect(FilledRectPrimitive),
     NoteBar(NoteBarPrimitive),
+    NoteHtmlLink(NoteHtmlLinkPrimitive),
 }
 
 /// The complete IR emitted by a layout algorithm.
