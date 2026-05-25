@@ -31,22 +31,33 @@ fn svg_text_full(
     size: f64,
     weight: &str,
     color: &str,
+    class: &str,
 ) -> String {
+    let cls = if class.is_empty() {
+        String::new()
+    } else {
+        format!(" class=\"{class}\"")
+    };
     format!(
         "  <text x=\"{x:.1}\" y=\"{y:.1}\" font-family=\"{family}\" \
-         font-size=\"{size}\" font-weight=\"{weight}\" fill=\"{color}\" xml:space=\"preserve\">{}</text>\n",
+         font-size=\"{size}\" font-weight=\"{weight}\" fill=\"{color}\"{cls} xml:space=\"preserve\">{}</text>\n",
         xml_escape(text)
     )
 }
 
 fn svg_text(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
-    svg_text_full(x, y, text, family, size, "normal", "black")
+    svg_text_full(x, y, text, family, size, "normal", "black", "")
 }
 
-fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64) -> String {
+fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64, class: &str) -> String {
+    let cls = if class.is_empty() {
+        String::new()
+    } else {
+        format!(" class=\"{class}\"")
+    };
     format!(
         "  <line x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\" \
-         stroke=\"{color}\" stroke-width=\"{width}\"/>\n"
+         stroke=\"{color}\" stroke-width=\"{width}\"{cls}/>\n"
     )
 }
 
@@ -60,10 +71,16 @@ fn svg_rect(
     stroke: &str,
     sw: f64,
     radius: f64,
+    class: &str,
 ) -> String {
+    let cls = if class.is_empty() {
+        String::new()
+    } else {
+        format!(" class=\"{class}\"")
+    };
     format!(
         "  <rect x=\"{x:.1}\" y=\"{y:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" \
-         rx=\"{radius:.1}\" ry=\"{radius:.1}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"/>\n"
+         rx=\"{radius:.1}\" ry=\"{radius:.1}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{sw}\"{cls}/>\n"
     )
 }
 
@@ -139,6 +156,7 @@ fn render_mixed_text(
     color: &str,
     bg: Option<&str>,
     align: &TextAlign,
+    class: &str,
 ) {
     if text.is_empty() {
         return;
@@ -181,7 +199,7 @@ fn render_mixed_text(
         let bg_y = y - font_size * 0.9;
         let bg_h = font_size * 1.2;
         out.push_str(&format!(
-            "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\"/>\n",
+            "  <rect x=\"{bx:.1}\" y=\"{by:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" fill=\"{c}\" class=\"highlight_rect\"/>\n",
             bx = start_x - 2.0, by = bg_y, w = total_width + 4.0, h = bg_h, c = bg_color
         ));
     }
@@ -194,7 +212,9 @@ fn render_mixed_text(
             primary_family
         };
         let wt = if *is_sym { "normal" } else { weight };
-        out.push_str(&svg_text_full(cur_x, y, seg, fam, font_size, wt, color));
+        out.push_str(&svg_text_full(
+            cur_x, y, seg, fam, font_size, wt, color, class,
+        ));
         cur_x += w;
     }
 }
@@ -210,6 +230,7 @@ fn render_mixed_text_rotated(
     primary_family: &str,
     font_size: f64,
     color: &str,
+    class: &str,
 ) {
     if text.is_empty() {
         return;
@@ -247,10 +268,15 @@ fn render_mixed_text_rotated(
         } else {
             primary_family
         };
+        let cls = if class.is_empty() {
+            String::new()
+        } else {
+            format!(" class=\"{class}\"")
+        };
         out.push_str(&format!(
             "    <text x=\"{cur_x:.1}\" y=\"{y:.1}\" \
              font-family=\"{fam}\" font-size=\"{font_size}\" \
-             fill=\"{color}\" dominant-baseline=\"middle\" \
+             fill=\"{color}\" dominant-baseline=\"middle\"{cls} \
              xml:space=\"preserve\">{}</text>\n",
             xml_escape(seg)
         ));
@@ -348,6 +374,25 @@ fn semantic_attr(attrs: &[TextAttr]) -> &TextAttr {
         .unwrap_or(&TextAttr::IndividualName)
 }
 
+/// Map a `[TextAttr]` slice to a space-separated CSS class string.
+fn class_for_attrs(attrs: &[TextAttr]) -> String {
+    let mut classes: Vec<&str> = Vec::new();
+    for attr in attrs {
+        match attr {
+            TextAttr::IndividualName => classes.push("indi_name"),
+            TextAttr::SpouseName => classes.push("spouse_name"),
+            TextAttr::BirthData => classes.push("indi_birth"),
+            TextAttr::DeathData => classes.push("indi_death"),
+            TextAttr::MarriageData => classes.push("indi_marriage"),
+            TextAttr::IndividualId => classes.push("indi_id"),
+            TextAttr::GenerationNum => classes.push("gen_num"),
+            TextAttr::NoteText => classes.push("note_text"),
+            TextAttr::Highlighted => classes.push("highlighted"),
+        }
+    }
+    classes.join(" ")
+}
+
 /// Build the font family string with symbol fallbacks (for ♂/♀ and other symbols).
 fn with_symbol_fallback(base: &str) -> String {
     format!("{base}, 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif")
@@ -439,7 +484,7 @@ fn render_fancy_highlight_rect(
     let rx = svg_x - pad;
     let ry = svg_y - pad;
     out.push_str(&format!(
-        "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+        "  <rect x=\"{rx:.1}\" y=\"{ry:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\" class=\"highlight_rect\"/>\n",
         w + 2.0 * pad,
         lh + 2.0 * pad
     ));
@@ -465,7 +510,7 @@ fn render_fancy_conn_group(
             format!(" stroke-dasharray=\"{}\"", c.stroke_dasharray)
         };
         out.push_str(&format!(
-            "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\"{}/>\n",
+            "    <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.1}\" fill=\"none\" stroke-linecap=\"round\" class=\"connector\"{}/>\n",
             c.d, c.stroke, c.stroke_width, dash
         ));
         if !c.id.is_empty() {
@@ -482,6 +527,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
         Primitive::Box(b) => {
             let x = (ctx.to_svg_x)(b.bbox.x);
             let y = (ctx.to_svg_y)(b.bbox.y);
+            let box_class = if b.two_spouses { "box double" } else { "box" };
             out.push_str(&svg_rect(
                 x,
                 y,
@@ -491,6 +537,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 ctx.box_stroke,
                 ctx.box_sw,
                 ctx.box_radius,
+                box_class,
             ));
         }
         Primitive::Text(t) => {
@@ -535,6 +582,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 &color,
                 bg_color.as_deref(),
                 &t.align,
+                &class_for_attrs(&t.attrs),
             );
         }
         Primitive::Connector(c) => {
@@ -567,6 +615,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     bar_y,
                     ctx.conn_color,
                     ctx.conn_width,
+                    "connector",
                 ));
             }
             if (bar_x_max - bar_x_min).abs() > 0.1 {
@@ -577,6 +626,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     bar_y,
                     ctx.conn_color,
                     ctx.conn_width,
+                    "connector",
                 ));
             }
             for (cx_svg, cy_svg) in &child_svgs {
@@ -587,6 +637,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     *cy_svg,
                     ctx.conn_color,
                     ctx.conn_width,
+                    "connector",
                 ));
             }
         }
@@ -621,6 +672,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 bar_y,
                 ctx.conn_color,
                 ctx.conn_width,
+                "connector",
             ));
             out.push_str(&svg_line(
                 exit_x,
@@ -629,11 +681,20 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 bar_y,
                 ctx.conn_color,
                 ctx.conn_width,
+                "connector",
             ));
             for sp in &c.spouse_entries {
                 let sx = (ctx.to_svg_x)(sp.x);
                 let sy = (ctx.to_svg_y)(sp.y);
-                out.push_str(&svg_line(sx, bar_y, sx, sy, ctx.conn_color, ctx.conn_width));
+                out.push_str(&svg_line(
+                    sx,
+                    bar_y,
+                    sx,
+                    sy,
+                    ctx.conn_color,
+                    ctx.conn_width,
+                    "connector",
+                ));
             }
         }
         Primitive::Image(img) => {
@@ -642,7 +703,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             let href_safe = img.href.replace('"', "&quot;");
             out.push_str(&format!(
                 "  <image x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
-                 href=\"{href_safe}\" preserveAspectRatio=\"none\"/>\n",
+                 href=\"{href_safe}\" preserveAspectRatio=\"none\" class=\"photo\"/>\n",
                 w = img.bbox.w,
                 h = img.bbox.h,
             ));
@@ -653,7 +714,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             let fill_safe = r.fill.replace('"', "&quot;");
             out.push_str(&format!(
                 "  <rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" \
-                 fill=\"{fill_safe}\"/>\n",
+                 fill=\"{fill_safe}\" class=\"highlight_rect\"/>\n",
                 w = r.bbox.w,
                 h = r.bbox.h,
             ));
@@ -692,6 +753,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                     &color,
                     None,
                     &TextAlign::Left,
+                    &class_for_attrs(&line.attrs),
                 );
             }
         }
@@ -702,7 +764,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             let anchor_x = (ctx.to_svg_x)(link.bbox.x);
             let baseline_svg = (ctx.to_svg_y)(link.bbox.y + link.bbox.h);
             out.push_str(&format!(
-                "  <a href=\"{}\" style=\"text-decoration:underline;\">\n",
+                "  <a href=\"{}\" class=\"note_link\" style=\"text-decoration:underline;\">\n",
                 xml_escape(&link.href)
             ));
             render_mixed_text(
@@ -717,6 +779,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 "#0066CC",
                 None,
                 &TextAlign::Left,
+                &class_for_attrs(&link.attrs),
             );
             out.push_str("  </a>\n");
         }
@@ -849,7 +912,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     w.radius_outer,
                 );
                 out.push_str(&format!(
-                    "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\"/>\n"
+                    "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\" class=\"wedge\"/>\n"
                 ));
                 let ring_height = w.radius_outer - w.radius_inner;
                 let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
@@ -865,6 +928,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     font_family: String,
                     font_size: f64,
                     color: String,
+                    class: String,
                 }
                 let mut lines: Vec<Line> = Vec::new();
                 let mut total_height = 0.0_f64;
@@ -879,6 +943,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         lines.push(Line {
                             text: text.to_string(),
                             color: color_for_attr(&w.label_attrs, prefs),
+                            class: class_for_attrs(&w.label_attrs),
                             font_family,
                             font_size,
                         });
@@ -918,6 +983,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         lines.push(Line {
                             text: text.to_string(),
                             color: color_for_attr(attrs, prefs),
+                            class: class_for_attrs(attrs),
                             font_family,
                             font_size,
                         });
@@ -961,7 +1027,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                         let bg = hex_color(prefs.output.style.text.highlights.background_color);
                         let pad = 1.0;
                         out.push_str(&format!(
-                            "    <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\"/>\n",
+                            "    <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{bg}\" class=\"highlight_rect\"/>\n",
                             -name_w / 2.0 - pad,
                             name_line_y - name_lh / 2.0 - pad,
                             name_w + 2.0 * pad,
@@ -979,6 +1045,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                             &line.font_family,
                             line.font_size,
                             &line.color,
+                            &line.class,
                         );
                     }
                     out.push_str("  </g>\n");
@@ -997,7 +1064,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 let y2_svg = to_svg_y(bar.bottom_y);
                 out.push_str(&format!(
                     "  <line x1=\"{x:.1}\" y1=\"{y1:.1}\" x2=\"{x:.1}\" y2=\"{y2:.1}\" \
-                     stroke=\"#cccccc\" stroke-width=\"2\" stroke-linecap=\"round\"/>\n",
+                     stroke=\"#cccccc\" stroke-width=\"2\" stroke-linecap=\"round\" class=\"note_bar\"/>\n",
                     x = x_svg,
                     y1 = y1_svg,
                     y2 = y2_svg,
@@ -1057,7 +1124,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             let line_x2 = to_svg_x(scene.canvas_bounds.w);
             out.push_str(&format!(
                 "    <line x1=\"{x1:.1}\" y1=\"{y:.1}\" x2=\"{x2:.1}\" y2=\"{y:.1}\" \
-                 stroke=\"{color}\" stroke-width=\"{width}\" class=\"row-rule\"/>\n",
+                 stroke=\"{color}\" stroke-width=\"{width}\" class=\"row_rule\"/>\n",
                 x1 = line_x1,
                 y = underline_y,
                 x2 = line_x2,
@@ -1272,7 +1339,7 @@ mod tests {
         prefs.output.style.dot_leaders = true;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(
-            out.contains("class=\"row-rule\""),
+            out.contains("class=\"row_rule\""),
             "row-rule underline lines expected: {out}"
         );
     }
@@ -1286,7 +1353,7 @@ mod tests {
         prefs.output.style.dot_leaders = false;
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(
-            !out.contains("class=\"row-rule\""),
+            !out.contains("class=\"row_rule\""),
             "no row-rule underlines expected: {out}"
         );
     }
@@ -1386,7 +1453,7 @@ mod tests {
         let out = render_to_string(&make_layout(&prefs), &prefs).unwrap();
         assert!(
             out.lines()
-                .any(|l| l.contains("class=\"row-rule\"") && l.contains("x1=\"20.0\"")),
+                .any(|l| l.contains("class=\"row_rule\"") && l.contains("x1=\"20.0\"")),
             "underline should start at left margin: {out}"
         );
     }

@@ -1118,6 +1118,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         // Outer box
         children.push(Primitive::Box(BoxPrimitive {
             bbox: box_bbox.clone(),
+            two_spouses: false,
         }));
 
         // Double border for duplicates when pref is set
@@ -1130,6 +1131,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                     w: (box_bbox.w - 2.0 * inset).max(0.0),
                     h: (box_bbox.h - 2.0 * inset).max(0.0),
                 },
+                two_spouses: false,
             }));
         }
 

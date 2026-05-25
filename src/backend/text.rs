@@ -1325,6 +1325,7 @@ mod tests {
                         w: 40.0,
                         h: 30.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Very Long Name That Should Be Truncated".to_string(),
@@ -1375,6 +1376,7 @@ mod tests {
                         w: 40.0,
                         h: 30.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "john".to_string(),
@@ -1431,6 +1433,7 @@ mod tests {
                         w: 80.0,
                         h: 36.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Name".to_string(),
@@ -1485,6 +1488,7 @@ mod tests {
                         w: 100.0, // wide enough for full dates
                         h: 72.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Name".to_string(),
@@ -1574,6 +1578,7 @@ mod tests {
                         w: 200.0, // wide enough for full date without truncation
                         h: 90.0,  // tall enough for blank-before + marriage + blank-after
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "⚭ 4 APR 1843, London".to_string(),
@@ -1628,6 +1633,7 @@ mod tests {
                         w: 100.0,
                         h: 36.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Very Long Name".to_string(),
@@ -1699,6 +1705,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Parent".to_string(),
@@ -1718,6 +1725,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Child".to_string(),
@@ -1782,6 +1790,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Parent".to_string(),
@@ -1801,6 +1810,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Child".to_string(),
@@ -1864,6 +1874,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Parent".to_string(),
@@ -1883,6 +1894,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Box(BoxPrimitive {
                     bbox: Rect {
@@ -1891,6 +1903,7 @@ mod tests {
                         w: 20.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 30.0, y: 18.0 }],
@@ -1939,6 +1952,7 @@ mod tests {
                         w: 80.0,
                         h: 54.0, // 3 rows: top border, text row, bottom border
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Text(TextPrimitive {
                     content: "Name".to_string(),
@@ -1998,6 +2012,7 @@ mod tests {
                         w: 120.0,
                         h: 54.0,
                     },
+                    two_spouses: false,
                 }),
                 // Left spouse name — same Y as right spouse name
                 Primitive::Text(TextPrimitive {
@@ -2070,6 +2085,7 @@ mod tests {
                         w: 120.0,
                         h: 108.0,
                     },
+                    two_spouses: false,
                 }),
                 // Individual name (different Y from marriage)
                 Primitive::Text(TextPrimitive {
@@ -2236,6 +2252,7 @@ mod tests {
                         w: 40.0,
                         h: 36.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Box(BoxPrimitive {
                     bbox: Rect {
@@ -2244,6 +2261,7 @@ mod tests {
                         w: 40.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 40.0, y: 36.0 }],
@@ -2376,6 +2394,7 @@ mod tests {
                         w: 40.0,
                         h: 18.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Box(BoxPrimitive {
                     bbox: Rect {
@@ -2384,6 +2403,7 @@ mod tests {
                         w: 40.0,
                         h: 36.0,
                     },
+                    two_spouses: false,
                 }),
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 40.0, y: 54.0 }],
@@ -2523,6 +2543,7 @@ mod tests {
                         w: 80.0,
                         h: 54.0,
                     },
+                    two_spouses: false,
                 }),
                 // Blank spouse placeholder (emitted by emit_blank_spouse_section)
                 Primitive::Text(TextPrimitive {

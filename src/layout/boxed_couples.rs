@@ -929,7 +929,10 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
 
         let ind = &genrep.individuals[*ind_id];
         let mut box_children: Vec<Primitive> = Vec::new();
-        box_children.push(Primitive::Box(BoxPrimitive { bbox: box_bbox }));
+        box_children.push(Primitive::Box(BoxPrimitive {
+            bbox: box_bbox,
+            two_spouses: geo.width > bc.box_width + 1.0,
+        }));
 
         // Layout sections
         let center_display_y = to_display_y(geo.y);

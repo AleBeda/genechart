@@ -99,6 +99,7 @@ pub struct TextPrimitive {
 #[derive(Debug, Clone)]
 pub struct BoxPrimitive {
     pub bbox: Rect,
+    pub two_spouses: bool,
 }
 
 /// An image primitive (boxes layout photos).
