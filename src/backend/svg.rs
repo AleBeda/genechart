@@ -885,7 +885,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
 
     // Copyright
     if !copy_text.is_empty() {
-        let y = MARGIN + chart_top_offset + (total_h - copy_line_h - MARGIN);
+        let y = total_h - MARGIN;
         out.push_str(&svg_text(
             MARGIN,
             y,
@@ -1473,6 +1473,26 @@ mod tests {
         assert!(
             out.contains("© 2026 Alex"),
             "copyright should appear in SVG: {out}"
+        );
+        // Verify the copyright baseline y is within the viewBox (was broken when title present).
+        let viewbox_h: f64 = out
+            .split("viewBox=\"0 0 ")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.split_whitespace().nth(1))
+            .and_then(|s| s.parse().ok())
+            .expect("viewBox height missing");
+        // The copyright <text> element is on a single line containing the text content.
+        let copy_y: f64 = out
+            .lines()
+            .find(|l| l.contains("© 2026 Alex"))
+            .and_then(|l| l.split("y=\"").nth(1))
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.parse().ok())
+            .expect("copyright y attribute missing");
+        assert!(
+            copy_y <= viewbox_h,
+            "copyright y={copy_y} is outside viewBox height={viewbox_h}"
         );
     }
 

@@ -249,10 +249,14 @@ pub fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
     vars.insert("lastname".into(), indi.surname.clone().unwrap_or_default());
     vars.insert(
         "sex".into(),
-        match indi.sex {
-            Some('M') => "♂".into(),
-            Some('F') => "♀".into(),
-            _ => String::new(),
+        if prefs.show.sex {
+            match indi.sex {
+                Some('M') => "♂".into(),
+                Some('F') => "♀".into(),
+                _ => String::new(),
+            }
+        } else {
+            String::new()
         },
     );
     strfmt::strfmt(&prefs.format.individual, &vars)
@@ -455,5 +459,58 @@ mod tests {
             "none",
         );
         assert_eq!(result, Some("* 1900, London".to_string()));
+    }
+
+    fn make_test_individual(
+        given: &str,
+        surname: &str,
+        sex: char,
+    ) -> crate::parser::genrep::Individual<()> {
+        crate::parser::genrep::Individual {
+            id: "I1".into(),
+            given: Some(given.into()),
+            surname: Some(surname.into()),
+            sex: Some(sex),
+            birth: None,
+            death: None,
+            fams: vec![],
+            famc: vec![],
+            alt_name: None,
+            name_heb: None,
+            living: None,
+            notes: vec![],
+            in_scope: true,
+            geo: None,
+        }
+    }
+
+    #[test]
+    fn show_sex_false_suppresses_symbol() {
+        let mut prefs = Prefs::default();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        prefs.show.sex = false;
+        let indi = make_test_individual("John", "Doe", 'M');
+        let name = format_name(&indi, &prefs);
+        assert!(
+            !name.contains('♂'),
+            "sex symbol should be absent when show.sex=false: {name}"
+        );
+        assert!(
+            name.contains("John"),
+            "name should still contain given name: {name}"
+        );
+    }
+
+    #[test]
+    fn show_sex_true_includes_symbol() {
+        let mut prefs = Prefs::default();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        prefs.show.sex = true;
+        let indi = make_test_individual("Jane", "Doe", 'F');
+        let name = format_name(&indi, &prefs);
+        assert!(
+            name.contains('♀'),
+            "sex symbol should be present when show.sex=true: {name}"
+        );
     }
 }
