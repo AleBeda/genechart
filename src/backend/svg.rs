@@ -1574,6 +1574,59 @@ mod tests {
     }
 
     #[test]
+    fn test_bc_svg_copyright_within_viewbox() {
+        let mut prefs = bc_prefs();
+        prefs.output.text.copyright = "© 2026 TestOwner".into();
+        let out = render_to_string(&bc_layout_with_prefs(&prefs), &prefs).unwrap();
+        assert!(
+            out.contains("© 2026 TestOwner"),
+            "copyright text missing from SVG"
+        );
+        let viewbox_h: f64 = out
+            .split("viewBox=\"0 0 ")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.split_whitespace().nth(1))
+            .and_then(|s| s.parse().ok())
+            .expect("viewBox height missing");
+        let copy_y: f64 = out
+            .lines()
+            .find(|l| l.contains("© 2026 TestOwner"))
+            .and_then(|l| l.split("y=\"").nth(1))
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.parse().ok())
+            .expect("copyright y attribute missing");
+        assert!(
+            copy_y <= viewbox_h,
+            "copyright y={copy_y} is outside viewBox height={viewbox_h}"
+        );
+    }
+
+    #[test]
+    fn test_bc_svg_show_sex_false_hides_symbol() {
+        let mut prefs = bc_prefs();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        prefs.show.sex = false;
+        let out = render_to_string(&bc_layout_with_prefs(&prefs), &prefs).unwrap();
+        assert!(
+            !out.contains('♂') && !out.contains('♀'),
+            "sex symbols should not appear when show.sex=false"
+        );
+    }
+
+    #[test]
+    fn test_bc_svg_show_sex_true_includes_symbol() {
+        let mut prefs = bc_prefs();
+        prefs.format.individual = "{firstname} {lastname} {sex}".into();
+        prefs.show.sex = true;
+        let out = render_to_string(&bc_layout_with_prefs(&prefs), &prefs).unwrap();
+        assert!(
+            out.contains('♂') || out.contains('♀'),
+            "sex symbols should appear when show.sex=true"
+        );
+    }
+
+    #[test]
     fn test_simple_svg_font_weight_applied() {
         let mut prefs = simple_prefs();
         prefs.format.individual = "{firstname} {lastname}".into();
