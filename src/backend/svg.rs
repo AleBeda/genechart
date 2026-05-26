@@ -816,7 +816,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let chart_top_offset = if title_text.is_empty() {
         0.0
     } else {
-        title_line_h
+        title_line_h + prefs.output.style.spacing.title
     };
 
     // Box style prefs
@@ -864,7 +864,13 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
 
     // SVG dimensions
     let total_w = scene.canvas_bounds.w + 2.0 * MARGIN;
-    let total_h = scene.canvas_bounds.h + 2.0 * MARGIN + chart_top_offset + copy_line_h;
+    let copy_spacing = if copy_text.is_empty() {
+        0.0
+    } else {
+        prefs.output.style.spacing.copyright
+    };
+    let total_h =
+        scene.canvas_bounds.h + 2.0 * MARGIN + chart_top_offset + copy_line_h + copy_spacing;
 
     let canvas_w = format!("{total_w:.0}");
     let canvas_h = format!("{total_h:.0}");
@@ -1623,6 +1629,53 @@ mod tests {
         assert!(
             out.contains('♂') || out.contains('♀'),
             "sex symbols should appear when show.sex=true"
+        );
+    }
+
+    fn parse_viewbox_h(svg: &str) -> f64 {
+        svg.split("viewBox=\"0 0 ")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.split_whitespace().nth(1))
+            .and_then(|s| s.parse().ok())
+            .expect("viewBox height missing")
+    }
+
+    #[test]
+    fn test_svg_title_spacing_enlarges_viewbox() {
+        let make_out = |spacing: f64| {
+            let mut prefs = bc_prefs();
+            prefs.output.text.title = "Test Title".into();
+            prefs.output.text.copyright = "".into();
+            prefs.output.style.spacing.title = spacing;
+            prefs.output.style.spacing.copyright = 0.0;
+            render_to_string(&bc_layout_with_prefs(&prefs), &prefs).unwrap()
+        };
+        let h0 = parse_viewbox_h(&make_out(0.0));
+        let h20 = parse_viewbox_h(&make_out(20.0));
+        assert!(
+            (h20 - h0 - 20.0).abs() < 0.5,
+            "expected viewBox to grow by 20, got {}",
+            h20 - h0
+        );
+    }
+
+    #[test]
+    fn test_svg_copyright_spacing_enlarges_viewbox() {
+        let make_out = |spacing: f64| {
+            let mut prefs = bc_prefs();
+            prefs.output.text.title = "".into();
+            prefs.output.text.copyright = "© Owner".into();
+            prefs.output.style.spacing.title = 0.0;
+            prefs.output.style.spacing.copyright = spacing;
+            render_to_string(&bc_layout_with_prefs(&prefs), &prefs).unwrap()
+        };
+        let h0 = parse_viewbox_h(&make_out(0.0));
+        let h20 = parse_viewbox_h(&make_out(20.0));
+        assert!(
+            (h20 - h0 - 20.0).abs() < 0.5,
+            "expected viewBox to grow by 20, got {}",
+            h20 - h0
         );
     }
 
