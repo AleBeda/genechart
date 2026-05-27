@@ -151,7 +151,19 @@ genechart family.ged -r I1 --text
 
 ### SVG
 
-Vector graphics output. Supports boxes, connectors, and configurable fonts.
+Vector graphics output. Supports boxes, connectors, and configurable fonts. Every SVG element carries a `class=` attribute so the chart can be restyled with a `<style>` block or external CSS without editing the source TOML:
+
+| Element | Class(es) |
+|---|---|
+| Individual/couple boxes (`<rect>`) | `box`; two-spouse boxes also get `double` |
+| Connectors (`<line>`, `<path>`) | `connector` |
+| Fan wedges (`<path>`) | `wedge` |
+| Row-rule underlines (`<line>`) | `row_rule` |
+| Note bars (`<line>`) | `note_bar` |
+| Note hyperlinks (`<a>`) | `note_link` |
+| Highlight backgrounds (`<rect>`) | `highlight_rect` |
+| Photo images (`<image>`) | `photo` |
+| Text elements | `indi_name`, `spouse_name`, `indi_birth`, `indi_death`, `indi_marriage`, `indi_id`, `gen_num`, `note_text`; highlighted text also adds `highlighted` |
 
 ```sh
 genechart family.ged -r I1 --svg -o chart.svg
@@ -248,6 +260,7 @@ birth = "* {date:%d %b %Y}, {location}"
 death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"
 date_qualifiers = "compact"  # "none" | "gedcom" | "compact"
+no_name = ""                # Placeholder for individuals with no name in the GEDCOM file; empty = omit the name line
 [layout]
 type = "simple"
 root_pos = "bottom"
@@ -300,10 +313,15 @@ alignment_lines = true
 [output.style]
 dot_leaders = true
 
+[output.style.spacing]
+title = 12.0         # Vertical space (canvas units) between the title text and the chart
+copyright = 12.0     # Vertical space (canvas units) between the copyright text and the chart
+
 [output.style.fonts]
 names = "Georgia 14"
 dates = "Arial 10"
 title = "Georgia 24"
+copyright = "Arial 8"
 
 [output.text]
 title = "{gedcom}"
