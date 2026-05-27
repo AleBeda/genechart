@@ -244,6 +244,11 @@ pub(crate) fn format_ged_date(raw: &str, pattern: Option<&str>, qualifier_mode: 
 ///
 /// Falls back to `"given surname"` if the template expansion fails.
 pub fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
+    let given = indi.given.as_deref().unwrap_or("").trim();
+    let surname = indi.surname.as_deref().unwrap_or("").trim();
+    if given.is_empty() && surname.is_empty() {
+        return prefs.format.no_name.clone();
+    }
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("firstname".into(), indi.given.clone().unwrap_or_default());
     vars.insert("lastname".into(), indi.surname.clone().unwrap_or_default());
@@ -511,6 +516,34 @@ mod tests {
         assert!(
             name.contains('♀'),
             "sex symbol should be present when show.sex=true: {name}"
+        );
+    }
+
+    #[test]
+    fn no_name_placeholder_shown() {
+        let mut prefs = Prefs::default();
+        prefs.format.no_name = "N.N.".into();
+        let indi = make_test_individual("", "", 'M');
+        assert_eq!(format_name(&indi, &prefs), "N.N.");
+    }
+
+    #[test]
+    fn no_name_empty_produces_empty_string() {
+        let mut prefs = Prefs::default();
+        prefs.format.no_name = "".into();
+        let indi = make_test_individual("", "", 'M');
+        assert_eq!(format_name(&indi, &prefs), "");
+    }
+
+    #[test]
+    fn no_name_not_triggered_when_surname_present() {
+        let mut prefs = Prefs::default();
+        prefs.format.no_name = "N.N.".into();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        let indi = make_test_individual("", "Smith", 'M');
+        assert!(
+            format_name(&indi, &prefs).contains("Smith"),
+            "surname-only individual should not use no_name placeholder"
         );
     }
 }

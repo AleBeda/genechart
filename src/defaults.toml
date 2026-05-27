@@ -31,6 +31,7 @@ birth = "* {date:%d %b %Y}, {location}"
 death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"
 date_qualifiers = "compact" # Valid values: "none", "gedcom", "compact"
+no_name = "" # Text to show when an individual has no name; empty means omit the name line entirely
 
 [layout]
 type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy", "boxes"
