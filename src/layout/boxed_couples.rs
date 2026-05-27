@@ -107,6 +107,15 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     spouses
 }
 
+/// Returns `box_w2/2` when `id` has ≥2 in-scope spouses, otherwise `box_w/2`.
+fn half_width_of(id: &str, genrep: &Genrep, box_w: f64, box_w2: f64) -> f64 {
+    (if spouses_of(id, genrep).len() >= 2 {
+        box_w2
+    } else {
+        box_w
+    }) / 2.0
+}
+
 /// Returns the right-side envelope of `ind`'s placed subtree.
 ///
 /// `result[0]` = right edge of `ind` itself (`x + width/2`).
@@ -413,7 +422,9 @@ fn recenter_pass(
     genrep: &Genrep,
     box_w: f64,
     box_w2: f64,
+    gap_w: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    max_center_x: Option<f64>,
 ) {
     // Use spouses_of (already scope-filtered, sorted by date) and take at most 2.
     // prune_spouses would give the same result for ≤2 spouses; any >2-spouse
@@ -430,8 +441,33 @@ fn recenter_pass(
             .filter(|cid| out.contains_key(cid.as_str()))
             .collect();
 
-        for child_id in children1.iter().chain(children2.iter()) {
-            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        for (i, child_id) in children1.iter().enumerate() {
+            let max_x = if i + 1 < children1.len() {
+                let rsib = &children1[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
+        }
+        for (i, child_id) in children2.iter().enumerate() {
+            let max_x = if i + 1 < children2.len() {
+                let rsib = &children2[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
         }
 
         if children1.is_empty() && children2.is_empty() {
@@ -445,11 +481,12 @@ fn recenter_pass(
         } else {
             get_x_of(children2.first().unwrap(), out) - conn_out2_offset
         };
+        let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
-                g.x = new_x;
-                g.conn_in_x = new_x;
+                g.x = final_x;
+                g.conn_in_x = final_x;
             }
         }
     } else {
@@ -463,8 +500,19 @@ fn recenter_pass(
             return;
         }
 
-        for child_id in &all_children {
-            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        for (i, child_id) in all_children.iter().enumerate() {
+            let max_x = if i + 1 < all_children.len() {
+                let rsib = &all_children[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
         }
 
         let n = all_children.len();
@@ -473,11 +521,12 @@ fn recenter_pass(
         } else {
             (get_x_of(&all_children[n / 2 - 1], out) + get_x_of(&all_children[n / 2], out)) / 2.0
         };
+        let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
-                g.x = new_x;
-                g.conn_in_x = new_x;
+                g.x = final_x;
+                g.conn_in_x = final_x;
             }
         }
     }
@@ -750,7 +799,15 @@ impl Layout for BoxedCouplesLayout {
             gap_w,
             0,
         );
-        recenter_pass(root_id, genrep, box_w, box_w2, &mut individuals);
+        recenter_pass(
+            root_id,
+            genrep,
+            box_w,
+            box_w2,
+            gap_w,
+            &mut individuals,
+            None,
+        );
 
         // Add in-scope spouses of placed individuals to the output,
         // skipping spouses of the last (deepest) generation unless opted in.
