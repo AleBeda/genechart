@@ -2727,4 +2727,73 @@ mod tests {
             x_i1 + conn_offset
         );
     }
+
+    /// Load a large fixture, run the boxed_couples layout for
+    /// several box_width values, and assert that no two boxes at the same
+    /// generation (same y) overlap in x.
+    ///
+    /// This is a regression test for the recenter_pass sibling-overshoot bug
+    /// where I514 was pushed past I515 when I514's child (I348) had a deep
+    /// two-spouse subtree.
+    #[test]
+    fn no_overlap_real_tree() {
+        use crate::parser::{compute_scope, parse};
+        use std::collections::HashMap;
+
+        let ged_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/fixture_large.ged");
+
+        // box_width values to test; for each: box_width_2_spouses = 2*w + gap_w
+        let gap_w = 40.0;
+        let box_widths: &[f64] = &[80.0, 140.0, 180.0, 240.0, 500.0];
+
+        for &box_w in box_widths {
+            let box_w2 = 2.0 * box_w + gap_w;
+
+            let mut prefs = Prefs::default();
+            prefs.scope.root = "I506".into();
+            prefs.scope.direction = "descendants".into();
+            prefs.scope.generations = 99;
+            prefs.layout.layout_type = "boxed_couples".into();
+            prefs.layout.boxed_couples.box_width = box_w;
+            prefs.layout.boxed_couples.box_height = 140.0;
+            prefs.layout.boxed_couples.gap_width = gap_w;
+            prefs.layout.boxed_couples.gap_height = 80.0;
+            prefs.layout.boxed_couples.box_width_2_spouses = box_w2;
+
+            let mut genrep = parse(&ged_path).expect("could not parse fixture_large.ged");
+            compute_scope(&mut genrep, Some("I506"), "descendants", Some(99));
+
+            let bc = BoxedCouplesLayout
+                .compute(&genrep, &prefs)
+                .unwrap_or_else(|e| panic!("layout failed at box_width={box_w}: {e}"));
+
+            // Group placed individuals by their y (generation row).
+            // key = y rounded to nearest integer (all same-gen boxes share y exactly)
+            let mut by_y: HashMap<i64, Vec<(String, f64, f64)>> = HashMap::new();
+            for (id, ind) in &bc.individuals {
+                if let Some(BoxedCouplesGeo::Individual(g)) = &ind.geo {
+                    let y_key = g.y.round() as i64;
+                    by_y.entry(y_key)
+                        .or_default()
+                        .push((id.clone(), g.x, g.width));
+                }
+            }
+
+            for (_, mut row) in by_y {
+                row.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                for w in row.windows(2) {
+                    let (ref id_l, cx_l, w_l) = w[0];
+                    let (ref id_r, cx_r, w_r) = w[1];
+                    let right_edge = cx_l + w_l / 2.0;
+                    let left_edge = cx_r - w_r / 2.0;
+                    assert!(
+                        right_edge <= left_edge - gap_w + 1e-4,
+                        "box_width={box_w}: {id_l} right={right_edge:.1} overlaps \
+                         {id_r} left={left_edge:.1} (required gap={gap_w})"
+                    );
+                }
+            }
+        }
+    }
 }
