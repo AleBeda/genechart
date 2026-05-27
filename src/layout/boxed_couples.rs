@@ -107,6 +107,15 @@ fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
     spouses
 }
 
+/// Returns `box_w2/2` when `id` has ≥2 in-scope spouses, otherwise `box_w/2`.
+fn half_width_of(id: &str, genrep: &Genrep, box_w: f64, box_w2: f64) -> f64 {
+    (if spouses_of(id, genrep).len() >= 2 {
+        box_w2
+    } else {
+        box_w
+    }) / 2.0
+}
+
 /// Returns the right-side envelope of `ind`'s placed subtree.
 ///
 /// `result[0]` = right edge of `ind` itself (`x + width/2`).
@@ -413,7 +422,9 @@ fn recenter_pass(
     genrep: &Genrep,
     box_w: f64,
     box_w2: f64,
+    gap_w: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    max_center_x: Option<f64>,
 ) {
     // Use spouses_of (already scope-filtered, sorted by date) and take at most 2.
     // prune_spouses would give the same result for ≤2 spouses; any >2-spouse
@@ -430,8 +441,33 @@ fn recenter_pass(
             .filter(|cid| out.contains_key(cid.as_str()))
             .collect();
 
-        for child_id in children1.iter().chain(children2.iter()) {
-            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        for (i, child_id) in children1.iter().enumerate() {
+            let max_x = if i + 1 < children1.len() {
+                let rsib = &children1[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
+        }
+        for (i, child_id) in children2.iter().enumerate() {
+            let max_x = if i + 1 < children2.len() {
+                let rsib = &children2[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
         }
 
         if children1.is_empty() && children2.is_empty() {
@@ -445,11 +481,12 @@ fn recenter_pass(
         } else {
             get_x_of(children2.first().unwrap(), out) - conn_out2_offset
         };
+        let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
-                g.x = new_x;
-                g.conn_in_x = new_x;
+                g.x = final_x;
+                g.conn_in_x = final_x;
             }
         }
     } else {
@@ -463,8 +500,19 @@ fn recenter_pass(
             return;
         }
 
-        for child_id in &all_children {
-            recenter_pass(child_id, genrep, box_w, box_w2, out);
+        for (i, child_id) in all_children.iter().enumerate() {
+            let max_x = if i + 1 < all_children.len() {
+                let rsib = &all_children[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
         }
 
         let n = all_children.len();
@@ -473,11 +521,12 @@ fn recenter_pass(
         } else {
             (get_x_of(&all_children[n / 2 - 1], out) + get_x_of(&all_children[n / 2], out)) / 2.0
         };
+        let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
-                g.x = new_x;
-                g.conn_in_x = new_x;
+                g.x = final_x;
+                g.conn_in_x = final_x;
             }
         }
     }
@@ -750,7 +799,15 @@ impl Layout for BoxedCouplesLayout {
             gap_w,
             0,
         );
-        recenter_pass(root_id, genrep, box_w, box_w2, &mut individuals);
+        recenter_pass(
+            root_id,
+            genrep,
+            box_w,
+            box_w2,
+            gap_w,
+            &mut individuals,
+            None,
+        );
 
         // Add in-scope spouses of placed individuals to the output,
         // skipping spouses of the last (deepest) generation unless opted in.
@@ -2669,5 +2726,74 @@ mod tests {
             I1.x={x_i1}, conn_out2_x={}, I5.x={x_i5}",
             x_i1 + conn_offset
         );
+    }
+
+    /// Load a large fixture, run the boxed_couples layout for
+    /// several box_width values, and assert that no two boxes at the same
+    /// generation (same y) overlap in x.
+    ///
+    /// This is a regression test for the recenter_pass sibling-overshoot bug
+    /// where I514 was pushed past I515 when I514's child (I348) had a deep
+    /// two-spouse subtree.
+    #[test]
+    fn no_overlap_real_tree() {
+        use crate::parser::{compute_scope, parse};
+        use std::collections::HashMap;
+
+        let ged_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/fixture_large.ged");
+
+        // box_width values to test; for each: box_width_2_spouses = 2*w + gap_w
+        let gap_w = 40.0;
+        let box_widths: &[f64] = &[80.0, 140.0, 180.0, 240.0, 500.0];
+
+        for &box_w in box_widths {
+            let box_w2 = 2.0 * box_w + gap_w;
+
+            let mut prefs = Prefs::default();
+            prefs.scope.root = "I506".into();
+            prefs.scope.direction = "descendants".into();
+            prefs.scope.generations = 99;
+            prefs.layout.layout_type = "boxed_couples".into();
+            prefs.layout.boxed_couples.box_width = box_w;
+            prefs.layout.boxed_couples.box_height = 140.0;
+            prefs.layout.boxed_couples.gap_width = gap_w;
+            prefs.layout.boxed_couples.gap_height = 80.0;
+            prefs.layout.boxed_couples.box_width_2_spouses = box_w2;
+
+            let mut genrep = parse(&ged_path).expect("could not parse fixture_large.ged");
+            compute_scope(&mut genrep, Some("I506"), "descendants", Some(99));
+
+            let bc = BoxedCouplesLayout
+                .compute(&genrep, &prefs)
+                .unwrap_or_else(|e| panic!("layout failed at box_width={box_w}: {e}"));
+
+            // Group placed individuals by their y (generation row).
+            // key = y rounded to nearest integer (all same-gen boxes share y exactly)
+            let mut by_y: HashMap<i64, Vec<(String, f64, f64)>> = HashMap::new();
+            for (id, ind) in &bc.individuals {
+                if let Some(BoxedCouplesGeo::Individual(g)) = &ind.geo {
+                    let y_key = g.y.round() as i64;
+                    by_y.entry(y_key)
+                        .or_default()
+                        .push((id.clone(), g.x, g.width));
+                }
+            }
+
+            for (_, mut row) in by_y {
+                row.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                for w in row.windows(2) {
+                    let (ref id_l, cx_l, w_l) = w[0];
+                    let (ref id_r, cx_r, w_r) = w[1];
+                    let right_edge = cx_l + w_l / 2.0;
+                    let left_edge = cx_r - w_r / 2.0;
+                    assert!(
+                        right_edge <= left_edge - gap_w + 1e-4,
+                        "box_width={box_w}: {id_l} right={right_edge:.1} overlaps \
+                         {id_r} left={left_edge:.1} (required gap={gap_w})"
+                    );
+                }
+            }
+        }
     }
 }
