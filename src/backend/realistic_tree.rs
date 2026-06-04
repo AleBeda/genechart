@@ -1047,6 +1047,63 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
     out
 }
 
+/// One continuous bark-striation line following the Bézier path at a perpendicular
+/// offset of `frac × local_hw` from the centre. `frac` ∈ (−1, 1).
+///
+/// At each of the N sample points along the curve, a small per-point noise is added
+/// perpendicular to the line so the striation wiggles like a real wood-grain fiber.
+/// The result is a single connected path rather than scattered marks, so adjacent
+/// striations (called at different `frac` values) are genuinely parallel.
+fn ink_grain_line(
+    p0x: f64,
+    p0y: f64,
+    p1x: f64,
+    p1y: f64,
+    p2x: f64,
+    p2y: f64,
+    p3x: f64,
+    p3y: f64,
+    hw_p: f64,
+    hw_c: f64,
+    frac: f64,
+    opacity: f64,
+    seed_off: u64,
+) -> String {
+    const N: usize = 32;
+    let mut seed = seed_off;
+    let mut pts: Vec<(f64, f64)> = Vec::with_capacity(N);
+
+    for i in 0..N {
+        let t = i as f64 / (N - 1) as f64;
+        let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
+        let (tang_x, tang_y) = bezier3_tangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
+        let norm_x = -tang_y;
+        let norm_y = tang_x;
+        let hw = hw_p + (hw_c - hw_p) * t;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let noise = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.20;
+
+        pts.push((
+            bx + norm_x * (frac * hw + noise),
+            by + norm_y * (frac * hw + noise),
+        ));
+    }
+
+    let mut d = format!("M {:.2},{:.2}", pts[0].0, pts[0].1);
+    for (x, y) in pts.iter().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", x, y));
+    }
+
+    format!(
+        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"0.70\" \
+         opacity=\"{:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
+        opacity
+    )
+}
+
 /// Smooth S-curve branch from (px,py) to (cx,cy) with ink texture.
 ///
 /// Uses a cubic Bézier with control points at (px, mid_y) and (cx, mid_y),
@@ -1073,7 +1130,14 @@ fn ink_smooth_branch(
 
     const N: usize = 24;
 
-    // Build polyline offset curves for the perimeter outline
+    // Build noisy polyline offset curves for the perimeter outline.
+    // A small per-point perturbation of the local hw gives an organic silhouette
+    // rather than a geometrically perfect smooth curve.
+    let mut outline_seed = ((px * 1000.0) as u64)
+        .wrapping_add((py * 997.0) as u64)
+        .wrapping_add((cx * 991.0) as u64)
+        .wrapping_add((cy * 983.0) as u64)
+        .wrapping_add(seed_off.wrapping_mul(1_000_003));
     let mut outer: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
     let mut inner: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
     for i in 0..=N {
@@ -1081,9 +1145,17 @@ fn ink_smooth_branch(
         let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
         let (tx, ty) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
         let hw = hw_p + (hw_c - hw_p) * t;
+        outline_seed = outline_seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let noise_o = ((outline_seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.18;
+        outline_seed = outline_seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let noise_i = ((outline_seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.18;
         // Right-normal = CCW 90° of tangent: (-ty, tx)
-        outer.push((bx + (-ty) * hw, by + tx * hw));
-        inner.push((bx - (-ty) * hw, by - tx * hw));
+        outer.push((bx + (-ty) * (hw + noise_o), by + tx * (hw + noise_o)));
+        inner.push((bx - (-ty) * (hw + noise_i), by - tx * (hw + noise_i)));
     }
 
     // Closed outline: outer forward → end cap → inner backward → start cap
@@ -1103,91 +1175,39 @@ fn ink_smooth_branch(
          stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
     ));
 
-    // Ink strokes sampled along the curve, oriented by local tangent
-    let arc_len = ((cx - px).hypot(cy - py) * 1.35).max(1.0);
+    // Bark striations: N continuous grain lines, each following the full Bézier arc
+    // at a fixed perpendicular offset from the centreline.  Because every line traces
+    // the same curve shape (just shifted across the branch width), adjacent lines are
+    // inherently parallel — they read as wood-grain fibres, not scattered marks.
+    // Per-point perpendicular noise on each line gives organic waviness.
     let avg_hw = (hw_p + hw_c) * 0.5;
-    let n = ((arc_len * avg_hw * 0.12) as usize + 1).max(10).min(220);
-
-    let mut seed = ((px * 1000.0) as u64)
+    let n_grains = ((avg_hw * 2.0 / 4.5) as usize + 2).max(2).min(16);
+    let branch_seed = ((px * 1000.0) as u64)
         .wrapping_add((py * 997.0) as u64)
         .wrapping_add((cx * 991.0) as u64)
         .wrapping_add((cy * 983.0) as u64)
-        .wrapping_add(seed_off);
+        .wrapping_add(seed_off.wrapping_mul(2_654_435_761));
 
-    for _ in 0..n {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let t = (seed & 0xFFFF) as f64 / 65535.0;
-
-        let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
-        let (tang_x, tang_y) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
-        let norm_x = -tang_y;
-        let norm_y = tang_x;
-        let hw_t = hw_p + (hw_c - hw_p) * t;
-
-        // Perpendicular offset: triangle distribution → centre-heavy
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u1 = (seed & 0xFFFF) as f64 / 65535.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u2 = (seed & 0xFFFF) as f64 / 65535.0;
-        let perp_frac = u1 + u2 - 1.0;
-        let stroke_cx = bx + norm_x * perp_frac * hw_t;
-        let stroke_cy = by + norm_y * perp_frac * hw_t;
-
-        // Stroke length 30–70 SVG units — long enough that adjacent strokes
-        // read as continuous parallel grain lines.
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let slen = 30.0 + (seed & 0xFF) as f64 / 255.0 * 40.0;
-
-        // Angular deviation ±3° (0.10 rad) — tight enough to read as wood grain.
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.10;
-        let cos_d = dev.cos();
-        let sin_d = dev.sin();
-        let sdx = tang_x * cos_d - tang_y * sin_d;
-        let sdy = tang_x * sin_d + tang_y * cos_d;
-
-        let sx = stroke_cx - sdx * slen * 0.5;
-        let sy = stroke_cy - sdy * slen * 0.5;
-        let ex = stroke_cx + sdx * slen * 0.5;
-        let ey = stroke_cy + sdy * slen * 0.5;
-
-        // Small transverse bow for organic feel
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let bow = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * slen * 0.25;
-        let c1x = sx + (ex - sx) * 0.33 - sdy * bow;
-        let c1y = sy + (ey - sy) * 0.33 + sdx * bow;
-        let c2x = sx + (ex - sx) * 0.67 - sdy * bow;
-        let c2y = sy + (ey - sy) * 0.67 + sdx * bow;
-
-        let edge = perp_frac.abs();
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rand_o = (seed & 0xFF) as f64 / 255.0;
-        let opacity = (0.78 - edge * 0.38 + rand_o * 0.12).clamp(0.25, 0.92);
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 1.0;
-
-        out.push_str(&format!(
-            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
-             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
-             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
-            sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
+    for i in 0..n_grains {
+        // Evenly spaced from −0.82 to +0.82 of the local branch half-width
+        let frac = -0.82 + (i as f64 + 0.5) * 1.64 / n_grains as f64;
+        // Opacity: dense at centre (dark ink core), transparent at edges
+        let edge_dist = frac.abs();
+        let opacity = (0.80 - edge_dist * 0.45).clamp(0.18, 0.80);
+        out.push_str(&ink_grain_line(
+            px,
+            py,
+            p1x,
+            p1y,
+            p2x,
+            p2y,
+            cx,
+            cy,
+            hw_p,
+            hw_c,
+            frac,
+            opacity,
+            branch_seed.wrapping_add(i as u64 * 7_919),
         ));
     }
 
