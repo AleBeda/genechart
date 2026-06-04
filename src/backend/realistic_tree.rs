@@ -798,14 +798,22 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
 
 // ── Style: ink ────────────────────────────────────────────────────────────────
 //
-// Near-solid black filled branches with thin white longitudinal Bézier strokes
-// running along each branch to simulate hand-drawn ink bark texture.
-// Leaves are hollow ellipse outlines only (fill="none"), scattered in loose clouds.
+// Branch body consists entirely of multiple thin parallel dark Bézier strokes
+// (no filled shape). The hatching pattern itself forms the visible branch width
+// and texture, matching a pen-and-ink botanical illustration aesthetic.
+// Leaves are hollow ellipse outlines only (fill="none").
 
-/// Longitudinal bark-scratch strokes over a tapered branch segment.
-/// Each scratch is a thin cubic Bézier running along the branch at a perpendicular
-/// offset, shortened at both ends, with slight waviness and random opacity.
-fn ink_bark_lines(x1: f64, y1: f64, x2: f64, y2: f64, hw1: f64, hw2: f64, seed_off: u64) -> String {
+/// Multiple thin parallel dark ink strokes forming the visible body of a branch.
+/// Stroke offsets fan from hw1 at (x1,y1) to hw2 at (x2,y2) so the bundle tapers.
+fn ink_branch_strokes(
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    hw1: f64,
+    hw2: f64,
+    seed_off: u64,
+) -> String {
     let dx = x2 - x1;
     let dy = y2 - y1;
     let len = dx.hypot(dy).max(0.01);
@@ -815,7 +823,7 @@ fn ink_bark_lines(x1: f64, y1: f64, x2: f64, y2: f64, hw1: f64, hw2: f64, seed_o
     let ny = ux;
 
     let avg_hw = (hw1 + hw2) * 0.5;
-    let n = ((avg_hw * 0.45) as usize + 1).min(10).max(2);
+    let n = ((avg_hw * 0.85) as usize + 1).min(9).max(2);
 
     let mut seed = ((x1 * 1000.0) as u64)
         .wrapping_add((y1 * 997.0) as u64)
@@ -833,25 +841,24 @@ fn ink_bark_lines(x1: f64, y1: f64, x2: f64, y2: f64, hw1: f64, hw2: f64, seed_o
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.14 - 0.07;
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.12 - 0.06;
         let perp_frac = (base_frac + jitter).clamp(-0.90, 0.90);
-        let offset = perp_frac * avg_hw;
 
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_s = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 * len;
+        let shorten_s = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * len;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_e = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 * len;
+        let shorten_e = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * len;
 
-        let sx = x1 + nx * offset + ux * shorten_s;
-        let sy = y1 + ny * offset + uy * shorten_s;
-        let ex = x2 + nx * offset - ux * shorten_e;
-        let ey = y2 + ny * offset - uy * shorten_e;
+        let sx = x1 + nx * perp_frac * hw1 + ux * shorten_s;
+        let sy = y1 + ny * perp_frac * hw1 + uy * shorten_s;
+        let ex = x2 + nx * perp_frac * hw2 - ux * shorten_e;
+        let ey = y2 + ny * perp_frac * hw2 - uy * shorten_e;
 
-        // Small perpendicular wave via quadratic-to-cubic Bézier conversion
+        // Slight perpendicular waviness via quadratic-to-cubic conversion
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
@@ -866,25 +873,25 @@ fn ink_bark_lines(x1: f64, y1: f64, x2: f64, y2: f64, hw1: f64, hw2: f64, seed_o
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let opacity = 0.18 + (seed & 0xFFFF) as f64 / 65535.0 * 0.37;
+        let opacity = 0.70 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let sw = 0.3 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+        let sw = 0.35 + (seed & 0xFFFF) as f64 / 65535.0 * 0.35;
 
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
-             stroke=\"white\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
-             fill=\"none\" class=\"tree-bark\"/>\n",
+             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
+             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
             sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
         ));
     }
     out
 }
 
-/// Horizontal bark-scratch strokes across a horizontal bar.
-fn ink_bar_bark_lines(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
-    let n = ((w * 0.85) as usize + 1).min(8).max(2);
+/// Multiple thin parallel dark ink strokes across a horizontal bar.
+fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
+    let n = ((w * 1.5) as usize + 1).min(9).max(2);
     let length = (x2 - x1).abs().max(1.0);
     let mut seed = ((x1 * 1000.0) as u64)
         .wrapping_add((y * 997.0) as u64)
@@ -901,17 +908,17 @@ fn ink_bar_bark_lines(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.14 - 0.07;
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.12 - 0.06;
         let ly = y + (base_frac + jitter).clamp(-0.90, 0.90) * w;
 
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_l = (seed & 0xFFFF) as f64 / 65535.0 * 0.08 * length;
+        let shorten_l = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * length;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_r = (seed & 0xFFFF) as f64 / 65535.0 * 0.08 * length;
+        let shorten_r = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * length;
         let lx1 = x1 + shorten_l;
         let lx2 = x2 - shorten_r;
         let cdx = (lx2 - lx1) * 0.4;
@@ -919,21 +926,21 @@ fn ink_bar_bark_lines(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * w * 0.08;
+        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * w * 0.10;
 
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let opacity = 0.18 + (seed & 0xFFFF) as f64 / 65535.0 * 0.37;
+        let opacity = 0.70 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let sw = 0.3 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+        let sw = 0.35 + (seed & 0xFFFF) as f64 / 65535.0 * 0.35;
 
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
-             stroke=\"white\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
-             fill=\"none\" class=\"tree-bark\"/>\n",
+             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
+             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
             lx1,
             ly,
             lx1 + cdx,
@@ -996,22 +1003,12 @@ fn ink_leaf_canopy(cx: f64, cy: f64, count: usize) -> String {
     out
 }
 
-/// Root spread for ink style: dark tapered roots with bark scratches.
+/// Root spread for ink style: hatched stroke bundles fanning below the root box.
 fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64) -> String {
-    const INK: &str = "#0d0d0d";
     let junction_y = y_root + root_depth * 0.55;
     let junction_hw = max_hw;
 
-    let mut out = tapered_branch_path(
-        root_x,
-        y_root,
-        root_x,
-        junction_y,
-        junction_hw,
-        junction_hw * 0.88,
-        INK,
-    );
-    out.push_str(&ink_bark_lines(
+    let mut out = ink_branch_strokes(
         root_x,
         y_root,
         root_x,
@@ -1019,7 +1016,7 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
         junction_hw,
         junction_hw * 0.88,
         1001,
-    ));
+    );
 
     let tips: [(f64, f64, f64); 4] = [
         (root_x - root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
@@ -1029,16 +1026,7 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
     ];
     for (i, (ex, ey, end_scale)) in tips.iter().enumerate() {
         let end_hw = min_hw + (junction_hw * 0.88 - min_hw) * end_scale;
-        out.push_str(&tapered_branch_path(
-            root_x,
-            junction_y,
-            *ex,
-            *ey,
-            junction_hw * 0.88,
-            end_hw,
-            INK,
-        ));
-        out.push_str(&ink_bark_lines(
+        out.push_str(&ink_branch_strokes(
             root_x,
             junction_y,
             *ex,
@@ -1052,7 +1040,6 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
 }
 
 fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
-    const INK: &str = "#0d0d0d";
     let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
         "low" => 12,
@@ -1062,8 +1049,8 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
 
     let (y_root, y_top) = y_bounds(branches);
     let y_range = (y_root - y_top).max(1.0);
-    const MAX_HW: f64 = 14.0;
-    const MIN_HW: f64 = 1.5;
+    const MAX_HW: f64 = 6.0;
+    const MIN_HW: f64 = 0.8;
 
     let mut out = String::new();
 
@@ -1089,27 +1076,18 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
         let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
 
-        // Short vertical trunk + bark scratches
-        out.push_str(&tapered_branch_path(px, py, px, bar_y, w_py, w_bar, INK));
-        out.push_str(&ink_bark_lines(px, py, px, bar_y, w_py, w_bar, 0));
+        // Short vertical trunk
+        out.push_str(&ink_branch_strokes(px, py, px, bar_y, w_py, w_bar, 0));
 
-        // Horizontal bar + bark scratches
+        // Horizontal bar
         if bar_max_x - bar_min_x > 1.0 {
-            out.push_str(&tapered_bar_path(bar_min_x, bar_y, bar_max_x, w_bar, INK));
-            out.push_str(&ink_bar_bark_lines(bar_min_x, bar_y, bar_max_x, w_bar, 0));
+            out.push_str(&ink_bar_strokes(bar_min_x, bar_y, bar_max_x, w_bar, 0));
         }
 
-        // Junction circles at T-joins
-        out.push_str(&junction_circle(px, bar_y, w_bar, INK));
-        for &(cx, _) in &branch.child_pts {
-            out.push_str(&junction_circle(cx, bar_y, w_bar, INK));
-        }
-
-        // Vertical drops + bark scratches + canopy leaves
+        // Vertical drops + canopy leaves
         for &(cx, cy) in &branch.child_pts {
             let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            out.push_str(&tapered_branch_path(cx, bar_y, cx, cy, w_bar, w_cy, INK));
-            out.push_str(&ink_bark_lines(cx, bar_y, cx, cy, w_bar, w_cy, 1));
+            out.push_str(&ink_branch_strokes(cx, bar_y, cx, cy, w_bar, w_cy, 1));
             if leaf_count > 0 {
                 out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
             }
