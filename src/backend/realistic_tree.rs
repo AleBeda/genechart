@@ -1067,12 +1067,14 @@ fn ink_grain_line(
     hw_c: f64,
     frac: f64,
     opacity: f64,
+    stroke_width: f64,
     seed_off: u64,
 ) -> String {
     const N: usize = 32;
     let mut seed = seed_off;
     let mut pts: Vec<(f64, f64)> = Vec::with_capacity(N);
 
+    // Compute sample points with per-point perpendicular noise.
     for i in 0..N {
         let t = i as f64 / (N - 1) as f64;
         let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
@@ -1092,15 +1094,46 @@ fn ink_grain_line(
         ));
     }
 
-    let mut d = format!("M {:.2},{:.2}", pts[0].0, pts[0].1);
-    for (x, y) in pts.iter().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", x, y));
+    // Build path with random gaps: brief interruptions along the line simulate
+    // the discontinuous quality of real ink strokes on fibrous paper.
+    let mut gap_seed = seed_off.wrapping_mul(1_234_567_891);
+    let mut in_gap = true; // begin with a Move command
+    let mut remaining_skip: usize = 0;
+    let mut d = String::new();
+
+    for (x, y) in &pts {
+        if remaining_skip > 0 {
+            remaining_skip -= 1;
+            in_gap = true;
+            continue;
+        }
+        // ~10 % chance of starting a brief gap at this sample point
+        gap_seed = gap_seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        if gap_seed & 0xFF < 26 {
+            gap_seed = gap_seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            remaining_skip = (gap_seed & 1) as usize + 1; // skip 1–2 samples
+            in_gap = true;
+            continue;
+        }
+        if in_gap {
+            d.push_str(&format!("M {x:.2},{y:.2}"));
+            in_gap = false;
+        } else {
+            d.push_str(&format!(" L {x:.2},{y:.2}"));
+        }
+    }
+
+    if d.is_empty() {
+        return String::new();
     }
 
     format!(
-        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"0.70\" \
-         opacity=\"{:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
-        opacity
+        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"{stroke_width:.2}\" \
+         opacity=\"{opacity:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n"
     )
 }
 
@@ -1120,13 +1153,12 @@ fn ink_smooth_branch(
     hw_c: f64,
     seed_off: u64,
 ) -> String {
-    // Fork at 25 % from the parent so the branch bends quickly near the trunk
-    // and extends in a more direct line toward the child — matches real branch geometry.
-    let fork_y = py + (cy - py) * 0.25;
+    // Control points at 50 % of the parent→child span produce a pronounced S-curve.
+    let fork_y = py + (cy - py) * 0.50;
     let p1x = px;
     let p1y = fork_y;
     let p2x = cx;
-    let p2y = cy - (cy - py) * 0.25; // symmetric arrival, 25 % from child
+    let p2y = cy - (cy - py) * 0.50; // symmetric arrival, 50 % from child
 
     const N: usize = 24;
 
@@ -1191,9 +1223,11 @@ fn ink_smooth_branch(
     for i in 0..n_grains {
         // Evenly spaced from −0.82 to +0.82 of the local branch half-width
         let frac = -0.82 + (i as f64 + 0.5) * 1.64 / n_grains as f64;
-        // Opacity: dense at centre (dark ink core), transparent at edges
+        // Shadow bias: frac < 0 = left/lower side gets denser, darker strokes.
         let edge_dist = frac.abs();
-        let opacity = (0.80 - edge_dist * 0.45).clamp(0.18, 0.80);
+        let shadow_bonus = 0.22 * (-frac).max(0.0);
+        let opacity = (0.65 - edge_dist * 0.25 + shadow_bonus).clamp(0.15, 0.85);
+        let stroke_width = if frac < 0.0 { 0.80 } else { 0.55 };
         out.push_str(&ink_grain_line(
             px,
             py,
@@ -1207,6 +1241,7 @@ fn ink_smooth_branch(
             hw_c,
             frac,
             opacity,
+            stroke_width,
             branch_seed.wrapping_add(i as u64 * 7_919),
         ));
     }
