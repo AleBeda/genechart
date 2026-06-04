@@ -236,6 +236,62 @@ fn canopy_leaves(cx: f64, cy: f64, count: usize, color: &str) -> String {
     out
 }
 
+// ── Horizontal-bar helpers ────────────────────────────────────────────────────
+
+/// Deterministic wave value in –1..+1 derived from a segment's position.
+fn segment_wave(x1: f64, y: f64, x2: f64) -> f64 {
+    let h = ((x1 + x2) * 63.5 + y * 311.7) as i64 as u64;
+    let h = h
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    (h & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0
+}
+
+/// SVG `d` for a horizontal bar whose midline bows by ≈ 60 % of `w` (both edges move
+/// together so the bar width stays constant; only the endpoints are anchored at `y ± w`).
+fn build_bar_d(x1: f64, y: f64, x2: f64, w: f64) -> String {
+    let wave_h = segment_wave(x1, y, x2) * w * 0.6;
+    let cdx = (x2 - x1) * 0.4;
+    format!(
+        "M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} \
+         L {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} Z",
+        x1,
+        y + w,
+        x1 + cdx,
+        y + w + wave_h,
+        x2 - cdx,
+        y + w + wave_h,
+        x2,
+        y + w,
+        x2,
+        y - w,
+        x2 - cdx,
+        y - w + wave_h,
+        x1 + cdx,
+        y - w + wave_h,
+        x1,
+        y - w
+    )
+}
+
+fn tapered_bar_path(x1: f64, y: f64, x2: f64, w: f64, color: &str) -> String {
+    let d = build_bar_d(x1, y, x2, w);
+    format!("  <path d=\"{d}\" fill=\"{color}\" class=\"tree-branch\"/>\n")
+}
+
+fn tapered_bar_highlight(x1: f64, y: f64, x2: f64, w: f64) -> String {
+    let d = build_bar_d(x1, y, x2, w * 0.25);
+    format!("  <path d=\"{d}\" fill=\"white\" opacity=\"0.20\" class=\"tree-branch\"/>\n")
+}
+
+/// Filled circle that rounds off a T-junction (trunk↔bar or drop↔bar).
+fn junction_circle(x: f64, y: f64, r: f64, color: &str) -> String {
+    format!(
+        "  <circle cx=\"{x:.2}\" cy=\"{y:.2}\" r=\"{r:.2}\" \
+         fill=\"{color}\" class=\"tree-branch\"/>\n"
+    )
+}
+
 // ── Common per-branch geometry ────────────────────────────────────────────────
 
 /// Compute the horizontal bar position for one branch.
@@ -318,17 +374,20 @@ fn render_tapered_style(branches: &[Branch], prefs: &Prefs) -> String {
             &trunk_color,
         ));
 
-        // Horizontal bar spanning all children
+        // Horizontal bar with organic wave
         if bar_max_x - bar_min_x > 1.0 {
-            out.push_str(&tapered_branch_path(
+            out.push_str(&tapered_bar_path(
                 bar_min_x,
                 bar_y,
                 bar_max_x,
-                bar_y,
-                w_bar,
                 w_bar,
                 &trunk_color,
             ));
+        }
+        // Round junction blobs at trunk↔bar and drop↔bar joins
+        out.push_str(&junction_circle(px, bar_y, w_bar, &trunk_color));
+        for &(cx, _) in &branch.child_pts {
+            out.push_str(&junction_circle(cx, bar_y, w_bar, &trunk_color));
         }
 
         // Vertical drops from bar to each child + canopy leaves
@@ -447,17 +506,20 @@ fn render_stroke_style(branches: &[Branch], prefs: &Prefs) -> String {
             &trunk_color,
         ));
 
-        // Horizontal bar
+        // Horizontal bar with organic wave
         if bar_max_x - bar_min_x > 1.0 {
-            out.push_str(&stroke_bezier_layers(
+            out.push_str(&stroke_bar_layers(
                 bar_min_x,
                 bar_y,
                 bar_max_x,
-                bar_y,
                 sw_bar,
-                0.0,
                 &trunk_color,
             ));
+        }
+        // Round junction blobs at T-joins
+        out.push_str(&junction_circle(px, bar_y, sw_bar / 2.0, &trunk_color));
+        for &(cx, _) in &branch.child_pts {
+            out.push_str(&junction_circle(cx, bar_y, sw_bar / 2.0, &trunk_color));
         }
 
         // Vertical drops + canopy leaves
@@ -549,6 +611,35 @@ fn stroke_bezier_layers(
         base_sw,
         base_sw * 0.6,
         base_sw * 0.3,
+        c = color
+    )
+}
+
+/// Horizontal bar for stroke style: three overlapping stroked paths with organic wave.
+fn stroke_bar_layers(x1: f64, y: f64, x2: f64, sw: f64, color: &str) -> String {
+    let wave_h = segment_wave(x1, y, x2) * sw * 0.4;
+    let cdx = (x2 - x1) * 0.4;
+    let d = format!(
+        "M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
+        x1,
+        y,
+        x1 + cdx,
+        y + wave_h,
+        x2 - cdx,
+        y + wave_h,
+        x2,
+        y
+    );
+    format!(
+        "  <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" \
+         opacity=\"0.35\" fill=\"none\" class=\"tree-branch\"/>\n\
+           <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" \
+         opacity=\"0.55\" fill=\"none\" class=\"tree-branch\"/>\n\
+           <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" \
+         opacity=\"0.85\" fill=\"none\" class=\"tree-branch\"/>\n",
+        sw,
+        sw * 0.6,
+        sw * 0.3,
         c = color
     )
 }
@@ -661,20 +752,23 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
         ));
         out.push_str(&tapered_branch_highlight(px, py, px, bar_y, w_py, w_bar));
 
-        // Horizontal bar
+        // Horizontal bar with organic wave
         if bar_max_x - bar_min_x > 1.0 {
-            out.push_str(&tapered_branch_path(
+            out.push_str(&tapered_bar_path(
                 bar_min_x,
                 bar_y,
                 bar_max_x,
-                bar_y,
-                w_bar,
                 w_bar,
                 &trunk_color,
             ));
-            out.push_str(&tapered_branch_highlight(
-                bar_min_x, bar_y, bar_max_x, bar_y, w_bar, w_bar,
-            ));
+            out.push_str(&tapered_bar_highlight(bar_min_x, bar_y, bar_max_x, w_bar));
+        }
+        // Round junction blobs at T-joins (main + highlight)
+        out.push_str(&junction_circle(px, bar_y, w_bar, &trunk_color));
+        out.push_str(&junction_circle(px, bar_y, w_bar * 0.25, "white"));
+        for &(cx, _) in &branch.child_pts {
+            out.push_str(&junction_circle(cx, bar_y, w_bar, &trunk_color));
+            out.push_str(&junction_circle(cx, bar_y, w_bar * 0.25, "white"));
         }
 
         // Vertical drops + canopy leaves
