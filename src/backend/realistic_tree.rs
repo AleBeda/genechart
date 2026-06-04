@@ -798,13 +798,13 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
 
 // ── Style: ink ────────────────────────────────────────────────────────────────
 //
-// Branch body consists entirely of multiple thin parallel dark Bézier strokes
-// (no filled shape). The hatching pattern itself forms the visible branch width
-// and texture, matching a pen-and-ink botanical illustration aesthetic.
+// Branch body consists entirely of multiple visible dark Bézier strokes on a
+// white background — no filled shape. The hatch bundle tapers naturally because
+// outer strokes fan from hw1 at the parent end to hw2 at the child end.
 // Leaves are hollow ellipse outlines only (fill="none").
 
-/// Multiple thin parallel dark ink strokes forming the visible body of a branch.
-/// Stroke offsets fan from hw1 at (x1,y1) to hw2 at (x2,y2) so the bundle tapers.
+/// Multiple dark ink strokes forming one branch segment.
+/// hw1/hw2 are the half-widths at start/end; strokes fan across the full ±hw range.
 fn ink_branch_strokes(
     x1: f64,
     y1: f64,
@@ -823,7 +823,8 @@ fn ink_branch_strokes(
     let ny = ux;
 
     let avg_hw = (hw1 + hw2) * 0.5;
-    let n = ((avg_hw * 0.85) as usize + 1).min(9).max(2);
+    // At MAX_HW≈12 we get ~9 strokes; at MIN_HW≈1.2 we get ~2.
+    let n = ((avg_hw * 0.65) as usize + 1).min(11).max(2);
 
     let mut seed = ((x1 * 1000.0) as u64)
         .wrapping_add((y1 * 997.0) as u64)
@@ -836,33 +837,33 @@ fn ink_branch_strokes(
         let base_frac = if n == 1 {
             0.0
         } else {
-            (i as f64 / (n - 1) as f64) * 1.70 - 0.85
+            (i as f64 / (n - 1) as f64) * 1.80 - 0.90
         };
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.12 - 0.06;
-        let perp_frac = (base_frac + jitter).clamp(-0.90, 0.90);
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 - 0.05;
+        let perp_frac = (base_frac + jitter).clamp(-0.95, 0.95);
 
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_s = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * len;
+        let shorten_s = (seed & 0xFFFF) as f64 / 65535.0 * 0.04 * len;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_e = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * len;
+        let shorten_e = (seed & 0xFFFF) as f64 / 65535.0 * 0.04 * len;
 
         let sx = x1 + nx * perp_frac * hw1 + ux * shorten_s;
         let sy = y1 + ny * perp_frac * hw1 + uy * shorten_s;
         let ex = x2 + nx * perp_frac * hw2 - ux * shorten_e;
         let ey = y2 + ny * perp_frac * hw2 - uy * shorten_e;
 
-        // Slight perpendicular waviness via quadratic-to-cubic conversion
+        // Perpendicular wave proportional to branch width for organic feel
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * avg_hw * 0.10;
+        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * avg_hw * 0.12;
         let mx = (sx + ex) * 0.5 + nx * wave;
         let my = (sy + ey) * 0.5 + ny * wave;
         let c1x = sx / 3.0 + mx * 2.0 / 3.0;
@@ -870,14 +871,18 @@ fn ink_branch_strokes(
         let c2x = ex / 3.0 + mx * 2.0 / 3.0;
         let c2y = ey / 3.0 + my * 2.0 / 3.0;
 
+        // Outer strokes are lighter and thinner; inner strokes heavier
+        let edge_frac = perp_frac.abs(); // 0 at centre, 1 at edge
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let opacity = 0.70 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+        let rand_f = (seed & 0xFFFF) as f64 / 65535.0;
+        let opacity = (0.85 - edge_frac * 0.35 + rand_f * 0.10).clamp(0.45, 0.95);
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let sw = 0.35 + (seed & 0xFFFF) as f64 / 65535.0 * 0.35;
+        let rand_f2 = (seed & 0xFFFF) as f64 / 65535.0;
+        let sw = (1.2 - edge_frac * 0.70 + rand_f2 * 0.50).clamp(0.40, 1.80);
 
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
@@ -889,9 +894,10 @@ fn ink_branch_strokes(
     out
 }
 
-/// Multiple thin parallel dark ink strokes across a horizontal bar.
+/// Multiple dark ink strokes across a horizontal bar, running parallel to the bar axis.
 fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
-    let n = ((w * 1.5) as usize + 1).min(9).max(2);
+    // w is half-height of bar; strokes span y-w .. y+w
+    let n = ((w * 1.3) as usize + 1).min(11).max(2);
     let length = (x2 - x1).abs().max(1.0);
     let mut seed = ((x1 * 1000.0) as u64)
         .wrapping_add((y * 997.0) as u64)
@@ -903,22 +909,22 @@ fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
         let base_frac = if n == 1 {
             0.0
         } else {
-            (i as f64 / (n - 1) as f64) * 1.70 - 0.85
+            (i as f64 / (n - 1) as f64) * 1.80 - 0.90
         };
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.12 - 0.06;
-        let ly = y + (base_frac + jitter).clamp(-0.90, 0.90) * w;
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 - 0.05;
+        let ly = y + (base_frac + jitter).clamp(-0.95, 0.95) * w;
 
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_l = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * length;
+        let shorten_l = (seed & 0xFFFF) as f64 / 65535.0 * 0.04 * length;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let shorten_r = (seed & 0xFFFF) as f64 / 65535.0 * 0.05 * length;
+        let shorten_r = (seed & 0xFFFF) as f64 / 65535.0 * 0.04 * length;
         let lx1 = x1 + shorten_l;
         let lx2 = x2 - shorten_r;
         let cdx = (lx2 - lx1) * 0.4;
@@ -926,16 +932,19 @@ fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * w * 0.10;
+        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * w * 0.12;
 
+        let edge_frac = base_frac.abs();
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let opacity = 0.70 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+        let rand_f = (seed & 0xFFFF) as f64 / 65535.0;
+        let opacity = (0.85 - edge_frac * 0.35 + rand_f * 0.10).clamp(0.45, 0.95);
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let sw = 0.35 + (seed & 0xFFFF) as f64 / 65535.0 * 0.35;
+        let rand_f2 = (seed & 0xFFFF) as f64 / 65535.0;
+        let sw = (1.2 - edge_frac * 0.70 + rand_f2 * 0.50).clamp(0.40, 1.80);
 
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
@@ -957,6 +966,7 @@ fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
 }
 
 /// Hollow ellipse ink-style leaves scattered around (cx, cy).
+/// Large spread radius and varied sizes to match the reference canopy density.
 fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
     let mut seed = ((cx * 1000.0) as u64 ^ (cy * 1000.0) as u64).wrapping_add(seed_off);
     let mut out = String::new();
@@ -965,17 +975,18 @@ fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
-        let radius = ((seed >> 16) & 0xFFFF) as f64 / 65535.0 * 26.0 + 6.0;
+        // Spread radius up to 65 SVG units — fills the gap between generations
+        let radius = ((seed >> 16) & 0xFFFF) as f64 / 65535.0 * 55.0 + 8.0;
         let lx = cx + angle.cos() * radius;
         let ly = cy + angle.sin() * radius * 0.55;
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let rx = (seed & 0xFF) as f64 / 255.0 * 4.0 + 4.0;
+        let rx = (seed & 0xFF) as f64 / 255.0 * 7.0 + 5.0; // 5–12 rx
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let ry = rx * (0.40 + (seed & 0xFF) as f64 / 255.0 * 0.25);
+        let ry = rx * (0.38 + (seed & 0xFF) as f64 / 255.0 * 0.28); // 0.38–0.66 * rx
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
@@ -983,7 +994,7 @@ fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 0.4;
+        let sw = 0.6 + (seed & 0xFF) as f64 / 255.0 * 0.5; // 0.6–1.1
         out.push_str(&format!(
             "  <ellipse cx=\"{0:.2}\" cy=\"{1:.2}\" rx=\"{2:.2}\" ry=\"{3:.2}\" \
              transform=\"rotate({4:.1},{0:.2},{1:.2})\" \
@@ -998,8 +1009,8 @@ fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
 fn ink_leaf_canopy(cx: f64, cy: f64, count: usize) -> String {
     let mut out = String::new();
     out.push_str(&ink_leaf_cluster(cx, cy, count, 0));
-    out.push_str(&ink_leaf_cluster(cx, cy - 28.0, count * 2 / 3 + 1, 1));
-    out.push_str(&ink_leaf_cluster(cx, cy - 56.0, count / 3 + 1, 2));
+    out.push_str(&ink_leaf_cluster(cx, cy - 36.0, count * 2 / 3 + 1, 1));
+    out.push_str(&ink_leaf_cluster(cx, cy - 72.0, count / 2 + 1, 2));
     out
 }
 
@@ -1042,15 +1053,18 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
 fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
     let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
-        "low" => 12,
-        "high" => 60,
-        _ => 30,
+        "low" => 20,
+        "high" => 80,
+        _ => 50, // "medium"
     };
 
     let (y_root, y_top) = y_bounds(branches);
     let y_range = (y_root - y_top).max(1.0);
-    const MAX_HW: f64 = 6.0;
-    const MIN_HW: f64 = 0.8;
+    // Half-widths: at root level branches span ±12 SVG units (24 total),
+    // tapering to ±1.2 at the finest tips — similar to tapered style's MAX_HW=9
+    // but wider to compensate for the lighter visual weight of strokes vs fills.
+    const MAX_HW: f64 = 12.0;
+    const MIN_HW: f64 = 1.2;
 
     let mut out = String::new();
 
