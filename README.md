@@ -101,6 +101,31 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
+**Realistic tree branches:** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Three rendering styles are available:
+
+| Style | Description |
+|---|---|
+| `"tapered"` (default) | Filled closed Bézier paths; branch width decreases globally from root to tips |
+| `"stroke"` | Layered stroked S-curve Bézier paths with opacity-based taper |
+| `"filter"` | Thick rounded paths with an SVG `feTurbulence` displacement filter for bark texture |
+
+```sh
+# Tapered style with medium leaf density
+genechart family.ged -r I1 --type boxed_couples \
+  --pref 'output.style.realistic_tree.enabled = true' \
+  --pref 'output.style.realistic_tree.style = "tapered"' \
+  -o chart.svg
+
+# Filter style with custom colours, no leaves
+genechart family.ged -r I1 --type boxed_couples \
+  --pref 'output.style.realistic_tree.enabled = true' \
+  --pref 'output.style.realistic_tree.style = "filter"' \
+  --pref 'output.style.realistic_tree.leaf_density = "none"' \
+  -o chart.svg
+```
+
+Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"`), `trunk_color` (hex), `leaf_color` (hex), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
+
 ### fan
 
 Half-circle pedigree fan (180°). Places ancestors in concentric rings, with the root at the center. Ancestors-only.
@@ -163,6 +188,9 @@ Vector graphics output. Supports boxes, connectors, and configurable fonts. Ever
 | Note hyperlinks (`<a>`) | `note_link` |
 | Highlight backgrounds (`<rect>`) | `highlight_rect` |
 | Photo images (`<image>`) | `photo` |
+| Realistic tree layer (`<g>`) | `realistic-tree` |
+| Realistic tree branch paths/lines | `tree-branch` |
+| Realistic tree leaf shapes | `tree-leaf` |
 | Text elements | `indi_name`, `spouse_name`, `indi_birth`, `indi_death`, `indi_marriage`, `indi_id`, `gen_num`, `note_text`; highlighted text also adds `highlighted` |
 
 ```sh

@@ -4,14 +4,14 @@
 //! replaces the default straight connectors. Boxes are rendered on top by the caller.
 //!
 //! Three style variants are available, selectable via `output.style.realistic_tree.style`:
-//!   "tapered" — filled closed Bézier paths, width proportional to subtree depth (default)
-//!   "stroke"  — layered stroked Bézier curves with simulated taper and S-curves
-//!   "filter"  — thick paths plus an SVG feTurbulence/feDisplacementMap filter for texture
+//!   "tapered" — filled closed Bézier paths, width globally decreasing from root to tips (default)
+//!   "stroke"  — layered stroked Bézier S-curves with global width taper
+//!   "filter"  — thick rounded paths with an SVG feTurbulence/feDisplacementMap filter for texture
 
 use crate::preferences::Prefs;
 use crate::scene::{ConnectorPrimitive, Primitive};
 
-// ── Public helpers ────────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /// Recursively collect all `ConnectorPrimitive` references from a primitive tree.
 pub fn collect_connectors<'a>(primitives: &'a [Primitive], out: &mut Vec<&'a ConnectorPrimitive>) {
@@ -24,13 +24,45 @@ pub fn collect_connectors<'a>(primitives: &'a [Primitive], out: &mut Vec<&'a Con
     }
 }
 
+/// Extra canvas height (display-space units) to add below the SVG for tree roots.
+///
+/// Only non-zero for root_pos = bottom charts (the default). Returns 0.0 for empty
+/// connector lists or when parent points are above child points (root_pos = top).
+pub fn root_extra_height(connectors: &[&ConnectorPrimitive]) -> f64 {
+    if connectors.is_empty() {
+        return 0.0;
+    }
+    // Detect root_pos_bottom: parent attachment points sit below (larger SVG Y) child points.
+    let sample_parent_y = connectors[0]
+        .parent_points
+        .first()
+        .map(|p| p.y)
+        .unwrap_or(0.0);
+    let sample_child_y = connectors[0]
+        .child_points
+        .first()
+        .map(|p| p.y)
+        .unwrap_or(0.0);
+    if sample_parent_y <= sample_child_y {
+        return 0.0; // root_pos = top — roots would extend above chart, skip
+    }
+    let y_root: f64 = connectors
+        .iter()
+        .flat_map(|c| c.parent_points.iter().map(|p| p.y))
+        .fold(f64::NEG_INFINITY, f64::max);
+    let y_top: f64 = connectors
+        .iter()
+        .flat_map(|c| c.child_points.iter().map(|p| p.y))
+        .fold(f64::INFINITY, f64::min);
+    ((y_root - y_top) * 0.22).max(40.0)
+}
+
 /// Render the full tree-branch SVG layer.
 ///
 /// Returns an SVG fragment (no outer `<svg>` tag) wrapped in
 /// `<g id="realistic-tree" class="realistic-tree">…</g>`.
 ///
-/// `to_svg_x` / `to_svg_y` are the same display→SVG coordinate transforms used in
-/// `svg.rs` (add MARGIN and chart_top_offset).
+/// `to_svg_x`/`to_svg_y` are the same display→SVG coordinate transforms used in `svg.rs`.
 pub fn render_tree_layer(
     connectors: &[&ConnectorPrimitive],
     to_svg_x: &dyn Fn(f64) -> f64,
@@ -41,7 +73,6 @@ pub fn render_tree_layer(
         return String::new();
     }
 
-    // Convert all connector points to SVG space.
     let branches: Vec<Branch> = connectors
         .iter()
         .map(|c| Branch {
@@ -69,13 +100,53 @@ pub fn render_tree_layer(
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
-/// One connector expressed in SVG coordinates.
-#[allow(dead_code)]
 struct Branch {
-    /// SVG-space attachment points at the bottom of the parent box (1 or 2).
     parent_pts: Vec<(f64, f64)>,
-    /// SVG-space attachment points at the top of each child box.
     child_pts: Vec<(f64, f64)>,
+}
+
+// ── Shared geometry helpers ────────────────────────────────────────────────────
+
+/// Width interpolated at SVG Y coordinate.
+/// Returns `max_w` at `y_root` (large Y, near root) and `min_w` at `y_top` (small Y, near tips).
+fn width_at(y: f64, y_top: f64, y_range: f64, max_w: f64, min_w: f64) -> f64 {
+    let t = ((y - y_top) / y_range).clamp(0.0, 1.0);
+    min_w + (max_w - min_w) * t
+}
+
+/// Maximum parent Y and minimum child Y across all branches (SVG space).
+fn y_bounds(branches: &[Branch]) -> (f64, f64) {
+    let y_root = branches
+        .iter()
+        .flat_map(|b| b.parent_pts.iter().map(|p| p.1))
+        .fold(f64::NEG_INFINITY, f64::max);
+    let y_top = branches
+        .iter()
+        .flat_map(|b| b.child_pts.iter().map(|p| p.1))
+        .fold(f64::INFINITY, f64::min);
+    (y_root, y_top)
+}
+
+/// X coordinate of the root-level branch parent attachment (the branch with the largest parent Y).
+fn root_center_x(branches: &[Branch], _y_root: f64) -> f64 {
+    branches
+        .iter()
+        .filter(|b| !b.parent_pts.is_empty())
+        .max_by(|a, bb| {
+            let ya = a
+                .parent_pts
+                .iter()
+                .map(|p| p.1)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let yb = bb
+                .parent_pts
+                .iter()
+                .map(|p| p.1)
+                .fold(f64::NEG_INFINITY, f64::max);
+            ya.partial_cmp(&yb).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|b| b.parent_pts.iter().map(|p| p.0).sum::<f64>() / b.parent_pts.len() as f64)
+        .unwrap_or_else(|| branches[0].parent_pts[0].0)
 }
 
 // ── Style: tapered ────────────────────────────────────────────────────────────
@@ -83,90 +154,75 @@ struct Branch {
 fn render_tapered_style(branches: &[Branch], prefs: &Prefs) -> String {
     let trunk_color = format!("#{:06X}", prefs.output.style.realistic_tree.trunk_color);
     let leaf_color = format!("#{:06X}", prefs.output.style.realistic_tree.leaf_color);
-    let leaf_density = prefs.output.style.realistic_tree.leaf_density.as_str();
-    let leaf_count: usize = match leaf_density {
+    let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
         "low" => 5,
         "high" => 25,
         _ => 12, // "medium"
     };
 
-    let base_width: f64 = 8.0;
+    let (y_root, y_top) = y_bounds(branches);
+    let y_range = (y_root - y_top).max(1.0);
+    const MAX_HW: f64 = 9.0;
+    const MIN_HW: f64 = 1.0;
+
     let mut out = String::new();
+
+    // Tree roots below the root box (root_pos_bottom only)
+    if y_root > y_top {
+        let rx = root_center_x(branches, y_root);
+        let root_depth = y_range * 0.22;
+        out.push_str(&tapered_roots(
+            rx,
+            y_root,
+            root_depth,
+            MAX_HW,
+            MIN_HW,
+            &trunk_color,
+        ));
+    }
 
     for branch in branches {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
             continue;
         }
 
-        let child_count = branch.child_pts.len();
-
-        // Parent center x: average of parent attachment points
-        let px: f64 =
+        let px =
             branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
-        let py: f64 =
+        let py =
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
+        let mean_cy =
+            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
+        let bar_y = (py + mean_cy) / 2.0;
 
-        // Mean child Y
-        let mean_child_y: f64 =
-            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / child_count as f64;
-
-        // Bar Y: midpoint between parent Y and mean child Y
-        let bar_y = (py + mean_child_y) / 2.0;
-
-        // Trunk width (from parent up to bar_y)
-        let trunk_half_w = base_width * (child_count as f64).sqrt() / 2.0;
-        // Sub-branch half-width from bar_y to each child
-        let sub_half_w = (base_width / (child_count as f64).sqrt() / 2.0).max(1.0);
-
-        // Draw trunk segment: from (px, py) up to (px, bar_y)
+        // Trunk from parent attachment to bar, width driven globally by Y position
+        let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
+        let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
         out.push_str(&tapered_branch_path(
             px,
             py,
             px,
             bar_y,
-            trunk_half_w,
-            trunk_half_w,
+            w_py,
+            w_bar,
             &trunk_color,
         ));
 
-        // Draw sub-branches from (px, bar_y) down to each child
+        // Sub-branches from bar to each child
         for &(cx, cy) in &branch.child_pts {
+            let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
             out.push_str(&tapered_branch_path(
                 px,
                 bar_y,
                 cx,
                 cy,
-                trunk_half_w,
-                sub_half_w,
+                w_bar,
+                w_cy,
                 &trunk_color,
             ));
         }
 
-        // Horizontal bar connecting all sub-branch tops at bar_y (only if multiple children)
-        if child_count > 1 {
-            let min_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::INFINITY, f64::min);
-            let max_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::NEG_INFINITY, f64::max);
-            let bar_half_h = 1.5_f64;
-            out.push_str(&format!(
-                "  <rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\" class=\"tree-branch\"/>\n",
-                min_cx,
-                bar_y - bar_half_h,
-                max_cx - min_cx,
-                bar_half_h * 2.0,
-                trunk_color
-            ));
-        }
-
-        // Leaf clusters at each child tip
+        // Leaf clusters at child tips
         if leaf_count > 0 {
             for &(cx, cy) in &branch.child_pts {
                 out.push_str(&tapered_leaf_cluster(cx, cy, leaf_count, &leaf_color));
@@ -177,9 +233,54 @@ fn render_tapered_style(branches: &[Branch], prefs: &Prefs) -> String {
     out
 }
 
-/// Generate a filled closed Bézier path for one branch segment.
-/// (x1,y1) is the wide end (bottom in SVG space), (x2,y2) is the narrow end (top).
-/// w1 and w2 are the half-widths at each end.
+/// Four root branches spreading downward from the root box attachment.
+fn tapered_roots(
+    root_x: f64,
+    y_root: f64,
+    root_depth: f64,
+    max_hw: f64,
+    min_hw: f64,
+    color: &str,
+) -> String {
+    let junction_y = y_root + root_depth * 0.30;
+    let junction_hw = max_hw;
+
+    // Short vertical trunk from root box down to junction
+    let mut out = tapered_branch_path(
+        root_x,
+        y_root,
+        root_x,
+        junction_y,
+        junction_hw,
+        junction_hw * 0.88,
+        color,
+    );
+
+    // Four root branches fanning outward and downward
+    let tips: [(f64, f64, f64); 4] = [
+        (root_x - root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
+        (root_x - root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
+        (root_x + root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
+        (root_x + root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
+    ];
+    for (ex, ey, end_scale) in tips {
+        let end_hw = min_hw + (junction_hw * 0.88 - min_hw) * end_scale;
+        out.push_str(&tapered_branch_path(
+            root_x,
+            junction_y,
+            ex,
+            ey,
+            junction_hw * 0.88,
+            end_hw,
+            color,
+        ));
+    }
+    out
+}
+
+/// Filled closed Bézier path for one branch segment.
+/// `(x1, y1)` is the wide end; `(x2, y2)` is the narrow end.
+/// Works for both upward segments (y1 > y2) and downward root segments (y1 < y2).
 fn tapered_branch_path(
     x1: f64,
     y1: f64,
@@ -189,10 +290,12 @@ fn tapered_branch_path(
     w2: f64,
     color: &str,
 ) -> String {
-    let dy = y1 - y2; // positive: y1 is lower (larger SVG y) than y2
+    let dy = y1 - y2;
     let ctrl = dy * 0.4;
     format!(
-        "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} L {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} Z\" fill=\"{}\" class=\"tree-branch\"/>\n",
+        "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} \
+         L {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} Z\" \
+         fill=\"{}\" class=\"tree-branch\"/>\n",
         x1 - w1,
         y1,
         x1 - w1,
@@ -213,7 +316,6 @@ fn tapered_branch_path(
     )
 }
 
-/// Generate leaf ellipses at a terminal child tip using a deterministic LCG.
 fn tapered_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
     let mut seed = (cx * 1000.0) as u64 ^ (cy * 1000.0) as u64;
     let mut out = String::new();
@@ -226,7 +328,8 @@ fn tapered_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
         let ex = cx + angle.cos() * radius;
         let ey = cy + angle.sin() * radius * 0.6;
         out.push_str(&format!(
-            "  <ellipse cx=\"{:.2}\" cy=\"{:.2}\" rx=\"4\" ry=\"2.5\" fill=\"{}\" opacity=\"0.7\" class=\"tree-leaf\"/>\n",
+            "  <ellipse cx=\"{:.2}\" cy=\"{:.2}\" rx=\"4\" ry=\"2.5\" \
+             fill=\"{}\" opacity=\"0.7\" class=\"tree-leaf\"/>\n",
             ex, ey, color
         ));
     }
@@ -238,50 +341,54 @@ fn tapered_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
 fn render_stroke_style(branches: &[Branch], prefs: &Prefs) -> String {
     let trunk_color = format!("#{:06X}", prefs.output.style.realistic_tree.trunk_color);
     let leaf_color = format!("#{:06X}", prefs.output.style.realistic_tree.leaf_color);
-    let leaf_density = prefs.output.style.realistic_tree.leaf_density.as_str();
-    let leaf_count: usize = match leaf_density {
+    let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
         "low" => 4,
         "high" => 22,
         _ => 10, // "medium"
     };
 
-    let base_sw: f64 = 6.0;
+    let (y_root, y_top) = y_bounds(branches);
+    let y_range = (y_root - y_top).max(1.0);
+    const MAX_SW: f64 = 14.0;
+    const MIN_SW: f64 = 2.0;
+
     let mut out = String::new();
+
+    // Tree roots below the root box (root_pos_bottom only)
+    if y_root > y_top {
+        let rx = root_center_x(branches, y_root);
+        let root_depth = y_range * 0.22;
+        out.push_str(&stroke_roots(rx, y_root, root_depth, MAX_SW, &trunk_color));
+    }
 
     for branch in branches {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
             continue;
         }
 
-        let child_count = branch.child_pts.len() as f64;
-
-        // Parent center
-        let px: f64 =
+        let px =
             branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
-        let py: f64 =
+        let py =
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
+        let mean_cy =
+            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
+        let bar_y = (py + mean_cy) / 2.0;
 
-        // Mean child Y
-        let mean_child_y: f64 = branch.child_pts.iter().map(|p| p.1).sum::<f64>() / child_count;
-
-        // Bar Y: midpoint between parent Y and mean child Y
-        let bar_y = (py + mean_child_y) / 2.0;
-
-        // ── Trunk: from (px, py) up to (px, bar_y) ──────────────────────────
-        let trunk_sw = base_sw * child_count.sqrt();
+        // Trunk from parent to bar_y
+        let sw_py = width_at(py, y_top, y_range, MAX_SW, MIN_SW);
         out.push_str(&stroke_bezier_layers(
             px,
             py,
             px,
             bar_y,
-            trunk_sw,
+            sw_py,
             0.0,
             &trunk_color,
         ));
 
-        // ── Sub-branches: from (px, bar_y) to each child ────────────────────
-        let sub_sw = base_sw / child_count.sqrt();
+        // Sub-branches from bar_y to each child
+        let sw_bar = width_at(bar_y, y_top, y_range, MAX_SW, MIN_SW);
         for &(cx, cy) in &branch.child_pts {
             let lateral = (cx - px) * 0.15;
             out.push_str(&stroke_bezier_layers(
@@ -289,31 +396,13 @@ fn render_stroke_style(branches: &[Branch], prefs: &Prefs) -> String {
                 bar_y,
                 cx,
                 cy,
-                sub_sw,
+                sw_bar,
                 lateral,
                 &trunk_color,
             ));
         }
 
-        // ── Horizontal connector at bar_y (multiple children only) ──────────
-        if branch.child_pts.len() > 1 {
-            let min_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::INFINITY, f64::min);
-            let max_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::NEG_INFINITY, f64::max);
-            out.push_str(&format!(
-                "  <line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"1.5\" opacity=\"0.7\" fill=\"none\" class=\"tree-branch\"/>\n",
-                min_cx, bar_y, max_cx, bar_y, trunk_color
-            ));
-        }
-
-        // ── Leaf clusters at each child tip ──────────────────────────────────
+        // Leaf clusters at child tips
         if leaf_count > 0 {
             for &(cx, cy) in &branch.child_pts {
                 out.push_str(&stroke_leaf_cluster(cx, cy, leaf_count, &leaf_color));
@@ -324,12 +413,47 @@ fn render_stroke_style(branches: &[Branch], prefs: &Prefs) -> String {
     out
 }
 
-/// Emit three overlapping stroked cubic Bézier `<path>` elements (thick→thin, low→high opacity)
-/// to simulate a tapered organic branch.
-///
-/// `lateral_offset` controls the S-bow direction: positive = bow right, negative = bow left.
-/// For trunk segments call with `lateral_offset = 0.0` (uses `dy * 0.08` rightward bow).
-/// For sub-branches call with `lateral_offset = (cx - px) * 0.15` (curves toward child).
+/// Four root branches spreading downward from the root box, stroke style.
+fn stroke_roots(root_x: f64, y_root: f64, root_depth: f64, max_sw: f64, color: &str) -> String {
+    let junction_y = y_root + root_depth * 0.30;
+
+    // Short vertical trunk from root box down to junction
+    let mut out = stroke_bezier_layers(root_x, y_root, root_x, junction_y, max_sw, 0.0, color);
+
+    // Four root branches fanning outward and downward
+    let tips: [(f64, f64, f64); 4] = [
+        (
+            root_x - root_depth * 0.48,
+            y_root + root_depth * 0.85,
+            max_sw * 0.50,
+        ),
+        (
+            root_x - root_depth * 0.20,
+            y_root + root_depth * 0.95,
+            max_sw * 0.65,
+        ),
+        (
+            root_x + root_depth * 0.20,
+            y_root + root_depth * 0.95,
+            max_sw * 0.65,
+        ),
+        (
+            root_x + root_depth * 0.48,
+            y_root + root_depth * 0.85,
+            max_sw * 0.50,
+        ),
+    ];
+    for (ex, ey, sw) in tips {
+        let lateral = (ex - root_x) * 0.12;
+        out.push_str(&stroke_bezier_layers(
+            root_x, junction_y, ex, ey, sw, lateral, color,
+        ));
+    }
+    out
+}
+
+/// Three overlapping stroked cubic Bézier `<path>` elements (thick→thin, low→high opacity)
+/// to simulate a tapered organic branch. `lateral_offset = 0.0` uses `dy * 0.08` S-bow.
 fn stroke_bezier_layers(
     x1: f64,
     y1: f64,
@@ -339,48 +463,31 @@ fn stroke_bezier_layers(
     lateral_offset: f64,
     color: &str,
 ) -> String {
-    let dy = y1 - y2; // positive: y1 is lower in SVG space
+    let dy = y1 - y2;
     let lat = if lateral_offset == 0.0 {
         dy * 0.08
     } else {
         lateral_offset
     };
-
-    // Control points for a gentle S-curve
     let cx1 = x1 + lat;
     let cy1 = y1 - dy * 0.35;
     let cx2 = x2 - lat;
     let cy2 = y2 + dy * 0.35;
-
     let d = format!(
         "M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
         x1, y1, cx1, cy1, cx2, cy2, x2, y2
     );
-
-    // Layer 1: thick, low opacity
-    let l1 = format!(
-        "  <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.2}\" opacity=\"0.35\" fill=\"none\" class=\"tree-branch\"/>\n",
-        d, color, base_sw
-    );
-    // Layer 2: medium
-    let l2 = format!(
-        "  <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.2}\" opacity=\"0.55\" fill=\"none\" class=\"tree-branch\"/>\n",
-        d,
-        color,
-        base_sw * 0.6
-    );
-    // Layer 3: thin, high opacity
-    let l3 = format!(
-        "  <path d=\"{}\" stroke=\"{}\" stroke-width=\"{:.2}\" opacity=\"0.85\" fill=\"none\" class=\"tree-branch\"/>\n",
-        d,
-        color,
-        base_sw * 0.3
-    );
-
-    format!("{l1}{l2}{l3}")
+    format!(
+        "  <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" opacity=\"0.35\" fill=\"none\" class=\"tree-branch\"/>\n\
+           <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" opacity=\"0.55\" fill=\"none\" class=\"tree-branch\"/>\n\
+           <path d=\"{d}\" stroke=\"{c}\" stroke-width=\"{:.2}\" opacity=\"0.85\" fill=\"none\" class=\"tree-branch\"/>\n",
+        base_sw,
+        base_sw * 0.6,
+        base_sw * 0.3,
+        c = color
+    )
 }
 
-/// Generate leaf shapes (Bézier teardrop) at a terminal child tip using a deterministic LCG.
 fn stroke_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
     let mut seed = (cx * 1000.0) as u64 ^ (cy * 1000.0) as u64;
     let mut out = String::new();
@@ -392,25 +499,18 @@ fn stroke_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
         let radius = ((seed >> 16) & 0xFFFF) as f64 / 65535.0 * 18.0 + 4.0;
         let lx = cx + angle.cos() * radius;
         let ly = cy + angle.sin() * radius;
-
-        // Size randomization
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let rx = ((seed & 0xFF) as f64 / 255.0) * 3.0 + 2.0;
         let ry = rx * 1.8;
-
-        // Rotation angle for the leaf
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let rot_deg = (seed & 0xFFFF) as f64 / 65535.0 * 360.0;
-
-        // Simple leaf teardrop: M lx,ly  Q (lx+rx),(ly-ry)  lx,(ly-ry*2)  Q (lx-rx),(ly-ry)  lx,ly
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} Q {:.2},{:.2} {:.2},{:.2} Q {:.2},{:.2} {:.2},{:.2}\" \
-             fill=\"{}\" opacity=\"0.75\" \
-             transform=\"rotate({:.1},{:.2},{:.2})\" \
+             fill=\"{}\" opacity=\"0.75\" transform=\"rotate({:.1},{:.2},{:.2})\" \
              class=\"tree-leaf\"/>\n",
             lx,
             ly,
@@ -440,29 +540,25 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
 
     let trunk_color = format!("#{:06X}", prefs.output.style.realistic_tree.trunk_color);
     let leaf_color = format!("#{:06X}", prefs.output.style.realistic_tree.leaf_color);
-    let leaf_density = prefs.output.style.realistic_tree.leaf_density.as_str();
-    let leaf_count: usize = match leaf_density {
+    let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
         "low" => 6,
         "high" => 28,
         _ => 14, // "medium"
     };
 
-    let base_sw: f64 = 9.0;
+    let (y_root, y_top) = y_bounds(branches);
+    let y_range = (y_root - y_top).max(1.0);
+    const MAX_SW: f64 = 16.0;
+    const MIN_SW: f64 = 3.0;
 
-    // Build set of all parent points (rounded) for terminal child detection.
-    let parent_set: std::collections::HashSet<(i64, i64)> = branches
-        .iter()
-        .flat_map(|b| b.parent_pts.iter())
-        .map(|&(x, y)| (x.round() as i64, y.round() as i64))
-        .collect();
-
-    // SVG filter definition.
     let filter_def = concat!(
         "<defs>\n",
         "  <filter id=\"bark-texture\" x=\"-10%\" y=\"-10%\" width=\"120%\" height=\"120%\">\n",
-        "    <feTurbulence type=\"fractalNoise\" baseFrequency=\"0.035 0.018\" numOctaves=\"4\" seed=\"42\" result=\"noise\"/>\n",
-        "    <feDisplacementMap in=\"SourceGraphic\" in2=\"noise\" scale=\"5\" xChannelSelector=\"R\" yChannelSelector=\"G\"/>\n",
+        "    <feTurbulence type=\"fractalNoise\" baseFrequency=\"0.035 0.018\" \
+         numOctaves=\"4\" seed=\"42\" result=\"noise\"/>\n",
+        "    <feDisplacementMap in=\"SourceGraphic\" in2=\"noise\" scale=\"5\" \
+         xChannelSelector=\"R\" yChannelSelector=\"G\"/>\n",
         "  </filter>\n",
         "</defs>\n",
     );
@@ -470,31 +566,28 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
     let mut filter_body = String::new();
     let mut leaves = String::new();
 
+    // Tree roots inside the filter group (root_pos_bottom only)
+    if y_root > y_top {
+        let rx = root_center_x(branches, y_root);
+        let root_depth = y_range * 0.22;
+        filter_body.push_str(&filter_roots(rx, y_root, root_depth, MAX_SW, &trunk_color));
+    }
+
     for branch in branches {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
             continue;
         }
 
-        let child_count = branch.child_pts.len();
-
-        // Parent center (average of parent attachment points).
-        let px: f64 =
+        let px =
             branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
-        let py: f64 =
+        let py =
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
+        let mean_cy =
+            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
+        let bar_y = (py + mean_cy) / 2.0;
 
-        // Mean child Y.
-        let mean_child_y: f64 =
-            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / child_count as f64;
-
-        // Bar Y: midpoint between parent Y and mean child Y.
-        let bar_y = (py + mean_child_y) / 2.0;
-
-        // Stroke widths.
-        let trunk_sw = base_sw * (child_count as f64).sqrt();
-        let sub_sw = (base_sw / (child_count as f64).sqrt()).max(3.0);
-
-        // Draw trunk: (px, py) → (px, bar_y) with gentle quadratic Bézier.
+        // Trunk
+        let trunk_sw = width_at(py, y_top, y_range, MAX_SW, MIN_SW);
         let dy_trunk = py - bar_y;
         filter_body.push_str(&filter_trunk_path(
             px,
@@ -504,42 +597,18 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
             trunk_sw,
             &trunk_color,
         ));
-
-        // Light highlight on trunk.
         filter_body.push_str(&filter_highlight_path(px, py, bar_y, dy_trunk, trunk_sw));
 
-        // Draw sub-branches: (px, bar_y) → (cx, cy) for each child.
+        // Sub-branches
+        let sub_sw = width_at(bar_y, y_top, y_range, MAX_SW, MIN_SW);
         for &(cx, cy) in &branch.child_pts {
             filter_body.push_str(&filter_sub_path(px, bar_y, cx, cy, sub_sw, &trunk_color));
         }
 
-        // Horizontal bar at bar_y when multiple children.
-        if child_count > 1 {
-            let min_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::INFINITY, f64::min);
-            let max_cx = branch
-                .child_pts
-                .iter()
-                .map(|p| p.0)
-                .fold(f64::NEG_INFINITY, f64::max);
-            filter_body.push_str(&format!(
-                "  <line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" \
-                 stroke=\"{}\" stroke-width=\"2.5\" stroke-linecap=\"round\" \
-                 fill=\"none\" class=\"tree-branch\"/>\n",
-                min_cx, bar_y, max_cx, bar_y, trunk_color
-            ));
-        }
-
-        // Leaf clusters at terminal child tips (outside filter group, accumulated separately).
+        // Leaf clusters (outside filter group so leaves aren't displaced)
         if leaf_count > 0 {
             for &(cx, cy) in &branch.child_pts {
-                let key = (cx.round() as i64, cy.round() as i64);
-                if !parent_set.contains(&key) {
-                    leaves.push_str(&filter_leaf_cluster(cx, cy, leaf_count, &leaf_color));
-                }
+                leaves.push_str(&filter_leaf_cluster(cx, cy, leaf_count, &leaf_color));
             }
         }
     }
@@ -547,7 +616,46 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
     format!("{filter_def}<g filter=\"url(#bark-texture)\">\n{filter_body}</g>\n{leaves}")
 }
 
-/// Quadratic Bézier trunk path (px, py) → (px, bar_y) with a gentle lateral bow.
+/// Four root branches inside the filter group, spreading downward.
+fn filter_roots(root_x: f64, y_root: f64, root_depth: f64, max_sw: f64, color: &str) -> String {
+    let junction_y = y_root + root_depth * 0.30;
+    let dy_trunk = y_root - junction_y; // negative (going down)
+
+    // Short vertical trunk from root box down to junction
+    let mut out = filter_trunk_path(root_x, y_root, junction_y, dy_trunk, max_sw, color);
+    out.push_str(&filter_highlight_path(
+        root_x, y_root, junction_y, dy_trunk, max_sw,
+    ));
+
+    // Four root branches fanning outward and downward
+    let tips: [(f64, f64, f64); 4] = [
+        (
+            root_x - root_depth * 0.48,
+            y_root + root_depth * 0.85,
+            max_sw * 0.55,
+        ),
+        (
+            root_x - root_depth * 0.20,
+            y_root + root_depth * 0.95,
+            max_sw * 0.70,
+        ),
+        (
+            root_x + root_depth * 0.20,
+            y_root + root_depth * 0.95,
+            max_sw * 0.70,
+        ),
+        (
+            root_x + root_depth * 0.48,
+            y_root + root_depth * 0.85,
+            max_sw * 0.55,
+        ),
+    ];
+    for (ex, ey, sw) in tips {
+        out.push_str(&filter_sub_path(root_x, junction_y, ex, ey, sw, color));
+    }
+    out
+}
+
 fn filter_trunk_path(px: f64, py: f64, bar_y: f64, dy: f64, sw: f64, color: &str) -> String {
     let qcx = px + dy * 0.05;
     let qcy = bar_y + (py - bar_y) * 0.5;
@@ -559,20 +667,23 @@ fn filter_trunk_path(px: f64, py: f64, bar_y: f64, dy: f64, sw: f64, color: &str
     )
 }
 
-/// Light highlight overlay on the trunk segment (white, low opacity).
 fn filter_highlight_path(px: f64, py: f64, bar_y: f64, dy: f64, trunk_sw: f64) -> String {
     let qcx = px + dy * 0.05;
     let qcy = bar_y + (py - bar_y) * 0.5;
-    let highlight_sw = trunk_sw * 0.25;
     format!(
         "  <path d=\"M {:.2},{:.2} Q {:.2},{:.2} {:.2},{:.2}\" \
          stroke=\"white\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" \
          stroke-linejoin=\"round\" fill=\"none\" opacity=\"0.15\"/>\n",
-        px, py, qcx, qcy, px, bar_y, highlight_sw
+        px,
+        py,
+        qcx,
+        qcy,
+        px,
+        bar_y,
+        trunk_sw * 0.25
     )
 }
 
-/// Quadratic Bézier sub-branch path (px, bar_y) → (cx, cy).
 fn filter_sub_path(px: f64, bar_y: f64, cx: f64, cy: f64, sw: f64, color: &str) -> String {
     let qcx = cx * 0.4 + px * 0.6;
     let qcy = bar_y + (cy - bar_y) * 0.4;
@@ -584,7 +695,6 @@ fn filter_sub_path(px: f64, bar_y: f64, cx: f64, cy: f64, sw: f64, color: &str) 
     )
 }
 
-/// Leaf cluster at a terminal child tip using a deterministic LCG.
 fn filter_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
     let mut seed = (cx * 1000.0) as u64 ^ (cy * 1000.0) as u64;
     let mut out = String::new();
@@ -593,8 +703,7 @@ fn filter_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
-        let r_norm = ((seed >> 16) & 0xFF) as f64 / 255.0;
-        let dist = r_norm * 22.0;
+        let dist = ((seed >> 16) & 0xFF) as f64 / 255.0 * 22.0;
         let lx = cx + angle.cos() * dist;
         let ly = cy + angle.sin() * dist;
         seed = seed
@@ -602,7 +711,8 @@ fn filter_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
             .wrapping_add(1442695040888963407);
         let radius = ((seed >> 24) & 0xF) as f64 / 15.0 * 3.5 + 1.5;
         out.push_str(&format!(
-            "  <circle cx=\"{:.2}\" cy=\"{:.2}\" r=\"{:.2}\" fill=\"{}\" opacity=\"0.65\" class=\"tree-leaf\"/>\n",
+            "  <circle cx=\"{:.2}\" cy=\"{:.2}\" r=\"{:.2}\" \
+             fill=\"{}\" opacity=\"0.65\" class=\"tree-leaf\"/>\n",
             lx, ly, radius, color
         ));
     }

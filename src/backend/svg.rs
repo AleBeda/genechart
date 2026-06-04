@@ -853,6 +853,20 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let realistic_tree_active =
         prefs.output.style.realistic_tree.enabled && output.is_boxed_couples();
 
+    // Collect connectors early so root_extra_height can expand the canvas before we emit the header.
+    let rt_connectors: Vec<&crate::scene::ConnectorPrimitive> = if realistic_tree_active {
+        let mut v = Vec::new();
+        crate::backend::realistic_tree::collect_connectors(&scene.primitives, &mut v);
+        v
+    } else {
+        Vec::new()
+    };
+    let tree_root_extra_h = if realistic_tree_active {
+        crate::backend::realistic_tree::root_extra_height(&rt_connectors)
+    } else {
+        0.0
+    };
+
     // Shared rendering context (used for boxed_couples groups and all non-fan primitives)
     let ctx = BcSvgCtx {
         to_svg_x: &to_svg_x,
@@ -874,8 +888,12 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     } else {
         prefs.output.style.spacing.copyright
     };
-    let total_h =
-        scene.canvas_bounds.h + 2.0 * MARGIN + chart_top_offset + copy_line_h + copy_spacing;
+    let total_h = scene.canvas_bounds.h
+        + 2.0 * MARGIN
+        + chart_top_offset
+        + copy_line_h
+        + copy_spacing
+        + tree_root_extra_h;
 
     let canvas_w = format!("{total_w:.0}");
     let canvas_h = format!("{total_h:.0}");
@@ -908,10 +926,8 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
 
     // Realistic tree background layer (rendered before boxes so boxes are on top)
     if realistic_tree_active {
-        let mut connectors: Vec<&crate::scene::ConnectorPrimitive> = Vec::new();
-        crate::backend::realistic_tree::collect_connectors(&scene.primitives, &mut connectors);
         out.push_str(&crate::backend::realistic_tree::render_tree_layer(
-            &connectors,
+            &rt_connectors,
             &to_svg_x,
             &to_svg_y,
             prefs,
