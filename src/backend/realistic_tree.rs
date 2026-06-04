@@ -1068,6 +1068,7 @@ fn ink_grain_line(
     frac: f64,
     opacity: f64,
     stroke_width: f64,
+    color: &str,
     seed_off: u64,
 ) -> String {
     const N: usize = 32;
@@ -1132,7 +1133,7 @@ fn ink_grain_line(
     }
 
     format!(
-        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"{stroke_width:.2}\" \
+        "  <path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{stroke_width:.2}\" \
          opacity=\"{opacity:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n"
     )
 }
@@ -1202,16 +1203,16 @@ fn ink_smooth_branch(
     d.push_str(" Z");
 
     let mut out = String::new();
+
+    // Solid black filled body — the closed offset-curve polygon becomes the branch silhouette.
     out.push_str(&format!(
-        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"1.20\" \
+        "  <path d=\"{d}\" fill=\"#111\" stroke=\"none\" \
          stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
     ));
 
-    // Bark striations: N continuous grain lines, each following the full Bézier arc
-    // at a fixed perpendicular offset from the centreline.  Because every line traces
-    // the same curve shape (just shifted across the branch width), adjacent lines are
-    // inherently parallel — they read as wood-grain fibres, not scattered marks.
-    // Per-point perpendicular noise on each line gives organic waviness.
+    // White grain lines on top simulate wood highlights and longitudinal fibres.
+    // Bias toward the upper/right side (frac > 0 = lit side) — same parallel-striation
+    // technique as before, but white-on-black instead of black-on-white.
     let avg_hw = (hw_p + hw_c) * 0.5;
     let n_grains = ((avg_hw * 2.0 / 4.5) as usize + 2).max(2).min(16);
     let branch_seed = ((px * 1000.0) as u64)
@@ -1221,13 +1222,12 @@ fn ink_smooth_branch(
         .wrapping_add(seed_off.wrapping_mul(2_654_435_761));
 
     for i in 0..n_grains {
-        // Evenly spaced from −0.82 to +0.82 of the local branch half-width
         let frac = -0.82 + (i as f64 + 0.5) * 1.64 / n_grains as f64;
-        // Shadow bias: frac < 0 = left/lower side gets denser, darker strokes.
+        // Highlight bias: frac > 0 = upper/right (lit) side gets brighter, thicker strokes.
         let edge_dist = frac.abs();
-        let shadow_bonus = 0.22 * (-frac).max(0.0);
-        let opacity = (0.65 - edge_dist * 0.25 + shadow_bonus).clamp(0.15, 0.85);
-        let stroke_width = if frac < 0.0 { 0.80 } else { 0.55 };
+        let highlight_bonus = 0.22 * frac.max(0.0);
+        let opacity = (0.50 - edge_dist * 0.22 + highlight_bonus).clamp(0.08, 0.70);
+        let stroke_width = if frac > 0.0 { 0.75 } else { 0.45 };
         out.push_str(&ink_grain_line(
             px,
             py,
@@ -1242,6 +1242,7 @@ fn ink_smooth_branch(
             frac,
             opacity,
             stroke_width,
+            "#FFF",
             branch_seed.wrapping_add(i as u64 * 7_919),
         ));
     }
