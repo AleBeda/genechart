@@ -318,6 +318,46 @@ fn branch_bar(py: f64, mean_cy: f64, px: f64, child_pts: &[(f64, f64)]) -> (f64,
     (bar_y, bar_min_x, bar_max_x)
 }
 
+// ── Cubic Bézier helpers (used by ink style) ─────────────────────────────────
+
+/// Evaluate a cubic Bézier at parameter t ∈ [0, 1].
+fn bezier3(
+    p0x: f64,
+    p0y: f64,
+    p1x: f64,
+    p1y: f64,
+    p2x: f64,
+    p2y: f64,
+    p3x: f64,
+    p3y: f64,
+    t: f64,
+) -> (f64, f64) {
+    let m = 1.0 - t;
+    (
+        m * m * m * p0x + 3.0 * m * m * t * p1x + 3.0 * m * t * t * p2x + t * t * t * p3x,
+        m * m * m * p0y + 3.0 * m * m * t * p1y + 3.0 * m * t * t * p2y + t * t * t * p3y,
+    )
+}
+
+/// Normalised tangent of a cubic Bézier at t.
+fn bezier3_tangent(
+    p0x: f64,
+    p0y: f64,
+    p1x: f64,
+    p1y: f64,
+    p2x: f64,
+    p2y: f64,
+    p3x: f64,
+    p3y: f64,
+    t: f64,
+) -> (f64, f64) {
+    let m = 1.0 - t;
+    let dx = 3.0 * (m * m * (p1x - p0x) + 2.0 * m * t * (p2x - p1x) + t * t * (p3x - p2x));
+    let dy = 3.0 * (m * m * (p1y - p0y) + 2.0 * m * t * (p2y - p1y) + t * t * (p3y - p2y));
+    let len = dx.hypot(dy).max(0.001);
+    (dx / len, dy / len)
+}
+
 // ── Style: tapered ────────────────────────────────────────────────────────────
 
 fn render_tapered_style(branches: &[Branch], prefs: &Prefs) -> String {
@@ -798,11 +838,12 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
 
 // ── Style: ink ────────────────────────────────────────────────────────────────
 //
-// Branch body is built from many short, randomly-placed ink strokes scattered
-// within the branch volume.  Each stroke is 5–17 SVG units long, oriented
-// roughly along the branch axis with ±23° angular noise.  A triangle-distributed
-// perpendicular position weights strokes toward the centre so the interior looks
-// dark and the edges feather naturally.  No filled base shape is used.
+// Each branch segment is drawn in two passes:
+//   1. A stroked closed Bézier perimeter outline (build_tapered_d / build_bar_d)
+//      gives the branch a clear delineated edge.
+//   2. Many short ink strokes (12–30 SVG units, ±14° angular noise) scattered
+//      within the branch volume texture the interior.
+// Triangle-distributed perpendicular position weights strokes toward the centre.
 // Leaves are hollow ellipse outlines (fill="none").
 
 /// Many short ink strokes scattered within a tapered branch segment.
@@ -834,6 +875,14 @@ fn ink_branch_strokes(
         .wrapping_add(seed_off);
     let mut out = String::new();
 
+    // Pass 1: stroked perimeter outline gives a clear branch edge
+    let outline_d = build_tapered_d(x1, y1, x2, y2, hw1, hw2);
+    out.push_str(&format!(
+        "  <path d=\"{outline_d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"1.20\" \
+         stroke-linejoin=\"round\" class=\"tree-branch\"/>\n"
+    ));
+
+    // Pass 2: interior ink strokes for texture
     for _ in 0..n {
         // Random position along branch
         seed = seed
@@ -859,17 +908,17 @@ fn ink_branch_strokes(
         let mx = x1 + ux * along + nx * perp;
         let my = y1 + uy * along + ny * perp;
 
-        // Stroke length: 5–17 SVG units
+        // Stroke length: 12–30 SVG units
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let slen = 5.0 + (seed & 0xFF) as f64 / 255.0 * 12.0;
+        let slen = 12.0 + (seed & 0xFF) as f64 / 255.0 * 18.0;
 
-        // Angular deviation from branch axis: ±0.40 rad (≈ ±23°)
+        // Angular deviation from branch axis: ±0.25 rad (≈ ±14°)
         seed = seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.80;
+        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.50;
         let cos_d = dev.cos();
         let sin_d = dev.sin();
         let sdx = ux * cos_d - uy * sin_d;
@@ -904,92 +953,6 @@ fn ink_branch_strokes(
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 1.0; // 0.5–1.5
-
-        out.push_str(&format!(
-            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
-             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
-             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
-            sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
-        ));
-    }
-    out
-}
-
-/// Short ink strokes scattered within a horizontal bar, oriented mostly horizontally.
-fn ink_bar_strokes(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
-    let length = (x2 - x1).abs().max(1.0);
-    let n = ((length * w * 0.15) as usize + 1).max(8).min(120);
-
-    let mut seed = ((x1 * 1000.0) as u64)
-        .wrapping_add((y * 997.0) as u64)
-        .wrapping_add((x2 * 991.0) as u64)
-        .wrapping_add(seed_off);
-    let mut out = String::new();
-
-    for _ in 0..n {
-        // Position along bar
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let t = (seed & 0xFFFF) as f64 / 65535.0;
-        let bx_along = x1 + t * length;
-
-        // Perpendicular (vertical) position: triangle dist
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u1 = (seed & 0xFFFF) as f64 / 65535.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u2 = (seed & 0xFFFF) as f64 / 65535.0;
-        let perp_frac = u1 + u2 - 1.0;
-        let by_across = y + perp_frac * w;
-
-        // Stroke length
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let slen = 5.0 + (seed & 0xFF) as f64 / 255.0 * 12.0;
-
-        // Angular deviation from horizontal: ±0.40 rad
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.80;
-        let cos_d = dev.cos();
-        let sin_d = dev.sin();
-        // bar direction = (1, 0) rotated by dev
-        let sdx = cos_d;
-        let sdy = sin_d;
-
-        let sx = bx_along - sdx * slen * 0.5;
-        let sy = by_across - sdy * slen * 0.5;
-        let ex = bx_along + sdx * slen * 0.5;
-        let ey = by_across + sdy * slen * 0.5;
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let bow = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * slen * 0.30;
-        let bpx = -sdy;
-        let bpy = sdx;
-        let c1x = sx + (ex - sx) * 0.33 + bpx * bow;
-        let c1y = sy + (ey - sy) * 0.33 + bpy * bow;
-        let c2x = sx + (ex - sx) * 0.67 + bpx * bow;
-        let c2y = sy + (ey - sy) * 0.67 + bpy * bow;
-
-        let edge = perp_frac.abs();
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rand_o = (seed & 0xFF) as f64 / 255.0;
-        let opacity = (0.78 - edge * 0.38 + rand_o * 0.12).clamp(0.25, 0.92);
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 1.0;
 
         out.push_str(&format!(
             "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
@@ -1084,6 +1047,153 @@ fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64
     out
 }
 
+/// Smooth S-curve branch from (px,py) to (cx,cy) with ink texture.
+///
+/// Uses a cubic Bézier with control points at (px, mid_y) and (cx, mid_y),
+/// which produces a tangent that is perfectly vertical at both endpoints and
+/// horizontal at the midpoint — no right-angle elbows.  The offset-curve
+/// polyline gives a visible perimeter; interior ink strokes follow the local
+/// tangent at each sample point.
+fn ink_smooth_branch(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+    hw_p: f64,
+    hw_c: f64,
+    seed_off: u64,
+) -> String {
+    // Fork at 25 % from the parent so the branch bends quickly near the trunk
+    // and extends in a more direct line toward the child — matches real branch geometry.
+    let fork_y = py + (cy - py) * 0.25;
+    let p1x = px;
+    let p1y = fork_y;
+    let p2x = cx;
+    let p2y = cy - (cy - py) * 0.25; // symmetric arrival, 25 % from child
+
+    const N: usize = 24;
+
+    // Build polyline offset curves for the perimeter outline
+    let mut outer: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
+    let mut inner: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
+    for i in 0..=N {
+        let t = i as f64 / N as f64;
+        let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
+        let (tx, ty) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
+        let hw = hw_p + (hw_c - hw_p) * t;
+        // Right-normal = CCW 90° of tangent: (-ty, tx)
+        outer.push((bx + (-ty) * hw, by + tx * hw));
+        inner.push((bx - (-ty) * hw, by - tx * hw));
+    }
+
+    // Closed outline: outer forward → end cap → inner backward → start cap
+    let mut d = format!("M {:.2},{:.2}", outer[0].0, outer[0].1);
+    for (x, y) in outer.iter().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", x, y));
+    }
+    d.push_str(&format!(" L {:.2},{:.2}", inner[N].0, inner[N].1));
+    for (x, y) in inner.iter().rev().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", x, y));
+    }
+    d.push_str(" Z");
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "  <path d=\"{d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"1.20\" \
+         stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
+    ));
+
+    // Ink strokes sampled along the curve, oriented by local tangent
+    let arc_len = ((cx - px).hypot(cy - py) * 1.35).max(1.0);
+    let avg_hw = (hw_p + hw_c) * 0.5;
+    let n = ((arc_len * avg_hw * 0.12) as usize + 1).max(10).min(220);
+
+    let mut seed = ((px * 1000.0) as u64)
+        .wrapping_add((py * 997.0) as u64)
+        .wrapping_add((cx * 991.0) as u64)
+        .wrapping_add((cy * 983.0) as u64)
+        .wrapping_add(seed_off);
+
+    for _ in 0..n {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let t = (seed & 0xFFFF) as f64 / 65535.0;
+
+        let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
+        let (tang_x, tang_y) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
+        let norm_x = -tang_y;
+        let norm_y = tang_x;
+        let hw_t = hw_p + (hw_c - hw_p) * t;
+
+        // Perpendicular offset: triangle distribution → centre-heavy
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let u1 = (seed & 0xFFFF) as f64 / 65535.0;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let u2 = (seed & 0xFFFF) as f64 / 65535.0;
+        let perp_frac = u1 + u2 - 1.0;
+        let stroke_cx = bx + norm_x * perp_frac * hw_t;
+        let stroke_cy = by + norm_y * perp_frac * hw_t;
+
+        // Stroke length 30–70 SVG units — long enough that adjacent strokes
+        // read as continuous parallel grain lines.
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let slen = 30.0 + (seed & 0xFF) as f64 / 255.0 * 40.0;
+
+        // Angular deviation ±3° (0.10 rad) — tight enough to read as wood grain.
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.10;
+        let cos_d = dev.cos();
+        let sin_d = dev.sin();
+        let sdx = tang_x * cos_d - tang_y * sin_d;
+        let sdy = tang_x * sin_d + tang_y * cos_d;
+
+        let sx = stroke_cx - sdx * slen * 0.5;
+        let sy = stroke_cy - sdy * slen * 0.5;
+        let ex = stroke_cx + sdx * slen * 0.5;
+        let ey = stroke_cy + sdy * slen * 0.5;
+
+        // Small transverse bow for organic feel
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let bow = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * slen * 0.25;
+        let c1x = sx + (ex - sx) * 0.33 - sdy * bow;
+        let c1y = sy + (ey - sy) * 0.33 + sdx * bow;
+        let c2x = sx + (ex - sx) * 0.67 - sdy * bow;
+        let c2y = sy + (ey - sy) * 0.67 + sdx * bow;
+
+        let edge = perp_frac.abs();
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let rand_o = (seed & 0xFF) as f64 / 255.0;
+        let opacity = (0.78 - edge * 0.38 + rand_o * 0.12).clamp(0.25, 0.92);
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 1.0;
+
+        out.push_str(&format!(
+            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
+             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
+             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
+            sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
+        ));
+    }
+
+    out
+}
+
 fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
     let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
@@ -1114,25 +1224,13 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
         let py =
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
-        let mean_cy =
-            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
-
-        let (bar_y, bar_min_x, bar_max_x) = branch_bar(py, mean_cy, px, &branch.child_pts);
         let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
-        let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
 
-        // Short vertical trunk
-        out.push_str(&ink_branch_strokes(px, py, px, bar_y, w_py, w_bar, 0));
-
-        // Horizontal bar
-        if bar_max_x - bar_min_x > 1.0 {
-            out.push_str(&ink_bar_strokes(bar_min_x, bar_y, bar_max_x, w_bar, 0));
-        }
-
-        // Vertical drops + canopy leaves
-        for &(cx, cy) in &branch.child_pts {
+        // One smooth S-curve per child: vertical at parent, horizontal in middle,
+        // vertical at child — no right-angle elbows or junction circles.
+        for (i, &(cx, cy)) in branch.child_pts.iter().enumerate() {
             let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            out.push_str(&ink_branch_strokes(cx, bar_y, cx, cy, w_bar, w_cy, 1));
+            out.push_str(&ink_smooth_branch(px, py, cx, cy, w_py, w_cy, i as u64));
             if leaf_count > 0 {
                 out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
             }
