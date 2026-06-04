@@ -326,6 +326,34 @@ pub struct StylePrefs {
     pub spacing: SpacingPrefs,
     #[serde(default)]
     pub text: TextStylePrefs,
+    #[serde(default)]
+    pub realistic_tree: RealisticTreePrefs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RealisticTreePrefs {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub style: String,
+    #[serde(default)]
+    pub trunk_color: i64,
+    #[serde(default)]
+    pub leaf_color: i64,
+    #[serde(default)]
+    pub leaf_density: String,
+}
+
+impl Default for RealisticTreePrefs {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            style: "tapered".to_string(),
+            trunk_color: 0x3d2b1f,
+            leaf_color: 0x4a7c3f,
+            leaf_density: "medium".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

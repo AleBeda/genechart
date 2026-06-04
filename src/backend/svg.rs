@@ -464,6 +464,7 @@ struct BcSvgCtx<'a> {
     conn_color: &'a str,
     conn_width: f64,
     prefs: &'a Prefs,
+    skip_connectors: bool,
 }
 
 fn render_fancy_highlight_rect(
@@ -586,7 +587,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             );
         }
         Primitive::Connector(c) => {
-            if c.child_points.is_empty() {
+            if ctx.skip_connectors || c.child_points.is_empty() {
                 return;
             }
             let parent_svgs: Vec<(f64, f64)> = c
@@ -849,6 +850,9 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let to_svg_x = |dx: f64| dx + MARGIN;
     let to_svg_y = |dy: f64| dy + MARGIN + chart_top_offset;
 
+    let realistic_tree_active =
+        prefs.output.style.realistic_tree.enabled && output.is_boxed_couples();
+
     // Shared rendering context (used for boxed_couples groups and all non-fan primitives)
     let ctx = BcSvgCtx {
         to_svg_x: &to_svg_x,
@@ -860,6 +864,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         conn_color: &conn_color,
         conn_width,
         prefs,
+        skip_connectors: realistic_tree_active,
     };
 
     // SVG dimensions
@@ -898,6 +903,18 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             &copy_text,
             &copy_font_family,
             copy_font_size,
+        ));
+    }
+
+    // Realistic tree background layer (rendered before boxes so boxes are on top)
+    if realistic_tree_active {
+        let mut connectors: Vec<&crate::scene::ConnectorPrimitive> = Vec::new();
+        crate::backend::realistic_tree::collect_connectors(&scene.primitives, &mut connectors);
+        out.push_str(&crate::backend::realistic_tree::render_tree_layer(
+            &connectors,
+            &to_svg_x,
+            &to_svg_y,
+            prefs,
         ));
     }
 
