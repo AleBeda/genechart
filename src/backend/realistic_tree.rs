@@ -89,13 +89,21 @@ pub fn render_tree_layer(
         })
         .collect();
 
-    let inner = match prefs.output.style.realistic_tree.style.as_str() {
-        "stroke" => render_stroke_style(&branches, prefs),
-        "filter" => render_filter_style(&branches, prefs),
-        _ => render_tapered_style(&branches, prefs),
-    };
-
-    format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
+    match prefs.output.style.realistic_tree.style.as_str() {
+        "stroke" => {
+            let inner = render_stroke_style(&branches, prefs);
+            format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
+        }
+        "filter" => {
+            // Emit <defs> before the group so the filter ID is always resolvable.
+            let (defs, inner) = render_filter_style(&branches, prefs);
+            format!("{defs}<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
+        }
+        _ => {
+            let inner = render_tapered_style(&branches, prefs);
+            format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
+        }
+    }
 }
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -242,7 +250,7 @@ fn tapered_roots(
     min_hw: f64,
     color: &str,
 ) -> String {
-    let junction_y = y_root + root_depth * 0.30;
+    let junction_y = y_root + root_depth * 0.55;
     let junction_hw = max_hw;
 
     // Short vertical trunk from root box down to junction
@@ -279,8 +287,8 @@ fn tapered_roots(
 }
 
 /// Filled closed Bézier path for one branch segment.
-/// `(x1, y1)` is the wide end; `(x2, y2)` is the narrow end.
-/// Works for both upward segments (y1 > y2) and downward root segments (y1 < y2).
+/// Width is measured perpendicular to the branch direction, so diagonal and horizontal
+/// branches appear as wide as vertical ones at the same `w` value.
 fn tapered_branch_path(
     x1: f64,
     y1: f64,
@@ -290,28 +298,39 @@ fn tapered_branch_path(
     w2: f64,
     color: &str,
 ) -> String {
-    let dy = y1 - y2;
-    let ctrl = dy * 0.4;
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let len = dx.hypot(dy).max(0.01);
+    // Perpendicular unit normal (90° CCW from travel direction)
+    let nx = -dy / len;
+    let ny = dx / len;
+    // Four outline corners
+    let (ax, ay) = (x1 + nx * w1, y1 + ny * w1);
+    let (bx, by) = (x1 - nx * w1, y1 - ny * w1);
+    let (cpx, cpy) = (x2 + nx * w2, y2 + ny * w2);
+    let (ex, ey) = (x2 - nx * w2, y2 - ny * w2);
+    // Bézier control offset: 40% along travel direction for smooth taper
+    let (cdx, cdy) = (dx * 0.4, dy * 0.4);
     format!(
         "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} \
          L {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} Z\" \
          fill=\"{}\" class=\"tree-branch\"/>\n",
-        x1 - w1,
-        y1,
-        x1 - w1,
-        y1 - ctrl,
-        x2 - w2,
-        y2 + ctrl,
-        x2 - w2,
-        y2,
-        x2 + w2,
-        y2,
-        x2 + w2,
-        y2 + ctrl,
-        x1 + w1,
-        y1 - ctrl,
-        x1 + w1,
-        y1,
+        ax,
+        ay,
+        ax + cdx,
+        ay + cdy,
+        cpx - cdx,
+        cpy - cdy,
+        cpx,
+        cpy,
+        ex,
+        ey,
+        ex - cdx,
+        ey - cdy,
+        bx + cdx,
+        by + cdy,
+        bx,
+        by,
         color
     )
 }
@@ -415,7 +434,7 @@ fn render_stroke_style(branches: &[Branch], prefs: &Prefs) -> String {
 
 /// Four root branches spreading downward from the root box, stroke style.
 fn stroke_roots(root_x: f64, y_root: f64, root_depth: f64, max_sw: f64, color: &str) -> String {
-    let junction_y = y_root + root_depth * 0.30;
+    let junction_y = y_root + root_depth * 0.55;
 
     // Short vertical trunk from root box down to junction
     let mut out = stroke_bezier_layers(root_x, y_root, root_x, junction_y, max_sw, 0.0, color);
@@ -533,9 +552,9 @@ fn stroke_leaf_cluster(cx: f64, cy: f64, count: usize, color: &str) -> String {
 
 // ── Style: filter ─────────────────────────────────────────────────────────────
 
-fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
+fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> (String, String) {
     if branches.is_empty() {
-        return String::new();
+        return (String::new(), String::new());
     }
 
     let trunk_color = format!("#{:06X}", prefs.output.style.realistic_tree.trunk_color);
@@ -613,12 +632,13 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
         }
     }
 
-    format!("{filter_def}<g filter=\"url(#bark-texture)\">\n{filter_body}</g>\n{leaves}")
+    let body = format!("<g filter=\"url(#bark-texture)\">\n{filter_body}</g>\n{leaves}");
+    (filter_def.to_string(), body)
 }
 
 /// Four root branches inside the filter group, spreading downward.
 fn filter_roots(root_x: f64, y_root: f64, root_depth: f64, max_sw: f64, color: &str) -> String {
-    let junction_y = y_root + root_depth * 0.30;
+    let junction_y = y_root + root_depth * 0.55;
     let dy_trunk = y_root - junction_y; // negative (going down)
 
     // Short vertical trunk from root box down to junction
