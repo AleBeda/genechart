@@ -137,7 +137,9 @@ enabled = false
 # style: rendering approach for the branches
 #   "tapered" — filled closed Bézier paths whose width decreases globally from root to tips (default)
 #   "stroke"  — layered stroked S-curve Bézier paths with opacity-based taper
-#   "filter"  — thick rounded paths with an SVG feTurbulence displacement filter for bark texture
+#   "filter"  — thick rounded paths with a white highlight for a cylindrical 3D look
+#   "ink"     — near-solid black filled branches with white longitudinal bark-scratch strokes;
+#               hollow ellipse outlines for leaves (ink-drawing aesthetic)
 style = "tapered"
 trunk_color = 0x3D2B1F  # dark brown
 leaf_color = 0x4A7C3F   # forest green

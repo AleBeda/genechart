@@ -101,13 +101,14 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
-**Realistic tree branches:** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Three rendering styles are available:
+**Realistic tree branches:** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Four rendering styles are available:
 
 | Style | Description |
 |---|---|
 | `"tapered"` (default) | Filled closed Bézier paths; branch width decreases globally from root to tips |
 | `"stroke"` | Layered stroked S-curve Bézier paths with opacity-based taper |
-| `"filter"` | Thick rounded paths with an SVG `feTurbulence` displacement filter for bark texture |
+| `"filter"` | Thick rounded paths with a white highlight for a cylindrical 3D look |
+| `"ink"` | Near-solid black filled branches with white longitudinal bark-scratch strokes; hollow ellipse outlines for leaves (ink-drawing aesthetic) |
 
 ```sh
 # Tapered style with medium leaf density
@@ -116,15 +117,14 @@ genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.style = "tapered"' \
   -o chart.svg
 
-# Filter style with custom colours, no leaves
+# Ink style — black and white hand-drawn look
 genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.enabled = true' \
-  --pref 'output.style.realistic_tree.style = "filter"' \
-  --pref 'output.style.realistic_tree.leaf_density = "none"' \
+  --pref 'output.style.realistic_tree.style = "ink"' \
   -o chart.svg
 ```
 
-Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"`), `trunk_color` (hex), `leaf_color` (hex), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
+Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"`), `trunk_color` (hex, ignored by `"ink"`), `leaf_color` (hex, ignored by `"ink"`), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
 
 ### fan
 

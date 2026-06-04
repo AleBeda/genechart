@@ -3,10 +3,12 @@
 //! Generates an SVG background layer of organic tree branches/trunk that
 //! replaces the default straight connectors. Boxes are rendered on top by the caller.
 //!
-//! Three style variants (selectable via `output.style.realistic_tree.style`):
+//! Four style variants (selectable via `output.style.realistic_tree.style`):
 //!   "tapered" — filled closed Bézier paths, width globally decreasing from root to tips (default)
 //!   "stroke"  — layered stroked Bézier paths with global width taper
 //!   "filter"  — two-layer filled paths with a white cylindrical highlight for a 3D rounded look
+//!   "ink"     — near-solid black filled branches with white longitudinal bark-scratch strokes;
+//!               hollow ellipse outlines for leaves (ink-drawing aesthetic)
 
 use crate::preferences::Prefs;
 use crate::scene::{ConnectorPrimitive, Primitive};
@@ -89,6 +91,7 @@ pub fn render_tree_layer(
     let inner = match prefs.output.style.realistic_tree.style.as_str() {
         "stroke" => render_stroke_style(&branches, prefs),
         "filter" => render_filter_style(&branches, prefs),
+        "ink" => render_ink_style(&branches, prefs),
         _ => render_tapered_style(&branches, prefs),
     };
     format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
@@ -786,6 +789,329 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
             out.push_str(&tapered_branch_highlight(cx, bar_y, cx, cy, w_bar, w_cy));
             if leaf_count > 0 {
                 out.push_str(&canopy_leaves(cx, cy, leaf_count, &leaf_color));
+            }
+        }
+    }
+
+    out
+}
+
+// ── Style: ink ────────────────────────────────────────────────────────────────
+//
+// Near-solid black filled branches with thin white longitudinal Bézier strokes
+// running along each branch to simulate hand-drawn ink bark texture.
+// Leaves are hollow ellipse outlines only (fill="none"), scattered in loose clouds.
+
+/// Longitudinal bark-scratch strokes over a tapered branch segment.
+/// Each scratch is a thin cubic Bézier running along the branch at a perpendicular
+/// offset, shortened at both ends, with slight waviness and random opacity.
+fn ink_bark_lines(x1: f64, y1: f64, x2: f64, y2: f64, hw1: f64, hw2: f64, seed_off: u64) -> String {
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let len = dx.hypot(dy).max(0.01);
+    let ux = dx / len;
+    let uy = dy / len;
+    let nx = -uy;
+    let ny = ux;
+
+    let avg_hw = (hw1 + hw2) * 0.5;
+    let n = ((avg_hw * 0.45) as usize + 1).min(10).max(2);
+
+    let mut seed = ((x1 * 1000.0) as u64)
+        .wrapping_add((y1 * 997.0) as u64)
+        .wrapping_add((x2 * 991.0) as u64)
+        .wrapping_add((y2 * 983.0) as u64)
+        .wrapping_add(seed_off);
+    let mut out = String::new();
+
+    for i in 0..n {
+        let base_frac = if n == 1 {
+            0.0
+        } else {
+            (i as f64 / (n - 1) as f64) * 1.70 - 0.85
+        };
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.14 - 0.07;
+        let perp_frac = (base_frac + jitter).clamp(-0.90, 0.90);
+        let offset = perp_frac * avg_hw;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let shorten_s = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 * len;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let shorten_e = (seed & 0xFFFF) as f64 / 65535.0 * 0.10 * len;
+
+        let sx = x1 + nx * offset + ux * shorten_s;
+        let sy = y1 + ny * offset + uy * shorten_s;
+        let ex = x2 + nx * offset - ux * shorten_e;
+        let ey = y2 + ny * offset - uy * shorten_e;
+
+        // Small perpendicular wave via quadratic-to-cubic Bézier conversion
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * avg_hw * 0.10;
+        let mx = (sx + ex) * 0.5 + nx * wave;
+        let my = (sy + ey) * 0.5 + ny * wave;
+        let c1x = sx / 3.0 + mx * 2.0 / 3.0;
+        let c1y = sy / 3.0 + my * 2.0 / 3.0;
+        let c2x = ex / 3.0 + mx * 2.0 / 3.0;
+        let c2y = ey / 3.0 + my * 2.0 / 3.0;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let opacity = 0.18 + (seed & 0xFFFF) as f64 / 65535.0 * 0.37;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sw = 0.3 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+
+        out.push_str(&format!(
+            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
+             stroke=\"white\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
+             fill=\"none\" class=\"tree-bark\"/>\n",
+            sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
+        ));
+    }
+    out
+}
+
+/// Horizontal bark-scratch strokes across a horizontal bar.
+fn ink_bar_bark_lines(x1: f64, y: f64, x2: f64, w: f64, seed_off: u64) -> String {
+    let n = ((w * 0.85) as usize + 1).min(8).max(2);
+    let length = (x2 - x1).abs().max(1.0);
+    let mut seed = ((x1 * 1000.0) as u64)
+        .wrapping_add((y * 997.0) as u64)
+        .wrapping_add((x2 * 991.0) as u64)
+        .wrapping_add(seed_off);
+    let mut out = String::new();
+
+    for i in 0..n {
+        let base_frac = if n == 1 {
+            0.0
+        } else {
+            (i as f64 / (n - 1) as f64) * 1.70 - 0.85
+        };
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let jitter = (seed & 0xFFFF) as f64 / 65535.0 * 0.14 - 0.07;
+        let ly = y + (base_frac + jitter).clamp(-0.90, 0.90) * w;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let shorten_l = (seed & 0xFFFF) as f64 / 65535.0 * 0.08 * length;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let shorten_r = (seed & 0xFFFF) as f64 / 65535.0 * 0.08 * length;
+        let lx1 = x1 + shorten_l;
+        let lx2 = x2 - shorten_r;
+        let cdx = (lx2 - lx1) * 0.4;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let wave = ((seed & 0xFFFF) as f64 / 65535.0 * 2.0 - 1.0) * w * 0.08;
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let opacity = 0.18 + (seed & 0xFFFF) as f64 / 65535.0 * 0.37;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sw = 0.3 + (seed & 0xFFFF) as f64 / 65535.0 * 0.30;
+
+        out.push_str(&format!(
+            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
+             stroke=\"white\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
+             fill=\"none\" class=\"tree-bark\"/>\n",
+            lx1,
+            ly,
+            lx1 + cdx,
+            ly + wave,
+            lx2 - cdx,
+            ly + wave,
+            lx2,
+            ly,
+            sw,
+            opacity
+        ));
+    }
+    out
+}
+
+/// Hollow ellipse ink-style leaves scattered around (cx, cy).
+fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
+    let mut seed = ((cx * 1000.0) as u64 ^ (cy * 1000.0) as u64).wrapping_add(seed_off);
+    let mut out = String::new();
+    for _ in 0..count {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
+        let radius = ((seed >> 16) & 0xFFFF) as f64 / 65535.0 * 26.0 + 6.0;
+        let lx = cx + angle.cos() * radius;
+        let ly = cy + angle.sin() * radius * 0.55;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let rx = (seed & 0xFF) as f64 / 255.0 * 4.0 + 4.0;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let ry = rx * (0.40 + (seed & 0xFF) as f64 / 255.0 * 0.25);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let rot = (seed & 0xFFFF) as f64 / 65535.0 * 180.0;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 0.4;
+        out.push_str(&format!(
+            "  <ellipse cx=\"{0:.2}\" cy=\"{1:.2}\" rx=\"{2:.2}\" ry=\"{3:.2}\" \
+             transform=\"rotate({4:.1},{0:.2},{1:.2})\" \
+             fill=\"none\" stroke=\"#111\" stroke-width=\"{5:.2}\" class=\"tree-leaf\"/>\n",
+            lx, ly, rx, ry, rot, sw
+        ));
+    }
+    out
+}
+
+/// Three stacked ink leaf clouds creating a canopy above (cx, cy).
+fn ink_leaf_canopy(cx: f64, cy: f64, count: usize) -> String {
+    let mut out = String::new();
+    out.push_str(&ink_leaf_cluster(cx, cy, count, 0));
+    out.push_str(&ink_leaf_cluster(cx, cy - 28.0, count * 2 / 3 + 1, 1));
+    out.push_str(&ink_leaf_cluster(cx, cy - 56.0, count / 3 + 1, 2));
+    out
+}
+
+/// Root spread for ink style: dark tapered roots with bark scratches.
+fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64) -> String {
+    const INK: &str = "#0d0d0d";
+    let junction_y = y_root + root_depth * 0.55;
+    let junction_hw = max_hw;
+
+    let mut out = tapered_branch_path(
+        root_x,
+        y_root,
+        root_x,
+        junction_y,
+        junction_hw,
+        junction_hw * 0.88,
+        INK,
+    );
+    out.push_str(&ink_bark_lines(
+        root_x,
+        y_root,
+        root_x,
+        junction_y,
+        junction_hw,
+        junction_hw * 0.88,
+        1001,
+    ));
+
+    let tips: [(f64, f64, f64); 4] = [
+        (root_x - root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
+        (root_x - root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
+        (root_x + root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
+        (root_x + root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
+    ];
+    for (i, (ex, ey, end_scale)) in tips.iter().enumerate() {
+        let end_hw = min_hw + (junction_hw * 0.88 - min_hw) * end_scale;
+        out.push_str(&tapered_branch_path(
+            root_x,
+            junction_y,
+            *ex,
+            *ey,
+            junction_hw * 0.88,
+            end_hw,
+            INK,
+        ));
+        out.push_str(&ink_bark_lines(
+            root_x,
+            junction_y,
+            *ex,
+            *ey,
+            junction_hw * 0.88,
+            end_hw,
+            1002 + i as u64,
+        ));
+    }
+    out
+}
+
+fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
+    const INK: &str = "#0d0d0d";
+    let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
+        "none" => 0,
+        "low" => 12,
+        "high" => 60,
+        _ => 30,
+    };
+
+    let (y_root, y_top) = y_bounds(branches);
+    let y_range = (y_root - y_top).max(1.0);
+    const MAX_HW: f64 = 14.0;
+    const MIN_HW: f64 = 1.5;
+
+    let mut out = String::new();
+
+    if y_root > y_top {
+        let rx = root_center_x(branches, y_root);
+        let root_depth = y_range * 0.22;
+        out.push_str(&ink_roots(rx, y_root, root_depth, MAX_HW, MIN_HW));
+    }
+
+    for branch in branches {
+        if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
+            continue;
+        }
+
+        let px =
+            branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
+        let py =
+            branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
+        let mean_cy =
+            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
+
+        let (bar_y, bar_min_x, bar_max_x) = branch_bar(py, mean_cy, px, &branch.child_pts);
+        let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
+        let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
+
+        // Short vertical trunk + bark scratches
+        out.push_str(&tapered_branch_path(px, py, px, bar_y, w_py, w_bar, INK));
+        out.push_str(&ink_bark_lines(px, py, px, bar_y, w_py, w_bar, 0));
+
+        // Horizontal bar + bark scratches
+        if bar_max_x - bar_min_x > 1.0 {
+            out.push_str(&tapered_bar_path(bar_min_x, bar_y, bar_max_x, w_bar, INK));
+            out.push_str(&ink_bar_bark_lines(bar_min_x, bar_y, bar_max_x, w_bar, 0));
+        }
+
+        // Junction circles at T-joins
+        out.push_str(&junction_circle(px, bar_y, w_bar, INK));
+        for &(cx, _) in &branch.child_pts {
+            out.push_str(&junction_circle(cx, bar_y, w_bar, INK));
+        }
+
+        // Vertical drops + bark scratches + canopy leaves
+        for &(cx, cy) in &branch.child_pts {
+            let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
+            out.push_str(&tapered_branch_path(cx, bar_y, cx, cy, w_bar, w_cy, INK));
+            out.push_str(&ink_bark_lines(cx, bar_y, cx, cy, w_bar, w_cy, 1));
+            if leaf_count > 0 {
+                out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
             }
         }
     }
