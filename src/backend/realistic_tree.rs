@@ -1140,45 +1140,37 @@ fn ink_grain_line(
     )
 }
 
-/// Smooth S-curve branch from (px,py) to (cx,cy) with ink texture.
+/// Core ink branch renderer with explicit cubic Bézier control points.
 ///
-/// Uses a cubic Bézier with control points at (px, mid_y) and (cx, mid_y),
-/// which produces a tangent that is perfectly vertical at both endpoints and
-/// horizontal at the midpoint — no right-angle elbows.  The offset-curve
-/// polyline gives a visible perimeter; interior ink strokes follow the local
-/// tangent at each sample point.
-fn ink_smooth_branch(
-    px: f64,
-    py: f64,
-    cx: f64,
-    cy: f64,
+/// P0=(p0x,p0y)…P3=(p3x,p3y) define the centreline; P1 and P2 are the interior
+/// control points.  Setting P1=P2 at a corner gives a smooth quarter-turn elbow.
+/// Setting them at the 50 % positions gives the standard S-curve shape.
+fn ink_branch(
+    p0x: f64,
+    p0y: f64,
+    p1x: f64,
+    p1y: f64,
+    p2x: f64,
+    p2y: f64,
+    p3x: f64,
+    p3y: f64,
     hw_p: f64,
     hw_c: f64,
     seed_off: u64,
 ) -> String {
-    // Control points at 50 % of the parent→child span produce a pronounced S-curve.
-    let fork_y = py + (cy - py) * 0.50;
-    let p1x = px;
-    let p1y = fork_y;
-    let p2x = cx;
-    let p2y = cy - (cy - py) * 0.50; // symmetric arrival, 50 % from child
-
     const N: usize = 24;
 
-    // Build noisy polyline offset curves for the perimeter outline.
-    // A small per-point perturbation of the local hw gives an organic silhouette
-    // rather than a geometrically perfect smooth curve.
-    let mut outline_seed = ((px * 1000.0) as u64)
-        .wrapping_add((py * 997.0) as u64)
-        .wrapping_add((cx * 991.0) as u64)
-        .wrapping_add((cy * 983.0) as u64)
+    let mut outline_seed = ((p0x * 1000.0) as u64)
+        .wrapping_add((p0y * 997.0) as u64)
+        .wrapping_add((p3x * 991.0) as u64)
+        .wrapping_add((p3y * 983.0) as u64)
         .wrapping_add(seed_off.wrapping_mul(1_000_003));
     let mut outer: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
     let mut inner: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
     for i in 0..=N {
         let t = i as f64 / N as f64;
-        let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
-        let (tx, ty) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
+        let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
+        let (tx, ty) = bezier3_tangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
         let hw = hw_p + (hw_c - hw_p) * t;
         outline_seed = outline_seed
             .wrapping_mul(6364136223846793005)
@@ -1188,12 +1180,10 @@ fn ink_smooth_branch(
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let noise_i = ((outline_seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.18;
-        // Right-normal = CCW 90° of tangent: (-ty, tx)
         outer.push((bx + (-ty) * (hw + noise_o), by + tx * (hw + noise_o)));
         inner.push((bx - (-ty) * (hw + noise_i), by - tx * (hw + noise_i)));
     }
 
-    // Closed outline: outer forward → end cap → inner backward → start cap
     let mut d = format!("M {:.2},{:.2}", outer[0].0, outer[0].1);
     for (x, y) in outer.iter().skip(1) {
         d.push_str(&format!(" L {:.2},{:.2}", x, y));
@@ -1205,55 +1195,47 @@ fn ink_smooth_branch(
     d.push_str(" Z");
 
     let mut out = String::new();
-
-    // Solid black filled body — the closed offset-curve polygon becomes the branch silhouette.
     out.push_str(&format!(
         "  <path d=\"{d}\" fill=\"#111\" stroke=\"none\" \
          stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
     ));
 
-    // Bristle bundle: white strokes on the black body simulate individual brush fibres.
-    //
-    // Split ~1/4 bristles on the shadow side and ~3/4 on the lit side, giving 3-4x more
-    // fibres where the branch catches the light.  Each bristle gets a random partial
-    // t-range so shorter fibres don't reach the endpoints.
-    //
-    // Lit-side convention:
-    //   vertical segment   → right side is lit → positive frac = lit
-    //   horizontal segment → top side is lit   → negative frac = lit (normal points down)
-    let is_horizontal = (cx - px).abs() > (cy - py).abs();
+    // Bristle bundle.  Lit-side convention:
+    //   vertical   → right side lit → lit_sign = +1
+    //   horizontal → top side lit  → lit_sign = −1 (normal points down in SVG)
+    let is_horizontal = (p3x - p0x).abs() > (p3y - p0y).abs();
     let lit_sign: f64 = if is_horizontal { -1.0 } else { 1.0 };
 
     let avg_hw = (hw_p + hw_c) * 0.5;
     let n_total = ((avg_hw * 2.0 / 3.0) as usize + 4).max(10).min(36);
     let n_shadow = (n_total / 4).max(2);
     let n_lit = n_total - n_shadow;
-    let branch_seed = ((px * 1000.0) as u64)
-        .wrapping_add((py * 997.0) as u64)
-        .wrapping_add((cx * 991.0) as u64)
-        .wrapping_add((cy * 983.0) as u64)
+    let branch_seed = ((p0x * 1000.0) as u64)
+        .wrapping_add((p0y * 997.0) as u64)
+        .wrapping_add((p3x * 991.0) as u64)
+        .wrapping_add((p3y * 983.0) as u64)
         .wrapping_add(seed_off.wrapping_mul(2_654_435_761));
 
-    let mut emit_bristle = |i: usize, frac: f64, opacity: f64, stroke_width: f64| -> String {
+    let emit_bristle = |i: usize, frac: f64, opacity: f64, stroke_width: f64| -> String {
         let mut rseed = branch_seed
             .wrapping_add(i as u64 * 13_331)
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        let length_frac = 0.75 + (rseed & 0xFFFF) as f64 / 65535.0 * 0.25; // 0.75–1.00
+        let length_frac = 0.75 + (rseed & 0xFFFF) as f64 / 65535.0 * 0.25;
         rseed = rseed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let t_start = (rseed & 0xFFFF) as f64 / 65535.0 * (1.0 - length_frac);
         let t_end = (t_start + length_frac).min(1.0);
         ink_grain_line(
-            px,
-            py,
+            p0x,
+            p0y,
             p1x,
             p1y,
             p2x,
             p2y,
-            cx,
-            cy,
+            p3x,
+            p3y,
             hw_p,
             hw_c,
             frac,
@@ -1266,13 +1248,11 @@ fn ink_smooth_branch(
         )
     };
 
-    // Shadow side: sparse and dim.
     for i in 0..n_shadow {
         let frac = lit_sign * (-0.85 + (i as f64 + 0.5) * 0.80 / n_shadow as f64);
         let s = emit_bristle(i, frac, 0.22, 0.38);
         out.push_str(&s);
     }
-    // Lit side: dense and bright; opacity peaks near the centre, fades toward the edge.
     for i in 0..n_lit {
         let base_frac = 0.05 + (i as f64 + 0.5) * 0.80 / n_lit as f64;
         let inner_t = base_frac / 0.85;
@@ -1282,6 +1262,32 @@ fn ink_smooth_branch(
     }
 
     out
+}
+
+/// S-curve branch using control points at 50 % of the span.  Wrapper around `ink_branch`.
+fn ink_smooth_branch(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+    hw_p: f64,
+    hw_c: f64,
+    seed_off: u64,
+) -> String {
+    let mid_y = py + (cy - py) * 0.50;
+    ink_branch(
+        px,
+        py,
+        px,
+        mid_y,
+        cx,
+        cy - (cy - py) * 0.50,
+        cx,
+        cy,
+        hw_p,
+        hw_c,
+        seed_off,
+    )
 }
 
 fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
@@ -1330,12 +1336,49 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             ));
         }
 
-        // 2. Horizontal bar spanning all child attachment points (and parent x).
-        if (bar_max_x - bar_min_x) > 1.0 {
-            out.push_str(&ink_smooth_branch(
-                bar_min_x,
+        // Sort children by x so we can identify the farthest (leftmost / rightmost).
+        let mut sorted_children: Vec<(f64, f64)> = branch.child_pts.clone();
+        sorted_children.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let (lx, ly) = *sorted_children.first().unwrap();
+        let (rx, ry) = *sorted_children.last().unwrap();
+
+        // Elbow radius: a few branch-widths, never more than 20 % of the bar span.
+        let bar_span = (bar_max_x - bar_min_x).max(1.0);
+        let elbow_r = (w_bar * 3.5).min(bar_span * 0.20).max(1.0);
+
+        // Which ends of the bar terminate at a child (vs the trunk x)?
+        let left_is_child = (bar_min_x - lx).abs() < 1.0;
+        let right_is_child = (bar_max_x - rx).abs() < 1.0;
+
+        // Bar endpoints are pulled inward by elbow_r where a child elbow takes over.
+        let bar_x0 = if left_is_child {
+            bar_min_x + elbow_r
+        } else {
+            bar_min_x
+        };
+        let bar_x1 = if right_is_child {
+            bar_max_x - elbow_r
+        } else {
+            bar_max_x
+        };
+
+        // 2. Horizontal bar with an S-wave (5× more Y variation than a flat line).
+        if bar_x1 > bar_x0 + 1.0 {
+            let bw = bar_x1 - bar_x0;
+            // Wave sign is seeded per-branch so adjacent bars don't all curve the same way.
+            let wave_seed = (bar_y as u64)
+                .wrapping_mul(997)
+                .wrapping_add(px as u64 * 1013);
+            let wave_sign: f64 = if wave_seed & 1 == 0 { 1.0 } else { -1.0 };
+            let wave = (w_bar * 2.5).min(bw * 0.12) * wave_sign;
+            out.push_str(&ink_branch(
+                bar_x0,
                 bar_y,
-                bar_max_x,
+                bar_x0 + bw / 3.0,
+                bar_y - wave,
+                bar_x1 - bw / 3.0,
+                bar_y + wave,
+                bar_x1,
                 bar_y,
                 w_bar,
                 w_bar,
@@ -1343,18 +1386,58 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             ));
         }
 
-        // 3. Vertical stub from the bar down to each child attachment point.
-        for (ci, &(cx, cy)) in branch.child_pts.iter().enumerate() {
+        // 3. Stubs / elbows — farthest children get a smooth quarter-turn elbow;
+        //    intermediate children get straight stubs from the bar.
+        for (ci, &(cx, cy)) in sorted_children.iter().enumerate() {
             let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            out.push_str(&ink_smooth_branch(
-                cx,
-                bar_y,
-                cx,
-                cy,
-                w_bar,
-                w_cy,
-                seed_base + 2 + ci as u64,
-            ));
+            let is_left = left_is_child && (cx - lx).abs() < 1.0;
+            let is_right =
+                right_is_child && (cx - rx).abs() < 1.0 && !(is_left && sorted_children.len() == 1);
+
+            if is_left {
+                // Elbow: arrives from the right along the bar, departs upward to the child.
+                // P1 = P2 = corner → horizontal departure, vertical arrival.
+                out.push_str(&ink_branch(
+                    lx + elbow_r,
+                    bar_y,
+                    lx,
+                    bar_y,
+                    lx,
+                    bar_y,
+                    lx,
+                    ly,
+                    w_bar,
+                    w_cy,
+                    seed_base + 2 + ci as u64,
+                ));
+            } else if is_right {
+                // Elbow: arrives from the left along the bar, departs upward to the child.
+                out.push_str(&ink_branch(
+                    rx - elbow_r,
+                    bar_y,
+                    rx,
+                    bar_y,
+                    rx,
+                    bar_y,
+                    rx,
+                    ry,
+                    w_bar,
+                    w_cy,
+                    seed_base + 2 + ci as u64,
+                ));
+            } else {
+                // Intermediate child: straight vertical stub.
+                out.push_str(&ink_smooth_branch(
+                    cx,
+                    bar_y,
+                    cx,
+                    cy,
+                    w_bar,
+                    w_cy,
+                    seed_base + 2 + ci as u64,
+                ));
+            }
+
             if leaf_count > 0 {
                 out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
             }
