@@ -55,7 +55,7 @@ pub fn root_extra_height(connectors: &[&ConnectorPrimitive]) -> f64 {
         .iter()
         .flat_map(|c| c.child_points.iter().map(|p| p.y))
         .fold(f64::INFINITY, f64::min);
-    ((y_root - y_top) * 0.22).max(40.0)
+    ((y_root - y_top) * 0.45).max(40.0)
 }
 
 /// Render the full tree-branch SVG layer.
@@ -1013,35 +1013,70 @@ fn ink_leaf_canopy(cx: f64, cy: f64, count: usize) -> String {
 
 /// Root spread for ink style: scattered short strokes fanning below the root box.
 fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64) -> String {
-    let junction_y = y_root + root_depth * 0.55;
-    let junction_hw = max_hw;
+    let trunk_hw = max_hw;
+    let trunk_end_y = y_root + root_depth * 0.60;
+    let trunk_end_hw = trunk_hw * 0.82;
 
-    let mut out = ink_branch_strokes(
+    // 1. Visible trunk chunk directly below the root ancestor box.
+    let mut out = ink_smooth_branch(
         root_x,
         y_root,
         root_x,
-        junction_y,
-        junction_hw,
-        junction_hw * 0.88,
-        1001,
+        trunk_end_y,
+        trunk_hw,
+        trunk_end_hw,
+        9_001,
     );
 
-    let tips: [(f64, f64, f64); 4] = [
-        (root_x - root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
-        (root_x - root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
-        (root_x + root_depth * 0.20, y_root + root_depth * 0.95, 0.38),
-        (root_x + root_depth * 0.48, y_root + root_depth * 0.85, 0.28),
+    // 2. Lateral roots: nearly horizontal, long, tapering to thin points.
+    //    (tip_x, tip_y, tip_hw_fraction, seed)
+    let span = root_depth * 1.8;
+    let roots: [(f64, f64, f64, u64); 6] = [
+        (root_x - span, y_root + root_depth * 0.82, 0.03, 9_011),
+        (
+            root_x - span * 0.60,
+            y_root + root_depth * 0.74,
+            0.06,
+            9_012,
+        ),
+        (
+            root_x - span * 0.24,
+            y_root + root_depth * 0.70,
+            0.10,
+            9_013,
+        ),
+        (
+            root_x + span * 0.24,
+            y_root + root_depth * 0.70,
+            0.10,
+            9_014,
+        ),
+        (
+            root_x + span * 0.60,
+            y_root + root_depth * 0.74,
+            0.06,
+            9_015,
+        ),
+        (root_x + span, y_root + root_depth * 0.82, 0.03, 9_016),
     ];
-    for (i, (ex, ey, end_scale)) in tips.iter().enumerate() {
-        let end_hw = min_hw + (junction_hw * 0.88 - min_hw) * end_scale;
-        out.push_str(&ink_branch_strokes(
+
+    for (tip_x, tip_y, tip_frac, seed) in roots.iter() {
+        let end_hw = min_hw * 0.3 + (trunk_end_hw - min_hw) * tip_frac;
+        let dx = tip_x - root_x;
+        let dy = tip_y - trunk_end_y;
+        // Control points give: ~20° departure angle from trunk base, nearly horizontal arrival.
+        out.push_str(&ink_branch(
             root_x,
-            junction_y,
-            *ex,
-            *ey,
-            junction_hw * 0.88,
+            trunk_end_y,
+            root_x + dx * 0.15,
+            trunk_end_y + dy * 0.50,
+            root_x + dx * 0.75,
+            *tip_y - dy * 0.10,
+            *tip_x,
+            *tip_y,
+            trunk_end_hw,
             end_hw,
-            1002 + i as u64,
+            *seed,
         ));
     }
     out
@@ -1307,7 +1342,7 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
 
     if y_root > y_top {
         let rx = root_center_x(branches, y_root);
-        let root_depth = y_range * 0.22;
+        let root_depth = y_range * 0.45;
         out.push_str(&ink_roots(rx, y_root, root_depth, MAX_HW, MIN_HW));
     }
 
@@ -1349,14 +1384,18 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         // Which ends of the bar terminate at a child (vs the trunk x)?
         let left_is_child = (bar_min_x - lx).abs() < 1.0;
         let right_is_child = (bar_max_x - rx).abs() < 1.0;
+        // A child directly above the parent gets a T-junction (no elbow), so the bar
+        // must NOT be shortened at that end.
+        let left_child_above_parent = (lx - px).abs() < 1.0;
+        let right_child_above_parent = (rx - px).abs() < 1.0;
 
-        // Bar endpoints are pulled inward by elbow_r where a child elbow takes over.
-        let bar_x0 = if left_is_child {
+        // Bar endpoints are pulled inward by elbow_r only where a curved elbow takes over.
+        let bar_x0 = if left_is_child && !left_child_above_parent {
             bar_min_x + elbow_r
         } else {
             bar_min_x
         };
-        let bar_x1 = if right_is_child {
+        let bar_x1 = if right_is_child && !right_child_above_parent {
             bar_max_x - elbow_r
         } else {
             bar_max_x
@@ -1390,9 +1429,14 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         //    intermediate children get straight stubs from the bar.
         for (ci, &(cx, cy)) in sorted_children.iter().enumerate() {
             let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            let is_left = left_is_child && (cx - lx).abs() < 1.0;
-            let is_right =
-                right_is_child && (cx - rx).abs() < 1.0 && !(is_left && sorted_children.len() == 1);
+            // Exception: if the child is directly above the parent x, the bar has no
+            // horizontal approach to bend from — use a straight stub instead of an elbow.
+            let child_above_parent = (cx - px).abs() < 1.0;
+            let is_left = left_is_child && (cx - lx).abs() < 1.0 && !child_above_parent;
+            let is_right = right_is_child
+                && (cx - rx).abs() < 1.0
+                && !(is_left && sorted_children.len() == 1)
+                && !child_above_parent;
 
             if is_left {
                 // Elbow: arrives from the right along the bar, departs upward to the child.
