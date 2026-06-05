@@ -358,6 +358,20 @@ fn bezier3_tangent(
     (dx / len, dy / len)
 }
 
+// ── Brush-pressure helpers (used by ink style) ───────────────────────────────
+
+fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Pressure envelope along a brush stroke: rises quickly from the tip, holds
+/// at full pressure through the middle, then tapers symmetrically at the far tip.
+/// Returns a value in [0, 1]; multiply by hw to get the pressure-adjusted width.
+fn brush_pressure(t: f64) -> f64 {
+    smoothstep(0.0, 0.28, t).min(smoothstep(1.0, 0.72, t))
+}
+
 // ── Style: tapered ────────────────────────────────────────────────────────────
 
 fn render_tapered_style(branches: &[Branch], prefs: &Prefs) -> String {
@@ -1066,23 +1080,26 @@ fn ink_grain_line(
     hw_p: f64,
     hw_c: f64,
     frac: f64,
+    t_start: f64,
+    t_end: f64,
     opacity: f64,
     stroke_width: f64,
     color: &str,
     seed_off: u64,
 ) -> String {
-    const N: usize = 32;
+    const N: usize = 20;
     let mut seed = seed_off;
     let mut pts: Vec<(f64, f64)> = Vec::with_capacity(N);
 
-    // Compute sample points with per-point perpendicular noise.
+    // Sample only within [t_start, t_end]; width follows pressure envelope.
     for i in 0..N {
-        let t = i as f64 / (N - 1) as f64;
+        let t = t_start + (t_end - t_start) * (i as f64 / (N - 1) as f64);
         let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
         let (tang_x, tang_y) = bezier3_tangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
         let norm_x = -tang_y;
         let norm_y = tang_x;
-        let hw = hw_p + (hw_c - hw_p) * t;
+        let hw_base = hw_p + (hw_c - hw_p) * t;
+        let hw = hw_base * (0.35 + 0.65 * brush_pressure(t));
 
         seed = seed
             .wrapping_mul(6364136223846793005)
@@ -1177,7 +1194,9 @@ fn ink_smooth_branch(
         let t = i as f64 / N as f64;
         let (bx, by) = bezier3(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
         let (tx, ty) = bezier3_tangent(px, py, p1x, p1y, p2x, p2y, cx, cy, t);
-        let hw = hw_p + (hw_c - hw_p) * t;
+        // Pressure envelope narrows the silhouette at both tips.
+        let hw_base = hw_p + (hw_c - hw_p) * t;
+        let hw = hw_base * (0.35 + 0.65 * brush_pressure(t));
         outline_seed = outline_seed
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
@@ -1210,24 +1229,38 @@ fn ink_smooth_branch(
          stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
     ));
 
-    // White grain lines on top simulate wood highlights and longitudinal fibres.
-    // Bias toward the upper/right side (frac > 0 = lit side) — same parallel-striation
-    // technique as before, but white-on-black instead of black-on-white.
+    // Bristle bundle: white strokes on the black body simulate individual brush fibres.
+    //
+    // Each bristle gets a random t-range within [0, 1] — shorter bristles don't reach
+    // both tips, so the silhouette tapers naturally as fewer fibres overlap near the ends.
+    // Highlight bias: frac > 0 (upper/right, lit side) → brighter, thicker strokes.
     let avg_hw = (hw_p + hw_c) * 0.5;
-    let n_grains = ((avg_hw * 2.0 / 4.5) as usize + 2).max(2).min(16);
+    let n_bristles = ((avg_hw * 2.0 / 3.5) as usize + 4).max(8).min(30);
     let branch_seed = ((px * 1000.0) as u64)
         .wrapping_add((py * 997.0) as u64)
         .wrapping_add((cx * 991.0) as u64)
         .wrapping_add((cy * 983.0) as u64)
         .wrapping_add(seed_off.wrapping_mul(2_654_435_761));
 
-    for i in 0..n_grains {
-        let frac = -0.82 + (i as f64 + 0.5) * 1.64 / n_grains as f64;
-        // Highlight bias: frac > 0 = upper/right (lit) side gets brighter, thicker strokes.
+    for i in 0..n_bristles {
+        let frac = -0.85 + (i as f64 + 0.5) * 1.70 / n_bristles as f64;
+
+        // Random length and placement for this bristle.
+        let mut rseed = branch_seed
+            .wrapping_add(i as u64 * 13_331)
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let length_frac = 0.75 + (rseed & 0xFFFF) as f64 / 65535.0 * 0.25; // 0.75–1.00
+        rseed = rseed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let t_start = (rseed & 0xFFFF) as f64 / 65535.0 * (1.0 - length_frac);
+        let t_end = (t_start + length_frac).min(1.0);
+
         let edge_dist = frac.abs();
-        let highlight_bonus = 0.22 * frac.max(0.0);
-        let opacity = (0.50 - edge_dist * 0.22 + highlight_bonus).clamp(0.08, 0.70);
-        let stroke_width = if frac > 0.0 { 0.75 } else { 0.45 };
+        let highlight_bonus = 0.20 * frac.max(0.0);
+        let opacity = (0.48 - edge_dist * 0.20 + highlight_bonus).clamp(0.06, 0.68);
+        let stroke_width = if frac > 0.0 { 0.70 } else { 0.40 };
         out.push_str(&ink_grain_line(
             px,
             py,
@@ -1240,6 +1273,8 @@ fn ink_smooth_branch(
             hw_p,
             hw_c,
             frac,
+            t_start,
+            t_end,
             opacity,
             stroke_width,
             "#FFF",
