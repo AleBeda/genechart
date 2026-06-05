@@ -1214,10 +1214,16 @@ fn ink_smooth_branch(
 
     // Bristle bundle: white strokes on the black body simulate individual brush fibres.
     //
-    // Split ~1/4 bristles on the shadow side and ~3/4 on the lit (upper/right) side,
-    // giving 3-4x more fibres where the branch catches the light.  Each bristle gets a
-    // random partial t-range so shorter fibres don't reach the endpoints, creating a
-    // soft, organic convergence at the branch tips without geometric tapering.
+    // Split ~1/4 bristles on the shadow side and ~3/4 on the lit side, giving 3-4x more
+    // fibres where the branch catches the light.  Each bristle gets a random partial
+    // t-range so shorter fibres don't reach the endpoints.
+    //
+    // Lit-side convention:
+    //   vertical segment   → right side is lit → positive frac = lit
+    //   horizontal segment → top side is lit   → negative frac = lit (normal points down)
+    let is_horizontal = (cx - px).abs() > (cy - py).abs();
+    let lit_sign: f64 = if is_horizontal { -1.0 } else { 1.0 };
+
     let avg_hw = (hw_p + hw_c) * 0.5;
     let n_total = ((avg_hw * 2.0 / 3.0) as usize + 4).max(10).min(36);
     let n_shadow = (n_total / 4).max(2);
@@ -1260,19 +1266,18 @@ fn ink_smooth_branch(
         )
     };
 
-    // Shadow side: frac ∈ [−0.85, −0.05], sparse and dim.
+    // Shadow side: sparse and dim.
     for i in 0..n_shadow {
-        let frac = -0.85 + (i as f64 + 0.5) * 0.80 / n_shadow as f64;
+        let frac = lit_sign * (-0.85 + (i as f64 + 0.5) * 0.80 / n_shadow as f64);
         let s = emit_bristle(i, frac, 0.22, 0.38);
         out.push_str(&s);
     }
-    // Lit side: frac ∈ [+0.05, +0.85], dense and bright; peaks near the centre of
-    // the lit half and fades gently toward the silhouette edge.
+    // Lit side: dense and bright; opacity peaks near the centre, fades toward the edge.
     for i in 0..n_lit {
-        let frac = 0.05 + (i as f64 + 0.5) * 0.80 / n_lit as f64;
-        let inner_t = frac / 0.85; // 0 → 1 from centre of lit half toward edge
+        let base_frac = 0.05 + (i as f64 + 0.5) * 0.80 / n_lit as f64;
+        let inner_t = base_frac / 0.85;
         let opacity = (0.62 - inner_t * 0.28).clamp(0.28, 0.62);
-        let s = emit_bristle(n_shadow + i, frac, opacity, 0.65);
+        let s = emit_bristle(n_shadow + i, lit_sign * base_frac, opacity, 0.65);
         out.push_str(&s);
     }
 
@@ -1300,7 +1305,7 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         out.push_str(&ink_roots(rx, y_root, root_depth, MAX_HW, MIN_HW));
     }
 
-    for branch in branches {
+    for (bi, branch) in branches.iter().enumerate() {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
             continue;
         }
@@ -1311,11 +1316,45 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
         let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
 
-        // One smooth S-curve per child: vertical at parent, horizontal in middle,
-        // vertical at child — no right-angle elbows or junction circles.
-        for (i, &(cx, cy)) in branch.child_pts.iter().enumerate() {
+        let mean_cy =
+            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
+        let (bar_y, bar_min_x, bar_max_x) = branch_bar(py, mean_cy, px, &branch.child_pts);
+        let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
+
+        let seed_base = bi as u64 * 100;
+
+        // 1. Vertical trunk from parent attachment up to the horizontal bar.
+        if (py - bar_y).abs() > 1.0 {
+            out.push_str(&ink_smooth_branch(
+                px, py, px, bar_y, w_py, w_bar, seed_base,
+            ));
+        }
+
+        // 2. Horizontal bar spanning all child attachment points (and parent x).
+        if (bar_max_x - bar_min_x) > 1.0 {
+            out.push_str(&ink_smooth_branch(
+                bar_min_x,
+                bar_y,
+                bar_max_x,
+                bar_y,
+                w_bar,
+                w_bar,
+                seed_base + 1,
+            ));
+        }
+
+        // 3. Vertical stub from the bar down to each child attachment point.
+        for (ci, &(cx, cy)) in branch.child_pts.iter().enumerate() {
             let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            out.push_str(&ink_smooth_branch(px, py, cx, cy, w_py, w_cy, i as u64));
+            out.push_str(&ink_smooth_branch(
+                cx,
+                bar_y,
+                cx,
+                cy,
+                w_bar,
+                w_cy,
+                seed_base + 2 + ci as u64,
+            ));
             if leaf_count > 0 {
                 out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
             }
