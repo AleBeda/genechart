@@ -101,7 +101,7 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
-**Realistic tree branches:** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Four rendering styles are available:
+**Realistic tree branches (experimental):** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Four rendering styles are available:
 
 | Style | Description |
 |---|---|

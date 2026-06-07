@@ -1,4 +1,5 @@
 //! Realistic tree branch rendering for the boxed_couples layout.
+//! (experimental, may be removed or redesigned in the future)
 //!
 //! Generates an SVG background layer of organic tree branches/trunk that
 //! replaces the default straight connectors. Boxes are rendered on top by the caller.
