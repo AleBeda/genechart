@@ -464,6 +464,7 @@ struct BcSvgCtx<'a> {
     conn_color: &'a str,
     conn_width: f64,
     prefs: &'a Prefs,
+    skip_connectors: bool,
 }
 
 fn render_fancy_highlight_rect(
@@ -586,7 +587,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             );
         }
         Primitive::Connector(c) => {
-            if c.child_points.is_empty() {
+            if ctx.skip_connectors || c.child_points.is_empty() {
                 return;
             }
             let parent_svgs: Vec<(f64, f64)> = c
@@ -849,6 +850,23 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let to_svg_x = |dx: f64| dx + MARGIN;
     let to_svg_y = |dy: f64| dy + MARGIN + chart_top_offset;
 
+    let realistic_tree_active =
+        prefs.output.style.realistic_tree.enabled && output.is_boxed_couples();
+
+    // Collect connectors early so root_extra_height can expand the canvas before we emit the header.
+    let rt_connectors: Vec<&crate::scene::ConnectorPrimitive> = if realistic_tree_active {
+        let mut v = Vec::new();
+        crate::backend::realistic_tree::collect_connectors(&scene.primitives, &mut v);
+        v
+    } else {
+        Vec::new()
+    };
+    let tree_root_extra_h = if realistic_tree_active {
+        crate::backend::realistic_tree::root_extra_height(&rt_connectors)
+    } else {
+        0.0
+    };
+
     // Shared rendering context (used for boxed_couples groups and all non-fan primitives)
     let ctx = BcSvgCtx {
         to_svg_x: &to_svg_x,
@@ -860,6 +878,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         conn_color: &conn_color,
         conn_width,
         prefs,
+        skip_connectors: realistic_tree_active,
     };
 
     // SVG dimensions
@@ -869,8 +888,12 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     } else {
         prefs.output.style.spacing.copyright
     };
-    let total_h =
-        scene.canvas_bounds.h + 2.0 * MARGIN + chart_top_offset + copy_line_h + copy_spacing;
+    let total_h = scene.canvas_bounds.h
+        + 2.0 * MARGIN
+        + chart_top_offset
+        + copy_line_h
+        + copy_spacing
+        + tree_root_extra_h;
 
     let canvas_w = format!("{total_w:.0}");
     let canvas_h = format!("{total_h:.0}");
@@ -898,6 +921,16 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
             &copy_text,
             &copy_font_family,
             copy_font_size,
+        ));
+    }
+
+    // Realistic tree background layer (rendered before boxes so boxes are on top)
+    if realistic_tree_active {
+        out.push_str(&crate::backend::realistic_tree::render_tree_layer(
+            &rt_connectors,
+            &to_svg_x,
+            &to_svg_y,
+            prefs,
         ));
     }
 

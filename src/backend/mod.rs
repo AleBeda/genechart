@@ -2,6 +2,7 @@
 
 pub(crate) mod font_metrics;
 pub mod pdf;
+pub mod realistic_tree;
 pub mod svg;
 pub mod text;
 
