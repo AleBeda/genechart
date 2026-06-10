@@ -78,8 +78,8 @@ size = "A4" # Valid values: "A0"–"A5", "letter", "custom"
 orientation = "portrait" # Valid values: "port[rait]", "land[scape]"
 
 [output.paper.custom]
-width = 210.0  # mm
-height = 297.0 # mm
+width = 0.0   # mm; set both width and height > 0 to use custom paper size
+height = 0.0  # mm
 
 [output.poster]
 rows = 1

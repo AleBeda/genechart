@@ -2,7 +2,7 @@
 
 A command-line tool that reads a [GEDCOM 5.5.1](https://gedcom.io/) genealogical file and generates a family-tree chart as text, SVG, or PDF.
 
-**Version**: v0.5.5
+**Version**: v0.5.6
 
 ## Installation
 
@@ -330,8 +330,12 @@ path = ""
 noclobber = false
 
 [output.paper]
-size = "A4"
-orientation = "portrait"
+size = "A4"           # "A0"–"A5", "letter", "custom"
+orientation = "portrait"  # ignored when size = "custom"
+
+[output.paper.custom]
+width = 0.0   # mm — set both > 0 to activate
+height = 0.0  # mm
 
 [output.poster]
 rows = 1

@@ -117,7 +117,7 @@ pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
             let cw = prefs.output.paper.custom.width;
             let ch = prefs.output.paper.custom.height;
             if cw > 0.0 && ch > 0.0 {
-                (cw, ch)
+                return Some((cw, ch)); // orientation is ignored for explicit custom dimensions
             } else {
                 return None;
             }
@@ -1419,6 +1419,20 @@ mod tests {
         prefs.output.paper.orientation = "landscape".into();
         assert_eq!(paper_size_mm(&prefs), Some((297.0, 210.0)));
         prefs.output.paper.size = "".into();
+        assert_eq!(paper_size_mm(&prefs), None);
+
+        // Custom: orientation is ignored; exact dimensions are returned as-is.
+        prefs.output.paper.size = "custom".into();
+        prefs.output.paper.custom.width = 300.0;
+        prefs.output.paper.custom.height = 150.0;
+        prefs.output.paper.orientation = "portrait".into();
+        assert_eq!(paper_size_mm(&prefs), Some((300.0, 150.0)));
+        prefs.output.paper.orientation = "landscape".into();
+        assert_eq!(paper_size_mm(&prefs), Some((300.0, 150.0)));
+
+        // Custom with no dimensions → None.
+        prefs.output.paper.custom.width = 0.0;
+        prefs.output.paper.custom.height = 0.0;
         assert_eq!(paper_size_mm(&prefs), None);
     }
 
