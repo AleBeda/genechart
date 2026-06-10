@@ -32,6 +32,14 @@ death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"
 date_qualifiers = "compact" # Valid values: "none", "gedcom", "compact"
 no_name = "" # Text to show when an individual has no name; empty means omit the name line entirely
+living = ""  # Text for {living} in format.individual when individual has living=true; empty = not shown
+
+[custom.gedcom.tags]
+# Non-standard GEDCOM tag names to capture. Change these to match your software's tags.
+living     = "_LIVING"  # individual: living flag ("Y" or "N")
+alt_name   = "NAM2"     # individual: alternate/romanized name
+relig_name = "NAMH"     # individual: religious or transliterated name
+relig_marr = "JMAR"     # family: religious or alternate marriage record reference
 
 [layout]
 type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy", "boxes"

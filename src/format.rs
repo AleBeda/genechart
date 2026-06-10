@@ -264,6 +264,19 @@ pub fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
             String::new()
         },
     );
+    vars.insert("alt_name".into(), indi.alt_name.clone().unwrap_or_default());
+    vars.insert(
+        "relig_name".into(),
+        indi.relig_name.clone().unwrap_or_default(),
+    );
+    vars.insert(
+        "living".into(),
+        if indi.living == Some(true) {
+            prefs.format.living.clone()
+        } else {
+            String::new()
+        },
+    );
     strfmt::strfmt(&prefs.format.individual, &vars)
         .unwrap_or_else(|_| {
             format!(
@@ -312,6 +325,41 @@ pub fn format_event(
         return None;
     }
     Some(s)
+}
+
+/// Like [`format_event`] but also injects additional key-value pairs into the template.
+///
+/// Used for marriage rendering where `{relig_marr}` may appear in `format.marriage`.
+/// Returns `None` when date, place, and all extra values are absent/empty.
+pub fn format_event_extra(
+    template: &str,
+    date: Option<&GedDate>,
+    place: Option<&str>,
+    qualifier_mode: &str,
+    extra: &[(&str, &str)],
+) -> Option<String> {
+    if date.is_none() && place.is_none() && extra.iter().all(|(_, v)| v.is_empty()) {
+        return None;
+    }
+
+    let (processed_template, date_pattern) = extract_date_format(template);
+
+    let date_str = date
+        .map(|d| format_ged_date(&d.raw, date_pattern.as_deref(), qualifier_mode))
+        .unwrap_or_default();
+
+    let mut vars: HashMap<String, String> = HashMap::new();
+    vars.insert("date".into(), date_str);
+    vars.insert("location".into(), place.unwrap_or("").to_string());
+    for (k, v) in extra {
+        vars.insert((*k).into(), (*v).into());
+    }
+
+    let s =
+        strfmt::strfmt(&processed_template, &vars).unwrap_or_else(|_| processed_template.clone());
+
+    let s = s.trim_end_matches([',', ' ']).to_string();
+    if s.is_empty() { None } else { Some(s) }
 }
 
 // ---------------------------------------------------------------------------
@@ -481,7 +529,7 @@ mod tests {
             fams: vec![],
             famc: vec![],
             alt_name: None,
-            name_heb: None,
+            relig_name: None,
             living: None,
             notes: vec![],
             in_scope: true,
