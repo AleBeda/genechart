@@ -109,6 +109,18 @@ fn data_font_size(prefs: &Prefs) -> f64 {
 fn name_lh(prefs: &Prefs) -> f64 {
     name_font_size(prefs) * 1.2
 }
+
+/// In compact mode: x of the vertical trunk for the spouse→children connector.
+/// Approximates the mid-point of the spouse's first character.
+fn compact_xv_spouse(ind_x: f64, prefs: &Prefs) -> f64 {
+    let approx_half_char = name_font_size(prefs) * CHAR_WIDTH_RATIO * 0.5;
+    ind_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP + approx_half_char
+}
+
+/// In compact mode: x where children's name text starts.
+fn compact_child_text_x(ind_x: f64, prefs: &Prefs) -> f64 {
+    compact_xv_spouse(ind_x, prefs) + ARC_R + CHILD_SHORT_H + CHILD_TEXT_GAP
+}
 fn data_lh(prefs: &Prefs) -> f64 {
     data_font_size(prefs) * 1.2
 }
@@ -211,10 +223,15 @@ fn place_subtree(
 
         // Recurse into children if within generation limit.
         if generation < max_gen {
+            let x_child = if prefs.layout.fancy.compact {
+                compact_child_text_x(x_gen, prefs)
+            } else {
+                x_gen + gen_width + CHILD_TEXT_GAP
+            };
             for child_id in &fam.children_ids {
                 let h = place_subtree(
                     child_id,
-                    x_gen + gen_width + CHILD_TEXT_GAP,
+                    x_child,
                     y_cursor,
                     generation + 1,
                     true,
@@ -1222,37 +1239,61 @@ fn emit_subtree(
                     .collect();
 
                 if !children.is_empty() {
-                    let child_gen_x = geo.x + gen_width;
-                    let x_spine = child_gen_x - CHILD_SHORT_H - ARC_R;
-                    let sp_text_x = name_start_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
-                    let x_conn_start = sp_text_x + spouse_name_w + NAME_TO_CONN_GAP;
-                    let y_sp_mid = y_sp + n_lh / 2.0;
-                    let y_last_mid = children.last().unwrap() + n_lh / 2.0;
-
-                    let mut d = format!(
-                        "M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 1 {:.1} {:.1} L {:.1} {:.1}",
-                        x_conn_start,
-                        y_sp_mid,
-                        x_spine - ARC_R,
-                        y_sp_mid,
-                        x_spine,
-                        y_sp_mid + ARC_R,
-                        x_spine,
-                        y_last_mid - ARC_R,
-                    );
-                    for y_c in &children {
-                        let y_c_mid = y_c + n_lh / 2.0;
-                        d.push_str(&format!(
-                            " M {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {:.1} L {:.1} {:.1}",
+                    let d;
+                    let max_x_conn;
+                    if prefs.layout.fancy.compact {
+                        let xv_sp = compact_xv_spouse(name_start_x, prefs);
+                        let child_gen_x = xv_sp + ARC_R + CHILD_SHORT_H;
+                        let y_sp_name_bot = y_sp + n_lh;
+                        let y_last_mid = children.last().unwrap() + n_lh / 2.0;
+                        let mut path = format!(
+                            "M {xv_sp:.1} {y_sp_name_bot:.1} L {xv_sp:.1} {:.1}",
+                            y_last_mid - ARC_R,
+                        );
+                        for y_c in &children {
+                            let y_c_mid = y_c + n_lh / 2.0;
+                            path.push_str(&format!(
+                                " M {xv_sp:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {y_c_mid:.1} L {child_gen_x:.1} {y_c_mid:.1}",
+                                y_c_mid - ARC_R,
+                                xv_sp + ARC_R,
+                            ));
+                        }
+                        d = path;
+                        max_x_conn = child_gen_x;
+                    } else {
+                        let child_gen_x = geo.x + gen_width;
+                        let x_spine = child_gen_x - CHILD_SHORT_H - ARC_R;
+                        let sp_text_x = name_start_x + IND_DATA_OFFSET + SPOUSE_TEXT_GAP;
+                        let x_conn_start = sp_text_x + spouse_name_w + NAME_TO_CONN_GAP;
+                        let y_sp_mid = y_sp + n_lh / 2.0;
+                        let y_last_mid = children.last().unwrap() + n_lh / 2.0;
+                        let mut path = format!(
+                            "M {:.1} {:.1} L {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 1 {:.1} {:.1} L {:.1} {:.1}",
+                            x_conn_start,
+                            y_sp_mid,
+                            x_spine - ARC_R,
+                            y_sp_mid,
                             x_spine,
-                            y_c_mid - ARC_R,
-                            x_spine + ARC_R,
-                            y_c_mid,
-                            child_gen_x,
-                            y_c_mid,
-                        ));
+                            y_sp_mid + ARC_R,
+                            x_spine,
+                            y_last_mid - ARC_R,
+                        );
+                        for y_c in &children {
+                            let y_c_mid = y_c + n_lh / 2.0;
+                            path.push_str(&format!(
+                                " M {:.1} {:.1} A {ARC_R} {ARC_R} 0 0 0 {:.1} {:.1} L {:.1} {:.1}",
+                                x_spine,
+                                y_c_mid - ARC_R,
+                                x_spine + ARC_R,
+                                y_c_mid,
+                                child_gen_x,
+                                y_c_mid,
+                            ));
+                        }
+                        d = path;
+                        max_x_conn = child_gen_x;
                     }
-                    *max_x = f64::max(*max_x, child_gen_x);
+                    *max_x = f64::max(*max_x, max_x_conn);
                     spouse_conns.push(FancyConnector {
                         d,
                         stroke: conn_color.to_string(),

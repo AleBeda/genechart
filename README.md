@@ -2,7 +2,7 @@
 
 A command-line tool that reads a [GEDCOM 5.5.1](https://gedcom.io/) genealogical file and generates a family-tree chart as text, SVG, or PDF.
 
-**Version**: v0.5.4
+**Version**: v0.5.5
 
 ## Installation
 
@@ -145,7 +145,7 @@ genechart family.ged -r I1 --type fancy -o chart.svg
 genechart family.ged -r I1 --type fancy --dir ancestors -o chart.svg
 ```
 
-Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations), `child_gap` (vertical gap between a person's last spouse and their first child), `anc_gap` (vertical breathing room around each individual in ancestors mode).
+Configuration: `[layout.fancy]` — `gen_width` (horizontal distance between successive generations; ignored when `compact = true`), `child_gap` (vertical gap between a person's last spouse and their first child), `anc_gap` (vertical breathing room around each individual in ancestors mode), `compact` (default `true`: children are stacked below the spouse column rather than placed `gen_width` to the right, producing a much narrower chart).
 
 ### boxes
 
@@ -312,9 +312,10 @@ outer_ring_height = 200
 radial_gen = 3
 
 [layout.fancy]
-gen_width = 300.0
+gen_width = 300.0      # ignored when compact = true
 child_gap = 10.0
 anc_gap = 10.0
+compact = true         # stack children below spouse (narrower chart)
 
 [layout.boxes]
 box_width = 240.0

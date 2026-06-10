@@ -198,7 +198,7 @@ pub struct FanPrefs {
     pub radial_gen: u32,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FancyPrefs {
     #[serde(default, deserialize_with = "de_f64")]
     pub gen_width: f64,
@@ -206,6 +206,19 @@ pub struct FancyPrefs {
     pub child_gap: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub anc_gap: f64,
+    #[serde(default = "default_true")]
+    pub compact: bool,
+}
+
+impl Default for FancyPrefs {
+    fn default() -> Self {
+        Self {
+            gen_width: 0.0,
+            child_gap: 0.0,
+            anc_gap: 0.0,
+            compact: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
