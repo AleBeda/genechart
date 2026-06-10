@@ -87,7 +87,7 @@ pub enum BoxedCouplesGeo {
 /// The layout can represent at most 2 spouses (a 1-spouse box or a wide
 /// 2-spouse box).  When more exist, spouses without children are dropped from
 /// the end of the list first until at most 2 remain.
-fn prune_spouses(ind_id: &str, genrep: &Genrep) -> Vec<String> {
+fn prune_spouses<G>(ind_id: &str, genrep: &Genrep<G>) -> Vec<String> {
     let mut spouses = spouses_of(ind_id, genrep);
     if spouses.len() > 2 {
         eprintln!(
@@ -1008,12 +1008,18 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
         };
         let marr_y = center_display_y + date_font_size / 2.0;
 
+        let pruned_spouse_ids: std::collections::HashSet<String> =
+            prune_spouses(ind_id, genrep).into_iter().collect();
         let sorted_fam_ids = sort_families_by_date(ind, genrep);
         let spouses: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> =
             sorted_fam_ids
                 .iter()
                 .filter_map(|fid| genrep.families.get(fid).map(|f| (fid, f)))
                 .filter(|(_, f)| f.in_scope)
+                .filter(|(_, f)| {
+                    spouse_id_from_family_bc(ind_id, f)
+                        .map_or(false, |id| pruned_spouse_ids.contains(&id))
+                })
                 .collect();
         let is_two_spouse = geo.width > bc.box_width + 1.0;
 
@@ -2796,5 +2802,65 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Regression: when an individual has 3 spouses and only the 3rd has children,
+    /// emit_scene must show the 3rd spouse (not the 2nd) in the right slot of the box.
+    ///
+    /// Before the fix, emit_scene used the full unsorted family list and took index 1
+    /// (Spouse2/I3) instead of the pruned list index 1 (Spouse3/I4).
+    #[test]
+    fn test_three_spouses_middle_pruned_scene() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::scene::Primitive;
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n1 FAMS @F3@\n\
+0 @I2@ INDI\n1 NAME Spouse1 /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Spouse2 /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Spouse3 /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME Child1 /C/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n\
+0 @F3@ FAM\n1 HUSB @I1@\n1 WIFE @I4@\n1 CHIL @I5@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&bc, &prefs);
+
+        fn collect_ids(prims: &[Primitive], ids: &mut Vec<String>) {
+            for p in prims {
+                if let Primitive::Group(g) = p {
+                    if !g.id.is_empty() {
+                        ids.push(g.id.clone());
+                    }
+                    collect_ids(&g.children, ids);
+                }
+            }
+        }
+        let mut ids = Vec::new();
+        collect_ids(&scene.primitives, &mut ids);
+
+        assert!(
+            ids.contains(&"I2-name".to_string()),
+            "I2 (1st spouse, kept) should appear in scene; found: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"I4-name".to_string()),
+            "I4 (3rd spouse with child, must be in right slot); found: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"I3-name".to_string()),
+            "I3 (2nd spouse, childless, pruned) must NOT appear in scene; found: {ids:?}"
+        );
     }
 }
