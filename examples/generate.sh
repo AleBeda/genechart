@@ -20,6 +20,7 @@ genechart "$KENNEDY" --root I0 --dir ancestors --type fan --gen 4 --svg \
 
 echo "==> Kennedy: fancy SVG (3 generations from Joseph Kennedy Sr.)"
 genechart "$KENNEDY" --root I1 --gen 3 --type fancy --svg \
+  --pref 'layout.fancy.compact=false' \
   -o examples/kennedy/kennedy_fancy.svg
 
 echo "==> Kennedy: boxes SVG with photos (3 generations from Joseph Kennedy Sr., root at top)"
@@ -64,6 +65,7 @@ genechart "$SHAKESPEARE" --root I0001 --dir ancestors --type fan --gen 3 --svg \
 
 echo "==> Shakespeare: fancy SVG (3 generations from William Shakespeare)"
 genechart "$SHAKESPEARE" --root I0001 --gen 3 --type fancy --svg \
+  --pref 'layout.fancy.compact=false' \
   -o examples/shakespeare/shakespeare_fancy.svg
 
 echo "Done. Outputs written to examples/shakespeare/"
