@@ -5,15 +5,28 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use crate::preferences::DiagnosticsPrefs;
+use crate::preferences::{CustomGedcomTagsPrefs, DiagnosticsPrefs};
 use crate::util::matches_direction;
 use genrep::{Event, Family, GedDate, Genrep, Individual};
 
 static DIAG: OnceLock<DiagnosticsPrefs> = OnceLock::new();
+static PARSER_TAGS: OnceLock<CustomGedcomTagsPrefs> = OnceLock::new();
 
 /// Call once from `main` after loading preferences, before parsing.
 pub fn set_diagnostics(diag: DiagnosticsPrefs) {
     let _ = DIAG.set(diag);
+}
+
+/// Call once from `main` after loading preferences, before parsing.
+pub fn set_parser_tags(tags: CustomGedcomTagsPrefs) {
+    let _ = PARSER_TAGS.set(tags);
+}
+
+fn parser_tags() -> CustomGedcomTagsPrefs {
+    PARSER_TAGS
+        .get()
+        .cloned()
+        .unwrap_or_else(|| crate::preferences::Prefs::default().custom.gedcom.tags)
 }
 
 macro_rules! diag_warn {
@@ -261,6 +274,8 @@ pub fn parse_and_merge(
 }
 
 pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
+    let tags = parser_tags();
+
     let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
     let mut families: HashMap<String, Family<()>> = HashMap::new();
     let mut first_indi_id: Option<String> = Option::None;
@@ -307,7 +322,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             fams: Vec::new(),
                             famc: Vec::new(),
                             alt_name: Option::None,
-                            name_heb: Option::None,
+                            relig_name: Option::None,
                             living: Option::None,
                             notes: Vec::new(),
                             in_scope: false,
@@ -324,7 +339,7 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                         wife_id: Option::None,
                         children_ids: Vec::new(),
                         marriage: Option::None,
-                        jmar: Option::None,
+                        relig_marr: Option::None,
                         notes: Vec::new(),
                         in_scope: false,
                         geo: Option::None,
@@ -433,22 +448,22 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             }
                         }
                         "CHAN" | "TEXT" => {} // silently skip
-                        "NAM2" => {
+                        t if !tags.alt_name.is_empty() && t == tags.alt_name => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
                                 indi.alt_name = Some(value.clone());
                             }
                         }
-                        "NAMH" => {
+                        t if !tags.relig_name.is_empty() && t == tags.relig_name => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
-                                indi.name_heb = Some(value.clone());
+                                indi.relig_name = Some(value.clone());
                             }
                         }
-                        "JMAR" => {
+                        t if !tags.relig_marr.is_empty() && t == tags.relig_marr => {
                             if let RecordCtx::Fam(fam) = &mut ctx {
-                                fam.jmar = Some(value.clone());
+                                fam.relig_marr = Some(value.clone());
                             }
                         }
-                        "_LIVING" => {
+                        t if !tags.living.is_empty() && t == tags.living => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
                                 indi.living = match value.trim() {
                                     "Y" => Some(true),
@@ -1022,14 +1037,14 @@ mod tests {
         let gr = parse_str(ged).unwrap();
         let i1 = gr.get_individual("I1").unwrap();
         assert_eq!(i1.alt_name.as_deref(), Some("Test Person (alternate)"));
-        assert_eq!(i1.name_heb.as_deref(), Some("טסט פרסון"));
+        assert_eq!(i1.relig_name.as_deref(), Some("טסט פרסון"));
         assert_eq!(i1.living, Some(true));
 
         let i2 = gr.get_individual("I2").unwrap();
         assert_eq!(i2.living, Some(false));
 
         let f1 = gr.get_family("F1").unwrap();
-        assert_eq!(f1.jmar.as_deref(), Some("ref-12345"));
+        assert_eq!(f1.relig_marr.as_deref(), Some("ref-12345"));
     }
 
     #[test]

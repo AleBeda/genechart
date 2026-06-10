@@ -149,8 +149,8 @@ pub fn merge_into(
             if mi.alt_name.is_none() {
                 mi.alt_name = fi.alt_name;
             }
-            if mi.name_heb.is_none() {
-                mi.name_heb = fi.name_heb;
+            if mi.relig_name.is_none() {
+                mi.relig_name = fi.relig_name;
             }
             if mi.living.is_none() {
                 mi.living = fi.living;
@@ -184,8 +184,8 @@ pub fn merge_into(
             if mf.marriage.is_none() {
                 mf.marriage = ff.marriage;
             }
-            if mf.jmar.is_none() {
-                mf.jmar = ff.jmar;
+            if mf.relig_marr.is_none() {
+                mf.relig_marr = ff.relig_marr;
             }
             for cid in ff.children_ids {
                 if !mf.children_ids.contains(&cid) {
@@ -217,7 +217,7 @@ mod tests {
             fams: Vec::new(),
             famc: Vec::new(),
             alt_name: None,
-            name_heb: None,
+            relig_name: None,
             living: None,
             notes: Vec::new(),
             in_scope: false,
@@ -232,7 +232,7 @@ mod tests {
             wife_id: None,
             children_ids: Vec::new(),
             marriage: None,
-            jmar: None,
+            relig_marr: None,
             notes: Vec::new(),
             in_scope: false,
             geo: None,

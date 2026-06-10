@@ -28,9 +28,9 @@ pub struct Individual<G = ()> {
     pub death: Option<Event>,
     pub fams: Vec<String>,
     pub famc: Vec<String>,
-    pub alt_name: Option<String>, // NAM2: alternate name
-    pub name_heb: Option<String>, // NAMH: Hebrew/transliterated name
-    pub living: Option<bool>,     // _LIVING: living flag
+    pub alt_name: Option<String>, // alternate name (tag configured via custom.gedcom.tags.alt_name)
+    pub relig_name: Option<String>, // religious/transliterated name (tag via custom.gedcom.tags.relig_name)
+    pub living: Option<bool>,       // living flag (tag via custom.gedcom.tags.living)
     pub notes: Vec<String>,
     pub in_scope: bool,
     pub geo: Option<G>,
@@ -43,7 +43,7 @@ pub struct Family<G = ()> {
     pub wife_id: Option<String>,
     pub children_ids: Vec<String>,
     pub marriage: Option<Event>,
-    pub jmar: Option<String>, // JMAR: Jewish marriage record reference
+    pub relig_marr: Option<String>, // religious/alternate marriage reference (tag via custom.gedcom.tags.relig_marr)
     pub notes: Vec<String>,
     pub in_scope: bool,
     pub geo: Option<G>,

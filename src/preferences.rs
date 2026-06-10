@@ -44,6 +44,8 @@ pub struct Prefs {
     pub output: OutputPrefs,
     #[serde(default)]
     pub diagnostics: DiagnosticsPrefs,
+    #[serde(default)]
+    pub custom: CustomPrefs,
 }
 
 impl Default for Prefs {
@@ -152,6 +154,32 @@ pub struct FormatPrefs {
     pub date_qualifiers: String, // "none" | "gedcom" | "compact"
     #[serde(default)]
     pub no_name: String,
+    #[serde(default)]
+    pub living: String, // text for {living} in format.individual when individual.living = true
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct CustomGedcomTagsPrefs {
+    #[serde(default)]
+    pub alt_name: String,
+    #[serde(default)]
+    pub relig_name: String,
+    #[serde(default)]
+    pub living: String,
+    #[serde(default)]
+    pub relig_marr: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct CustomGedcomPrefs {
+    #[serde(default)]
+    pub tags: CustomGedcomTagsPrefs,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct CustomPrefs {
+    #[serde(default)]
+    pub gedcom: CustomGedcomPrefs,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

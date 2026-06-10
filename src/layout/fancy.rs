@@ -3,7 +3,7 @@
 use anyhow::{Result, bail};
 use std::collections::{HashMap, HashSet};
 
-use crate::format::{format_event, format_name};
+use crate::format::{format_event, format_event_extra, format_name};
 use crate::layout::Layout;
 use crate::layout::common::{
     copy_families, copy_individual, highlight_set, resolve_root_id, sort_families_by_date,
@@ -1115,11 +1115,12 @@ fn emit_subtree(
                             }
                             let marriage_text: Option<String> = if prefs.show.marriage {
                                 fam.marriage.as_ref().and_then(|ev| {
-                                    format_event(
+                                    format_event_extra(
                                         &prefs.format.marriage,
                                         ev.date.as_ref(),
                                         ev.place.as_deref(),
                                         &prefs.format.date_qualifiers,
+                                        &[("relig_marr", fam.relig_marr.as_deref().unwrap_or(""))],
                                     )
                                 })
                             } else {

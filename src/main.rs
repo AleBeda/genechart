@@ -237,6 +237,7 @@ fn run() -> anyhow::Result<()> {
 
     // 8. Parse GEDCOM (with optional merge from further files)
     parser::set_diagnostics(prefs.diagnostics.clone());
+    parser::set_parser_tags(prefs.custom.gedcom.tags.clone());
 
     let gedcom_dir = gedcom_path.parent().unwrap_or(std::path::Path::new("."));
     let mut further_pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();

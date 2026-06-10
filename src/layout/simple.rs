@@ -226,7 +226,7 @@ fn html_word_wrap(segs: &[HtmlSeg], avail: usize) -> Vec<Vec<HtmlSeg>> {
 /// Conservative lower bound on chart width in chars (ignores indentation).
 /// Used to pre-allocate note lines before the actual max_x_px is known.
 fn estimate_max_x_chars(genrep: &Genrep, prefs: &Prefs) -> usize {
-    use crate::format::{format_event, format_name};
+    use crate::format::{format_event, format_event_extra, format_name};
 
     let id_col: usize = if prefs.show.id { 6 } else { 0 };
     let gen_pfx: usize = if prefs.show.generation_num { 4 } else { 0 };
@@ -293,11 +293,12 @@ fn estimate_max_x_chars(genrep: &Genrep, prefs: &Prefs) -> usize {
                 i.fams.iter().find_map(|fid| {
                     genrep.families.get(fid.as_str()).and_then(|fam| {
                         fam.marriage.as_ref().and_then(|e| {
-                            format_event(
+                            format_event_extra(
                                 &prefs.format.marriage,
                                 e.date.as_ref(),
                                 e.place.as_deref(),
                                 &prefs.format.date_qualifiers,
+                                &[("relig_marr", fam.relig_marr.as_deref().unwrap_or(""))],
                             )
                         })
                     })
@@ -654,7 +655,7 @@ pub fn gen_prefix_str(generation: usize) -> String {
 /// - `top_y     = geo.line as f64 * line_height_px`
 /// - `x_name    = geo.indent as f64 * indent_px + gen_prefix_px`
 pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Scene {
-    use crate::format::{format_event, format_name};
+    use crate::format::{format_event, format_event_extra, format_name};
     use crate::scene::{
         ConnectorPrimitive, Point, Primitive, Rect, Scene, TextAlign, TextAttr, TextPrimitive,
     };
@@ -767,13 +768,16 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             .iter()
             .filter_map(|(id, _i, g)| {
                 if g.is_spouse {
-                    find_marriage_in_genrep(id, genrep).and_then(|e| {
-                        format_event(
-                            &prefs.format.marriage,
-                            e.date.as_ref(),
-                            e.place.as_deref(),
-                            &prefs.format.date_qualifiers,
-                        )
+                    find_marriage_in_genrep(id, genrep).and_then(|fam| {
+                        fam.marriage.as_ref().and_then(|e| {
+                            format_event_extra(
+                                &prefs.format.marriage,
+                                e.date.as_ref(),
+                                e.place.as_deref(),
+                                &prefs.format.date_qualifiers,
+                                &[("relig_marr", fam.relig_marr.as_deref().unwrap_or(""))],
+                            )
+                        })
                     })
                 } else {
                     None
@@ -935,13 +939,16 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 
         // Marriage data (spouse only)
         if prefs.show.marriage && geo.is_spouse {
-            if let Some(e) = find_marriage_in_genrep(id, genrep) {
-                if let Some(s) = format_event(
-                    &prefs.format.marriage,
-                    e.date.as_ref(),
-                    e.place.as_deref(),
-                    &prefs.format.date_qualifiers,
-                ) {
+            if let Some(fam) = find_marriage_in_genrep(id, genrep) {
+                if let Some(s) = fam.marriage.as_ref().and_then(|e| {
+                    format_event_extra(
+                        &prefs.format.marriage,
+                        e.date.as_ref(),
+                        e.place.as_deref(),
+                        &prefs.format.date_qualifiers,
+                        &[("relig_marr", fam.relig_marr.as_deref().unwrap_or(""))],
+                    )
+                }) {
                     let w = s.chars().count() as f64 * char_width_px;
                     primitives.push(Primitive::Text(TextPrimitive {
                         content: s,
@@ -1134,12 +1141,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
 fn find_marriage_in_genrep<'a>(
     id: &str,
     genrep: &'a Genrep<SimpleGeo>,
-) -> Option<&'a crate::parser::genrep::Event> {
+) -> Option<&'a crate::parser::genrep::Family<SimpleGeo>> {
     let indi = genrep.individuals.get(id)?;
     for fam_id in &indi.fams {
         if let Some(fam) = genrep.families.get(fam_id) {
             if fam.in_scope {
-                return fam.marriage.as_ref();
+                return Some(fam);
             }
         }
     }
