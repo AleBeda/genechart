@@ -600,7 +600,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 .iter()
                 .map(|p| ((ctx.to_svg_x)(p.x), (ctx.to_svg_y)(p.y)))
                 .collect();
-            let bar_y = (parent_svgs[0].1 + child_svgs[0].1) / 2.0;
+            let bar_y = parent_svgs[0].1 + (child_svgs[0].1 - parent_svgs[0].1) * c.bar_y_fraction;
             let all_x: Vec<f64> = parent_svgs
                 .iter()
                 .map(|p| p.0)

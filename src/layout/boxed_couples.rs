@@ -68,6 +68,12 @@ pub struct FamilyGeo {
     pub conn_out2_y: f64,
     /// `true` when the parent box uses the wide `box_w2` form (2 in-scope spouses).
     pub has_spouse2: bool,
+    /// x of the outgoing connector for the third spouse's children (far-right column).
+    pub conn_out3_x: f64,
+    #[allow(dead_code)]
+    pub conn_out3_y: f64,
+    /// `true` when the parent box uses the triple-wide `box_w3` form (3 in-scope spouses).
+    pub has_spouse3: bool,
 }
 
 /// Geo payload stored in both `Individual.geo` and `Family.geo`.
@@ -82,34 +88,37 @@ pub enum BoxedCouplesGeo {
     Family(FamilyGeo),
 }
 
-/// Returns at most 2 in-scope spouses, preferring those with children.
+/// Returns at most 3 in-scope spouses, preferring those with children.
 ///
-/// The layout can represent at most 2 spouses (a 1-spouse box or a wide
-/// 2-spouse box).  When more exist, spouses without children are dropped from
-/// the end of the list first until at most 2 remain.
+/// The layout can represent at most 3 spouses (a 1-spouse box, a wide 2-spouse box,
+/// or a triple-wide 3-spouse box).  When more exist, spouses without children are
+/// dropped from the end of the list first until at most 3 remain.
 fn prune_spouses<G>(ind_id: &str, genrep: &Genrep<G>) -> Vec<String> {
     let mut spouses = spouses_of(ind_id, genrep);
-    if spouses.len() > 2 {
+    if spouses.len() > 3 {
         eprintln!(
-            "warning: {} has {} spouses; only 2 can be represented in boxed_couples layout",
+            "warning: {} has {} spouses; only 3 can be represented in boxed_couples layout",
             ind_id,
             spouses.len()
         );
         let mut i = spouses.len();
-        while i > 0 && spouses.len() > 2 {
+        while i > 0 && spouses.len() > 3 {
             i -= 1;
             if children_with_spouse(ind_id, &spouses[i].clone(), genrep).is_empty() {
                 spouses.remove(i);
             }
         }
-        spouses.truncate(2);
+        spouses.truncate(3);
     }
     spouses
 }
 
-/// Returns `box_w2/2` when `id` has ≥2 in-scope spouses, otherwise `box_w/2`.
-fn half_width_of(id: &str, genrep: &Genrep, box_w: f64, box_w2: f64) -> f64 {
-    (if spouses_of(id, genrep).len() >= 2 {
+/// Returns the appropriate half-width for `id` based on its pruned spouse count.
+fn half_width_of(id: &str, genrep: &Genrep, box_w: f64, box_w2: f64, box_w3: f64) -> f64 {
+    let n = prune_spouses(id, genrep).len();
+    (if n >= 3 {
+        box_w3
+    } else if n >= 2 {
         box_w2
     } else {
         box_w
@@ -204,6 +213,7 @@ fn build_family_geo(
     box_h: f64,
     box_w: f64,
     box_w2: f64,
+    box_w3: f64,
 ) -> Option<BoxedCouplesGeo> {
     let is_placed = |id: &&str| {
         matches!(
@@ -222,16 +232,19 @@ fn build_family_geo(
         _ => return None, // unreachable; kept for exhaustiveness
     };
 
-    let has_spouse2 = geo.width > box_w + 1.0;
+    let has_spouse3 = geo.width > box_w2 + 1.0;
+    let has_spouse2 = geo.width > box_w + 1.0; // true for both 2- and 3-spouse boxes
 
     let conn_out_y = geo.y + box_h / 2.0;
-    let (conn_out1_x, conn_out2_x) = if has_spouse2 {
-        (
-            geo.x - (box_w2 / 2.0 - box_w / 2.0),
-            geo.x + (box_w2 / 2.0 - box_w / 2.0),
-        )
+    let off3 = box_w3 / 2.0 - box_w / 2.0; // = box_w + gap_w at default sizing
+    let off2 = box_w2 / 2.0 - box_w / 2.0;
+    let (conn_out1_x, conn_out2_x, conn_out3_x) = if has_spouse3 {
+        (geo.x - off3, geo.x, geo.x + off3)
+    } else if has_spouse2 {
+        // conn_out3 ≡ conn_out2 (unused for 2-spouse families)
+        (geo.x - off2, geo.x + off2, geo.x + off2)
     } else {
-        (geo.x, geo.x)
+        (geo.x, geo.x, geo.x)
     };
 
     Some(BoxedCouplesGeo::Family(FamilyGeo {
@@ -240,6 +253,9 @@ fn build_family_geo(
         conn_out2_x,
         conn_out2_y: conn_out_y,
         has_spouse2,
+        conn_out3_x,
+        conn_out3_y: conn_out_y,
+        has_spouse3,
     }))
 }
 
@@ -366,7 +382,32 @@ fn compact_pass(
 ) {
     let spouses = prune_spouses(ind_id, genrep);
 
-    if spouses.len() >= 2 {
+    if spouses.len() >= 3 {
+        // 3-spouse parents: compact each spouse's children independently.
+        // Never compact across group boundaries (would violate connector invariants).
+        let children1: Vec<String> = children_with_spouse(ind_id, &spouses[0], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children2: Vec<String> = children_with_spouse(ind_id, &spouses[1], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children3: Vec<String> = children_with_spouse(ind_id, &spouses[2], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        compact_siblings(&children1, generation + 1, gap_w, genrep, out, global_right);
+        compact_siblings(&children2, generation + 1, gap_w, genrep, out, global_right);
+        compact_siblings(&children3, generation + 1, gap_w, genrep, out, global_right);
+        for child_id in children1
+            .iter()
+            .chain(children2.iter())
+            .chain(children3.iter())
+        {
+            compact_pass(child_id, genrep, out, global_right, gap_w, generation + 1);
+        }
+    } else if spouses.len() >= 2 {
         // For 2-spouse parents, compact each spouse's children independently.
         // Compacting across the children1/children2 boundary would shift children1
         // past conn_out1_x, breaking the invariant set by place_descendants.
@@ -417,21 +458,104 @@ fn compact_pass(
 /// - 1-spouse: median child for odd n; average of two middle children for even n.
 /// - 2-spouse: derived from `children1.last()` via `conn_out1_offset`, or
 ///   `children2.first()` via `conn_out2_offset` when `children1` is empty.
+/// - 3-spouse: derived from `children2`'s median (center over middle spouse's children).
 fn recenter_pass(
     ind_id: &str,
     genrep: &Genrep,
     box_w: f64,
     box_w2: f64,
+    box_w3: f64,
     gap_w: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
     max_center_x: Option<f64>,
 ) {
-    // Use spouses_of (already scope-filtered, sorted by date) and take at most 2.
-    // prune_spouses would give the same result for ≤2 spouses; any >2-spouse
-    // warning was already emitted during place_descendants.
-    let spouses: Vec<String> = spouses_of(ind_id, genrep).into_iter().take(2).collect();
+    // Use prune_spouses (scope-filtered, sorted by date, at most 3).
+    // Any warning was already emitted during place_descendants.
+    let spouses = prune_spouses(ind_id, genrep);
 
-    if spouses.len() >= 2 {
+    if spouses.len() >= 3 {
+        let children1: Vec<String> = children_with_spouse(ind_id, &spouses[0], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children2: Vec<String> = children_with_spouse(ind_id, &spouses[1], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+        let children3: Vec<String> = children_with_spouse(ind_id, &spouses[2], genrep)
+            .into_iter()
+            .filter(|cid| out.contains_key(cid.as_str()))
+            .collect();
+
+        for (i, child_id) in children1.iter().enumerate() {
+            let max_x = if i + 1 < children1.len() {
+                let rsib = &children1[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
+        }
+        for (i, child_id) in children2.iter().enumerate() {
+            let max_x = if i + 1 < children2.len() {
+                let rsib = &children2[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
+        }
+        for (i, child_id) in children3.iter().enumerate() {
+            let max_x = if i + 1 < children3.len() {
+                let rsib = &children3[i + 1];
+                Some(
+                    get_x_of(rsib, out)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
+                        - gap_w
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
+                )
+            } else {
+                None
+            };
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
+        }
+
+        if children1.is_empty() && children2.is_empty() && children3.is_empty() {
+            return;
+        }
+
+        let conn_out3_offset = box_w3 / 2.0 - box_w / 2.0;
+        let new_x = if !children2.is_empty() {
+            let n2 = children2.len();
+            if n2 % 2 == 1 {
+                get_x_of(&children2[n2 / 2], out)
+            } else {
+                (get_x_of(&children2[n2 / 2 - 1], out) + get_x_of(&children2[n2 / 2], out)) / 2.0
+            }
+        } else if !children1.is_empty() {
+            get_x_of(children1.last().unwrap(), out) + conn_out3_offset
+        } else {
+            get_x_of(children3.first().unwrap(), out) - conn_out3_offset
+        };
+        let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
+
+        if let Some(ind) = out.get_mut(ind_id) {
+            if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                g.x = final_x;
+                g.conn_in_x = final_x;
+            }
+        }
+    } else if spouses.len() >= 2 {
         let children1: Vec<String> = children_with_spouse(ind_id, &spouses[0], genrep)
             .into_iter()
             .filter(|cid| out.contains_key(cid.as_str()))
@@ -446,28 +570,28 @@ fn recenter_pass(
                 let rsib = &children1[i + 1];
                 Some(
                     get_x_of(rsib, out)
-                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
                         - gap_w
-                        - half_width_of(child_id, genrep, box_w, box_w2),
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
                 )
             } else {
                 None
             };
-            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
         }
         for (i, child_id) in children2.iter().enumerate() {
             let max_x = if i + 1 < children2.len() {
                 let rsib = &children2[i + 1];
                 Some(
                     get_x_of(rsib, out)
-                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
                         - gap_w
-                        - half_width_of(child_id, genrep, box_w, box_w2),
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
                 )
             } else {
                 None
             };
-            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
         }
 
         if children1.is_empty() && children2.is_empty() {
@@ -505,14 +629,14 @@ fn recenter_pass(
                 let rsib = &all_children[i + 1];
                 Some(
                     get_x_of(rsib, out)
-                        - half_width_of(rsib, genrep, box_w, box_w2)
+                        - half_width_of(rsib, genrep, box_w, box_w2, box_w3)
                         - gap_w
-                        - half_width_of(child_id, genrep, box_w, box_w2),
+                        - half_width_of(child_id, genrep, box_w, box_w2, box_w3),
                 )
             } else {
                 None
             };
-            recenter_pass(child_id, genrep, box_w, box_w2, gap_w, out, max_x);
+            recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
         }
 
         let n = all_children.len();
@@ -562,6 +686,7 @@ fn place_descendants(
     box_w: f64,
     box_h: f64,
     box_w2: f64,
+    box_w3: f64,
     gap_w: f64,
     gap_h: f64,
     out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
@@ -577,7 +702,13 @@ fn place_descendants(
     }
 
     let spouses = prune_spouses(ind_id, genrep);
-    let width = if spouses.len() >= 2 { box_w2 } else { box_w };
+    let width = if spouses.len() >= 3 {
+        box_w3
+    } else if spouses.len() == 2 {
+        box_w2
+    } else {
+        box_w
+    };
     let y = -(generation as f64 * (box_h + gap_h));
 
     let x_default = env_left.first().copied().unwrap_or(0.0) + gap_w + width / 2.0;
@@ -598,6 +729,7 @@ fn place_descendants(
                     box_w,
                     box_h,
                     box_w2,
+                    box_w3,
                     gap_w,
                     gap_h,
                     out,
@@ -618,6 +750,7 @@ fn place_descendants(
                         box_w,
                         box_h,
                         box_w2,
+                        box_w3,
                         gap_w,
                         gap_h,
                         out,
@@ -643,7 +776,7 @@ fn place_descendants(
             }
         }
 
-        _ => {
+        2 => {
             let children1 = children_with_spouse(ind_id, &spouses[0], genrep);
             let children2 = children_with_spouse(ind_id, &spouses[1], genrep);
             let all_children: Vec<String> =
@@ -660,6 +793,7 @@ fn place_descendants(
                     box_w,
                     box_h,
                     box_w2,
+                    box_w3,
                     gap_w,
                     gap_h,
                     out,
@@ -680,6 +814,7 @@ fn place_descendants(
                         box_w,
                         box_h,
                         box_w2,
+                        box_w3,
                         gap_w,
                         gap_h,
                         out,
@@ -695,6 +830,89 @@ fn place_descendants(
                 } else {
                     get_x_of(children2.first().unwrap(), out) - conn_out2_offset
                 };
+                if x_from_children < x_default {
+                    let shift = x_default - x_from_children;
+                    for child_id in all_children.iter() {
+                        shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
+                    }
+                    x_default
+                } else {
+                    x_from_children
+                }
+            }
+        }
+
+        _ => {
+            // spouses.len() == 3
+            let children1 = children_with_spouse(ind_id, &spouses[0], genrep);
+            let children2 = children_with_spouse(ind_id, &spouses[1], genrep);
+            let children3 = children_with_spouse(ind_id, &spouses[2], genrep);
+            let all_children: Vec<String> = children1
+                .iter()
+                .chain(children2.iter())
+                .chain(children3.iter())
+                .cloned()
+                .collect();
+
+            if all_children.is_empty() {
+                x_default
+            } else {
+                // Sequential left-to-right placement (identical structure to 2-spouse arm)
+                place_descendants(
+                    genrep,
+                    &all_children[0],
+                    &env_left[1..],
+                    generation + 1,
+                    box_w,
+                    box_h,
+                    box_w2,
+                    box_w3,
+                    gap_w,
+                    gap_h,
+                    out,
+                    global_right,
+                );
+                for i in 1..all_children.len() {
+                    let right_env = fill_env_from_global(
+                        get_right_envelope(&all_children[i - 1], genrep, out),
+                        env_left.len().saturating_sub(1),
+                        global_right,
+                        (generation as usize) + 1,
+                    );
+                    place_descendants(
+                        genrep,
+                        &all_children[i],
+                        &right_env,
+                        generation + 1,
+                        box_w,
+                        box_h,
+                        box_w2,
+                        box_w3,
+                        gap_w,
+                        gap_h,
+                        out,
+                        global_right,
+                    );
+                }
+
+                // Parent x from children2's median — centers the triple box over the
+                // middle spouse's children. Falls back to children1 / children3 when
+                // children2 is empty (analogous to the 2-spouse fallback).
+                let conn_out3_offset = box_w3 / 2.0 - box_w / 2.0;
+                let x_from_children = if !children2.is_empty() {
+                    let n2 = children2.len();
+                    if n2 % 2 == 1 {
+                        get_x_of(&children2[n2 / 2], out)
+                    } else {
+                        (get_x_of(&children2[n2 / 2 - 1], out) + get_x_of(&children2[n2 / 2], out))
+                            / 2.0
+                    }
+                } else if !children1.is_empty() {
+                    get_x_of(children1.last().unwrap(), out) + conn_out3_offset
+                } else {
+                    get_x_of(children3.first().unwrap(), out) - conn_out3_offset
+                };
+
                 if x_from_children < x_default {
                     let shift = x_default - x_from_children;
                     for child_id in all_children.iter() {
@@ -765,6 +983,7 @@ impl Layout for BoxedCouplesLayout {
         let box_w = bc.box_width;
         let box_h = bc.box_height;
         let box_w2 = bc.box_width_2_spouses;
+        let box_w3 = bc.box_width_3_spouses;
         let gap_w = bc.gap_width;
         let gap_h = bc.gap_height;
 
@@ -786,6 +1005,7 @@ impl Layout for BoxedCouplesLayout {
             box_w,
             box_h,
             box_w2,
+            box_w3,
             gap_w,
             gap_h,
             &mut individuals,
@@ -804,6 +1024,7 @@ impl Layout for BoxedCouplesLayout {
             genrep,
             box_w,
             box_w2,
+            box_w3,
             gap_w,
             &mut individuals,
             None,
@@ -852,7 +1073,7 @@ impl Layout for BoxedCouplesLayout {
         }
 
         let families = copy_families(genrep, |fam| {
-            build_family_geo(fam, &individuals, box_h, box_w, box_w2)
+            build_family_geo(fam, &individuals, box_h, box_w, box_w2, box_w3)
         });
 
         Ok(Genrep {
@@ -1021,9 +1242,102 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                         .map_or(false, |id| pruned_spouse_ids.contains(&id))
                 })
                 .collect();
-        let is_two_spouse = geo.width > bc.box_width + 1.0;
+        let is_three_spouse = geo.width > bc.box_width_2_spouses + 1.0;
+        let is_two_spouse = !is_three_spouse && geo.width > bc.box_width + 1.0;
 
-        if is_two_spouse {
+        if is_three_spouse {
+            let off3 = bc.box_width_3_spouses / 2.0 - bc.box_width / 2.0;
+            let left_cx = to_display_x(geo.x - off3); // sp1 center = conn_out1_x
+            let center_cx = to_display_x(geo.x); // sp2 + ind center = conn_out2_x
+            let right_cx = to_display_x(geo.x + off3); // sp3 center = conn_out3_x
+            let box_display_left = to_display_x(geo.x - geo.width / 2.0);
+
+            // Individual section — bottom half of center region; name spans full box width
+            let name_baseline = ind_section_top + spacing.name_above + font_size;
+            emit_individual_section(
+                &mut box_children,
+                ind,
+                &ind_id_trimmed,
+                center_cx,
+                box_display_left + 2.0,
+                geo.width,
+                name_baseline,
+                font_size,
+                date_font_size,
+                spacing,
+                prefs,
+                is_highlighted,
+            );
+
+            // sp1 — top half of left region
+            if let Some((fam1_id, fam1)) = spouses.first() {
+                if let Some(sp1_id) = spouse_id_from_family_bc(ind_id, fam1) {
+                    if let Some(sp1) = genrep.individuals.get(&sp1_id) {
+                        box_children.extend(emit_spouse_primitives(
+                            left_cx,
+                            box_display_left + 2.0,
+                            marr_y,
+                            sp_section_top,
+                            sp1,
+                            fam1,
+                            fam1_id,
+                            prefs,
+                            bc.box_width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                            highlighted_ids.contains(sp1_id.as_str()),
+                        ));
+                    }
+                }
+            }
+
+            // sp2 — top half of center region
+            if let Some((fam2_id, fam2)) = spouses.get(1) {
+                if let Some(sp2_id) = spouse_id_from_family_bc(ind_id, fam2) {
+                    if let Some(sp2) = genrep.individuals.get(&sp2_id) {
+                        box_children.extend(emit_spouse_primitives(
+                            center_cx,
+                            to_display_x(geo.x - bc.box_width / 2.0) + 2.0,
+                            marr_y,
+                            sp_section_top,
+                            sp2,
+                            fam2,
+                            fam2_id,
+                            prefs,
+                            bc.box_width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                            highlighted_ids.contains(sp2_id.as_str()),
+                        ));
+                    }
+                }
+            }
+
+            // sp3 — top half of right region
+            if let Some((fam3_id, fam3)) = spouses.get(2) {
+                if let Some(sp3_id) = spouse_id_from_family_bc(ind_id, fam3) {
+                    if let Some(sp3) = genrep.individuals.get(&sp3_id) {
+                        box_children.extend(emit_spouse_primitives(
+                            right_cx,
+                            to_display_x(geo.x + off3 - bc.box_width / 2.0) + 2.0,
+                            marr_y,
+                            sp_section_top,
+                            sp3,
+                            fam3,
+                            fam3_id,
+                            prefs,
+                            bc.box_width,
+                            font_size,
+                            date_font_size,
+                            spacing,
+                            highlighted_ids.contains(sp3_id.as_str()),
+                        ));
+                    }
+                }
+            }
+        } else if is_two_spouse {
             let left_cx = to_display_x(geo.x - (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
             let right_cx =
                 to_display_x(geo.x + (bc.box_width_2_spouses / 2.0 - bc.box_width / 2.0));
@@ -1203,13 +1517,40 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             _ => continue,
         };
 
-        // Determine which conn_out_x to use based on family index
-        let sorted_fams = sort_families_by_date(parent_ind, genrep);
-        let fam_index = sorted_fams.iter().position(|f| f == fam_id).unwrap_or(0);
-        let conn_out_x = if fam_index == 0 || !fam_geo.has_spouse2 {
-            fam_geo.conn_out1_x
+        // Determine which conn_out_x to use based on the family's position in the pruned list.
+        let pruned_spouse_ids = prune_spouses(parent_id, genrep);
+        let spouse_of_fam = spouse_id_from_family_bc(parent_id, fam);
+        let pruned_idx = match spouse_of_fam
+            .as_deref()
+            .and_then(|sp| pruned_spouse_ids.iter().position(|s| s == sp))
+        {
+            Some(idx) => idx,
+            None => continue, // family's spouse not in pruned list → skip
+        };
+        let conn_out_x = match pruned_idx {
+            0 => fam_geo.conn_out1_x,
+            1 if fam_geo.has_spouse2 || fam_geo.has_spouse3 => fam_geo.conn_out2_x,
+            2 if fam_geo.has_spouse3 => fam_geo.conn_out3_x,
+            _ => fam_geo.conn_out1_x,
+        };
+
+        // 2-channel routing: lower channel (1/3) for sp1/sp3, upper (2/3) for sp2,
+        // only when the parent has a 3-spouse box AND all 3 spouses have ≥2 children.
+        let bar_y_fraction = if fam_geo.has_spouse3 {
+            let all_two_plus = pruned_spouse_ids
+                .iter()
+                .all(|sp| children_with_spouse(parent_id, sp, genrep).len() >= 2);
+            if all_two_plus {
+                if pruned_idx == 1 {
+                    2.0 / 3.0
+                } else {
+                    1.0 / 3.0
+                }
+            } else {
+                0.5
+            }
         } else {
-            fam_geo.conn_out2_x
+            0.5
         };
 
         // Parent exit point: the child-facing edge of the parent box
@@ -1250,6 +1591,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 children: vec![Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![parent_point],
                     child_points,
+                    bar_y_fraction,
                 })],
             })],
         }));
@@ -2182,13 +2524,15 @@ mod tests {
     }
 
     #[test]
-    fn prune_spouses_keeps_two_with_children() {
+    fn prune_spouses_keeps_up_to_three() {
+        // three_spouse_genrep has I10 with 3 spouses: I11 (1 child), I12 (1 child), I13 (0 children).
+        // With a limit of 3, all three are returned (no pruning needed for ≤3).
         let genrep = three_spouse_genrep();
         let pruned = prune_spouses("I10", &genrep);
-        assert_eq!(pruned.len(), 2);
+        assert_eq!(pruned.len(), 3);
         assert!(pruned.contains(&"I11".to_string()));
         assert!(pruned.contains(&"I12".to_string()));
-        assert!(!pruned.contains(&"I13".to_string()));
+        assert!(pruned.contains(&"I13".to_string()));
     }
 
     #[test]
@@ -2271,7 +2615,7 @@ mod tests {
             in_scope: true,
             geo: None,
         };
-        let result = build_family_geo(&fam, &out, 160.0, 220.0, 480.0);
+        let result = build_family_geo(&fam, &out, 160.0, 220.0, 480.0, 800.0);
         assert!(
             result.is_some(),
             "build_family_geo must succeed when wife is the placed individual"
@@ -2804,13 +3148,11 @@ mod tests {
         }
     }
 
-    /// Regression: when an individual has 3 spouses and only the 3rd has children,
-    /// emit_scene must show the 3rd spouse (not the 2nd) in the right slot of the box.
-    ///
-    /// Before the fix, emit_scene used the full unsorted family list and took index 1
-    /// (Spouse2/I3) instead of the pruned list index 1 (Spouse3/I4).
+    /// With 3-spouse support, all three spouses are shown in a triple-wide box.
+    /// I1 has 3 spouses: I2 (no children), I3 (no children), I4 (child I5).
+    /// The box should use box_width_3_spouses and show all three spouses.
     #[test]
-    fn test_three_spouses_middle_pruned_scene() {
+    fn test_three_spouses_all_shown_in_scene() {
         use crate::parser::{compute_scope, parse_str};
         use crate::scene::Primitive;
 
@@ -2835,6 +3177,15 @@ mod tests {
         let mut genrep = parse_str(GED).unwrap();
         compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
         let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+
+        // I1 must have a triple-wide box
+        let i1_geo = ind_geo(&bc, "I1");
+        assert!(
+            (i1_geo.width - prefs.layout.boxed_couples.box_width_3_spouses).abs() < 1e-6,
+            "I1 should have a 3-spouse box width; got {}",
+            i1_geo.width
+        );
+
         let scene = emit_scene(&bc, &prefs);
 
         fn collect_ids(prims: &[Primitive], ids: &mut Vec<String>) {
@@ -2852,15 +3203,147 @@ mod tests {
 
         assert!(
             ids.contains(&"I2-name".to_string()),
-            "I2 (1st spouse, kept) should appear in scene; found: {ids:?}"
+            "I2 (sp1, left) must appear; found: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"I3-name".to_string()),
+            "I3 (sp2, center) must appear; found: {ids:?}"
         );
         assert!(
             ids.contains(&"I4-name".to_string()),
-            "I4 (3rd spouse with child, must be in right slot); found: {ids:?}"
+            "I4 (sp3, right) must appear; found: {ids:?}"
         );
+    }
+
+    /// 3-spouse layout placement: no sibling overlap, correct box width.
+    #[test]
+    fn test_three_spouse_placement() {
+        use crate::parser::{compute_scope, parse_str};
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n1 FAMS @F3@\n\
+0 @I2@ INDI\n1 NAME Sp1 /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Sp2 /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Sp3 /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME C1a /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I6@ INDI\n1 NAME C1b /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I7@ INDI\n1 NAME C2a /C/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME C2b /C/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I9@ INDI\n1 NAME C3a /C/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME C3b /C/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I5@\n1 CHIL @I6@\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n1 CHIL @I7@\n1 CHIL @I8@\n\
+0 @F3@ FAM\n1 HUSB @I1@\n1 WIFE @I4@\n1 CHIL @I9@\n1 CHIL @I10@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+
+        // I1 must have the 3-spouse box width
+        let i1_geo = ind_geo(&bc, "I1");
         assert!(
-            !ids.contains(&"I3-name".to_string()),
-            "I3 (2nd spouse, childless, pruned) must NOT appear in scene; found: {ids:?}"
+            (i1_geo.width - prefs.layout.boxed_couples.box_width_3_spouses).abs() < 1e-6,
+            "I1 width should be box_width_3_spouses; got {}",
+            i1_geo.width
+        );
+
+        // No sibling overlap at generation 1
+        let box_w = prefs.layout.boxed_couples.box_width;
+        let gap_w = prefs.layout.boxed_couples.gap_width;
+        let mut xs: Vec<f64> = ["I5", "I6", "I7", "I8", "I9", "I10"]
+            .iter()
+            .map(|id| ind_geo(&bc, id).x)
+            .collect();
+        xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        for pair in xs.windows(2) {
+            assert!(
+                pair[1] - pair[0] >= box_w + gap_w - 1e-6,
+                "children overlap: gap = {}",
+                pair[1] - pair[0]
+            );
+        }
+    }
+
+    /// 2-channel bar_y_fraction: when all 3 spouses have ≥2 children, sp2 gets 2/3
+    /// and sp1/sp3 get 1/3; otherwise all get 0.5.
+    #[test]
+    fn test_three_spouse_bar_y_fraction() {
+        use crate::parser::{compute_scope, parse_str};
+        use crate::scene::Primitive;
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /R/\n1 SEX M\n1 FAMS @F1@\n1 FAMS @F2@\n1 FAMS @F3@\n\
+0 @I2@ INDI\n1 NAME Sp1 /S/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Sp2 /S/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME Sp3 /S/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME C1a /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I6@ INDI\n1 NAME C1b /C/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I7@ INDI\n1 NAME C2a /C/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME C2b /C/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I9@ INDI\n1 NAME C3a /C/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME C3b /C/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I5@\n1 CHIL @I6@\n\
+0 @F2@ FAM\n1 HUSB @I1@\n1 WIFE @I3@\n1 CHIL @I7@\n1 CHIL @I8@\n\
+0 @F3@ FAM\n1 HUSB @I1@\n1 WIFE @I4@\n1 CHIL @I9@\n1 CHIL @I10@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 2;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(2));
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&bc, &prefs);
+
+        fn collect_connectors(prims: &[Primitive], conns: &mut Vec<f64>) {
+            for p in prims {
+                match p {
+                    Primitive::Connector(c) => conns.push(c.bar_y_fraction),
+                    Primitive::Group(g) => collect_connectors(&g.children, conns),
+                    _ => {}
+                }
+            }
+        }
+        let mut fractions = Vec::new();
+        collect_connectors(&scene.primitives, &mut fractions);
+
+        // Should have 3 connectors (one per family of I1)
+        assert_eq!(
+            fractions.len(),
+            3,
+            "expected 3 connectors, got {fractions:?}"
+        );
+
+        // With all spouses having ≥2 children: 2 outer at 1/3, 1 middle at 2/3
+        let lower = 1.0_f64 / 3.0;
+        let upper = 2.0_f64 / 3.0;
+        let lower_count = fractions
+            .iter()
+            .filter(|&&f| (f - lower).abs() < 1e-6)
+            .count();
+        let upper_count = fractions
+            .iter()
+            .filter(|&&f| (f - upper).abs() < 1e-6)
+            .count();
+        assert_eq!(
+            lower_count, 2,
+            "expected 2 connectors at 1/3 (sp1+sp3); fractions: {fractions:?}"
+        );
+        assert_eq!(
+            upper_count, 1,
+            "expected 1 connector at 2/3 (sp2); fractions: {fractions:?}"
         );
     }
 }

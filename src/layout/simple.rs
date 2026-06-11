@@ -1102,6 +1102,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                         x: x_conn,
                         y: child_y,
                     }],
+                    bar_y_fraction: 0.5,
                 }));
             }
         }
@@ -1120,6 +1121,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
                     x: x_conn,
                     y: child_y,
                 }],
+                bar_y_fraction: 0.5,
             }));
         }
     }

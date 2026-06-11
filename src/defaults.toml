@@ -56,6 +56,7 @@ spouse_sep_height = 30.0
 gap_width = 40.0
 gap_height = 80.0
 box_width_2_spouses = 520.0 # must be >= 2 * box_width + gap_width
+box_width_3_spouses = 800.0 # must be >= 3 * box_width + 2 * gap_width
 
 [layout.fan]
 ring_height = 90       # radial thickness of each inner generation ring (canvas units)

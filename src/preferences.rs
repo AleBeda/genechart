@@ -271,6 +271,8 @@ pub struct BoxedCouplesPrefs {
     pub gap_height: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub box_width_2_spouses: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub box_width_3_spouses: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

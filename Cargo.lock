@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "genechart"
-version = "0.5.8"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "base64",

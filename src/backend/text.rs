@@ -1741,6 +1741,7 @@ mod tests {
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 10.0, y: 18.0 }],
                     child_points: vec![Point { x: 10.0, y: 72.0 }],
+                    bar_y_fraction: 0.5,
                 }),
             ],
             canvas_bounds: Rect {
@@ -1826,6 +1827,7 @@ mod tests {
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 10.0, y: 90.0 }],
                     child_points: vec![Point { x: 10.0, y: 18.0 }],
+                    bar_y_fraction: 0.5,
                 }),
             ],
             canvas_bounds: Rect {
@@ -1908,6 +1910,7 @@ mod tests {
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 30.0, y: 18.0 }],
                     child_points: vec![Point { x: 10.0, y: 72.0 }, Point { x: 50.0, y: 72.0 }],
+                    bar_y_fraction: 0.5,
                 }),
             ],
             canvas_bounds: Rect {
@@ -2163,6 +2166,7 @@ mod tests {
             primitives: vec![Primitive::Connector(ConnectorPrimitive {
                 parent_points: vec![Point { x: 40.0, y: 18.0 }],
                 child_points: vec![Point { x: 40.0, y: 72.0 }],
+                bar_y_fraction: 0.5,
             })],
             canvas_bounds: Rect {
                 x: 0.0,
@@ -2201,6 +2205,7 @@ mod tests {
             primitives: vec![Primitive::Connector(ConnectorPrimitive {
                 parent_points: vec![Point { x: 40.0, y: 18.0 }],
                 child_points: vec![Point { x: 10.0, y: 72.0 }, Point { x: 70.0, y: 72.0 }],
+                bar_y_fraction: 0.5,
             })],
             canvas_bounds: Rect {
                 x: 0.0,
@@ -2266,6 +2271,7 @@ mod tests {
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 40.0, y: 36.0 }],
                     child_points: vec![Point { x: 40.0, y: 54.0 }],
+                    bar_y_fraction: 0.5,
                 }),
             ],
             canvas_bounds: Rect {
@@ -2408,6 +2414,7 @@ mod tests {
                 Primitive::Connector(ConnectorPrimitive {
                     parent_points: vec![Point { x: 40.0, y: 54.0 }],
                     child_points: vec![Point { x: 40.0, y: 36.0 }],
+                    bar_y_fraction: 0.5,
                 }),
             ],
             canvas_bounds: Rect {
