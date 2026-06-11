@@ -130,6 +130,9 @@ pub struct FilledRectPrimitive {
 pub struct ConnectorPrimitive {
     pub parent_points: Vec<Point>,
     pub child_points: Vec<Point>,
+    /// Fractional position of the horizontal routing bar between parent and child.
+    /// 0.5 = midpoint (default). 1/3 = lower channel (closer to parent); 2/3 = upper channel.
+    pub bar_y_fraction: f64,
 }
 
 /// A single text line for the fancy layout (absolute canvas coordinates).

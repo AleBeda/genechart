@@ -1,6 +1,6 @@
 [package]
 name = "genechart"
-version = "0.5.8"
+version = "0.6.0"
 edition = "2024"
 description = "Genealogical chart generator from GEDCOM files"
 license = "MIT"

@@ -1342,6 +1342,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                     children: vec![Primitive::Connector(ConnectorPrimitive {
                         parent_points: vec![ind_point],
                         child_points: parent_points_display,
+                        bar_y_fraction: 0.5,
                     })],
                 })],
             }));
@@ -1520,6 +1521,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                                     y: sp_exit_y,
                                 }],
                                 child_points,
+                                bar_y_fraction: 0.5,
                             })],
                         })],
                     }));
