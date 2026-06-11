@@ -945,6 +945,49 @@ fn place_descendants(
     }
 }
 
+/// Sweeps each generation left-to-right and pushes any overlapping right-side node
+/// (and its subtree) far enough right to restore a `gap_w` gap.
+///
+/// Called once after `recenter_pass` to fix cross-family overlaps that can arise
+/// when compact+recenter moves a node rightward after its right cousin was already
+/// placed during `place_descendants`.
+fn fix_overlaps_pass(
+    genrep: &Genrep,
+    gap_w: f64,
+    out: &mut HashMap<String, Individual<BoxedCouplesGeo>>,
+    global_right: &mut Vec<f64>,
+) {
+    let mut by_gen: HashMap<u32, Vec<(f64, f64, String)>> = HashMap::new();
+    for (id, ind) in out.iter() {
+        if let Some(BoxedCouplesGeo::Individual(g)) = &ind.geo {
+            by_gen
+                .entry(g.generation)
+                .or_default()
+                .push((g.x, g.width, id.clone()));
+        }
+    }
+    for (generation, nodes) in &mut by_gen {
+        nodes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        for i in 0..nodes.len().saturating_sub(1) {
+            let a_right = nodes[i].0 + nodes[i].1 / 2.0;
+            let b_left = nodes[i + 1].0 - nodes[i + 1].1 / 2.0;
+            let gap = b_left - a_right;
+            if gap < gap_w - 1e-6 {
+                let shift = gap_w - gap;
+                shift_subtree(
+                    &nodes[i + 1].2,
+                    shift,
+                    *generation,
+                    genrep,
+                    out,
+                    global_right,
+                );
+                nodes[i + 1].0 += shift;
+            }
+        }
+    }
+}
+
 pub struct BoxedCouplesLayout;
 
 impl Layout for BoxedCouplesLayout {
@@ -1019,6 +1062,17 @@ impl Layout for BoxedCouplesLayout {
             gap_w,
             0,
         );
+        recenter_pass(
+            root_id,
+            genrep,
+            box_w,
+            box_w2,
+            box_w3,
+            gap_w,
+            &mut individuals,
+            None,
+        );
+        fix_overlaps_pass(genrep, gap_w, &mut individuals, &mut global_right);
         recenter_pass(
             root_id,
             genrep,
