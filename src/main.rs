@@ -290,7 +290,11 @@ fn run() -> anyhow::Result<()> {
     );
 
     // 10. Run layout
+    #[cfg(feature = "bc_debug")]
+    layout::boxed_couples::bc_debug_init();
     let layout_output = layout::run_layout(&genrep, &prefs)?;
+    #[cfg(feature = "bc_debug")]
+    layout::boxed_couples::bc_debug_flush();
 
     // 11. Open output (file or stdout)
     let mut writer: Box<dyn std::io::Write> = if prefs.output.path.is_empty() {

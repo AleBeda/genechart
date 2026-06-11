@@ -32,6 +32,114 @@ use crate::util::matches_direction;
 use anyhow::Result;
 use std::collections::HashMap;
 
+// ── placement audit logging (compiled only with --features bc_debug) ─────────
+#[cfg(feature = "bc_debug")]
+mod bc_debug {
+    use std::cell::RefCell;
+    use std::fs::File;
+    use std::io::{BufWriter, Write};
+
+    thread_local! {
+        static LOG: RefCell<Option<BufWriter<File>>> = const { RefCell::new(None) };
+        pub(super) static SHIFT_CTX: RefCell<&'static str> = const { RefCell::new("?") };
+    }
+
+    pub(super) fn init() {
+        let path =
+            std::env::var("BC_DEBUG_LOG").unwrap_or_else(|_| "/tmp/bc_debug.log".to_string());
+        let file = File::create(&path).expect("bc_debug: cannot create log file");
+        let mut w = BufWriter::new(file);
+        writeln!(w, "op,id,x_before,x_after,dx,generation,source").unwrap();
+        LOG.with(|l| *l.borrow_mut() = Some(w));
+        eprintln!("bc_debug: logging to {path}");
+    }
+
+    pub(super) fn flush() {
+        LOG.with(|l| {
+            if let Some(w) = l.borrow_mut().as_mut() {
+                w.flush().ok();
+            }
+        });
+    }
+
+    pub(super) fn log(
+        op: &str,
+        id: &str,
+        x_before: Option<f64>,
+        x_after: f64,
+        generation: u32,
+        source: &str,
+    ) {
+        LOG.with(|l| {
+            if let Some(w) = l.borrow_mut().as_mut() {
+                let before = x_before.map(|v| format!("{v:.1}")).unwrap_or_default();
+                let dx = x_before
+                    .map(|v| format!("{:.1}", x_after - v))
+                    .unwrap_or_default();
+                writeln!(
+                    w,
+                    "{op},{id},{before},{x_after:.1},{dx},{generation},{source}"
+                )
+                .ok();
+            }
+        });
+    }
+
+    pub(super) fn shift_ctx() -> &'static str {
+        SHIFT_CTX.with(|c| *c.borrow())
+    }
+}
+
+// Public entry points called from main.rs (feature-gated, zero cost otherwise).
+#[cfg(feature = "bc_debug")]
+pub fn bc_debug_init() {
+    bc_debug::init();
+}
+#[cfg(feature = "bc_debug")]
+pub fn bc_debug_flush() {
+    bc_debug::flush();
+}
+
+macro_rules! bc_log_place {
+    ($id:expr, $x:expr, $gen:expr) => {
+        #[cfg(feature = "bc_debug")]
+        bc_debug::log("PLACE", $id, None, $x, $gen, concat!(file!(), ":", line!()));
+    };
+}
+
+macro_rules! bc_log_shift {
+    ($id:expr, $x_before:expr, $x_after:expr, $gen:expr) => {
+        #[cfg(feature = "bc_debug")]
+        {
+            let ctx = bc_debug::shift_ctx();
+            let src = concat!(file!(), ":", line!());
+            let full_src = format!("{src}/{ctx}");
+            bc_debug::log("SHIFT", $id, Some($x_before), $x_after, $gen, &full_src);
+        }
+    };
+}
+
+macro_rules! bc_log_recenter {
+    ($id:expr, $x_before:expr, $x_after:expr, $gen:expr) => {
+        #[cfg(feature = "bc_debug")]
+        bc_debug::log(
+            "RECENTER",
+            $id,
+            Some($x_before),
+            $x_after,
+            $gen,
+            concat!(file!(), ":", line!()),
+        );
+    };
+}
+
+macro_rules! bc_set_shift_ctx {
+    ($ctx:expr) => {
+        #[cfg(feature = "bc_debug")]
+        bc_debug::SHIFT_CTX.with(|c| *c.borrow_mut() = $ctx);
+    };
+}
+
 /// Layout geometry for a placed descendant box.
 #[derive(Debug, Clone)]
 pub struct IndividualGeo {
@@ -289,8 +397,11 @@ fn shift_subtree(
 
     if let Some(ind) = out.get_mut(ind_id) {
         if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+            #[cfg(feature = "bc_debug")]
+            let x_before = g.x;
             g.x += dx;
             g.conn_in_x += dx;
+            bc_log_shift!(ind_id, x_before, g.x, generation);
             let gen_idx = generation as usize;
             if gen_idx < global_right.len() {
                 global_right[gen_idx] = global_right[gen_idx].max(g.x + g.width / 2.0);
@@ -352,6 +463,7 @@ fn compact_siblings(
             .max(0.0);
 
         if safe_shift > 1e-6 {
+            bc_set_shift_ctx!("compact");
             #[allow(clippy::needless_range_loop)]
             for j in 0..=i {
                 shift_subtree(
@@ -551,8 +663,11 @@ fn recenter_pass(
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                #[cfg(feature = "bc_debug")]
+                let x_before = g.x;
                 g.x = final_x;
                 g.conn_in_x = final_x;
+                bc_log_recenter!(ind_id, x_before, final_x, g.generation);
             }
         }
     } else if spouses.len() >= 2 {
@@ -609,8 +724,11 @@ fn recenter_pass(
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                #[cfg(feature = "bc_debug")]
+                let x_before = g.x;
                 g.x = final_x;
                 g.conn_in_x = final_x;
+                bc_log_recenter!(ind_id, x_before, final_x, g.generation);
             }
         }
     } else {
@@ -649,8 +767,11 @@ fn recenter_pass(
 
         if let Some(ind) = out.get_mut(ind_id) {
             if let Some(BoxedCouplesGeo::Individual(g)) = &mut ind.geo {
+                #[cfg(feature = "bc_debug")]
+                let x_before = g.x;
                 g.x = final_x;
                 g.conn_in_x = final_x;
+                bc_log_recenter!(ind_id, x_before, final_x, g.generation);
             }
         }
     }
@@ -766,6 +887,7 @@ fn place_descendants(
                 };
                 if x_mid < x_default {
                     let shift = x_default - x_mid;
+                    bc_set_shift_ctx!("place/align");
                     for child_id in &children {
                         shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
                     }
@@ -832,6 +954,7 @@ fn place_descendants(
                 };
                 if x_from_children < x_default {
                     let shift = x_default - x_from_children;
+                    bc_set_shift_ctx!("place/align");
                     for child_id in all_children.iter() {
                         shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
                     }
@@ -915,6 +1038,7 @@ fn place_descendants(
 
                 if x_from_children < x_default {
                     let shift = x_default - x_from_children;
+                    bc_set_shift_ctx!("place/align");
                     for child_id in all_children.iter() {
                         shift_subtree(child_id, shift, generation + 1, genrep, out, global_right);
                     }
@@ -939,6 +1063,7 @@ fn place_descendants(
         ind_id.to_string(),
         copy_individual(ind, Some(BoxedCouplesGeo::Individual(geo))),
     );
+    bc_log_place!(ind_id, x, generation);
     if (generation as usize) < global_right.len() {
         let right_edge = x + width / 2.0;
         global_right[generation as usize] = global_right[generation as usize].max(right_edge);
@@ -974,6 +1099,7 @@ fn fix_overlaps_pass(
             let gap = b_left - a_right;
             if gap < gap_w - 1e-6 {
                 let shift = gap_w - gap;
+                bc_set_shift_ctx!("fix_overlap");
                 shift_subtree(
                     &nodes[i + 1].2,
                     shift,

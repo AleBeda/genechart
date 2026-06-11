@@ -27,3 +27,6 @@ opt-level = 0
 opt-level = 3
 lto = true
 strip = true
+
+[features]
+bc_debug = []
