@@ -93,6 +93,7 @@ pub fn render_tree_layer(
         "stroke" => render_stroke_style(&branches, prefs),
         "filter" => render_filter_style(&branches, prefs),
         "ink" => render_ink_style(&branches, prefs),
+        "ink2" => render_ink2_style(&branches, prefs),
         _ => render_tapered_style(&branches, prefs),
     };
     format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
@@ -1489,5 +1490,665 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         }
     }
 
+    out
+}
+
+// ── Style: ink2 ──────────────────────────────────────────────────────────────
+//
+// Implements the coherent-tree algorithm (realistic_tree_spec.md):
+// trunk+flare, power-law depth width, organic kinked branches,
+// da-Vinci width splitting at forks, white bark scratches, open-ellipse leaves.
+
+// §0 — deterministic hash PRNG (stable SVG diffs across runs)
+fn ink2_rand(px: f64, py: f64, seed: u32) -> f64 {
+    let a = (px * 7.0).round();
+    let b = (py * 7.0).round();
+    let v = (a * 12.9898 + b * 78.233 + seed as f64 * 37.719).sin() * 43758.5453;
+    v - v.floor()
+}
+
+fn ink2_jitter(px: f64, py: f64, seed: u32) -> f64 {
+    ink2_rand(px, py, seed) * 2.0 - 1.0
+}
+
+// §7 — color helpers; clamp each channel to [0, 255]
+fn darken_color(c: u32, amount: f64) -> u32 {
+    let f = (1.0 - amount.clamp(0.0, 1.0)) * 255.0;
+    let r = (((c >> 16) & 0xFF) as f64 / 255.0 * f) as u32;
+    let g = (((c >> 8) & 0xFF) as f64 / 255.0 * f) as u32;
+    let bv = ((c & 0xFF) as f64 / 255.0 * f) as u32;
+    (r.min(255) << 16) | (g.min(255) << 8) | bv.min(255)
+}
+
+fn lighten_color(c: u32, amount: f64) -> u32 {
+    let lerp_ch = |ch: u32| -> u32 {
+        (ch as f64 + (255.0 - ch as f64) * amount)
+            .round()
+            .clamp(0.0, 255.0) as u32
+    };
+    (lerp_ch((c >> 16) & 0xFF) << 16) | (lerp_ch((c >> 8) & 0xFF) << 8) | lerp_ch(c & 0xFF)
+}
+
+fn mix_color(ac: u32, bc: u32, t: f64) -> u32 {
+    let lerp_ch = |a: u32, b: u32| -> u32 {
+        (a as f64 + (b as f64 - a as f64) * t)
+            .round()
+            .clamp(0.0, 255.0) as u32
+    };
+    (lerp_ch((ac >> 16) & 0xFF, (bc >> 16) & 0xFF) << 16)
+        | (lerp_ch((ac >> 8) & 0xFF, (bc >> 8) & 0xFF) << 8)
+        | lerp_ch(ac & 0xFF, bc & 0xFF)
+}
+
+fn ink2_color_hex(c: u32) -> String {
+    format!("#{:06X}", c & 0xFFFFFF)
+}
+
+// bark fill: darkens near base (s≈0), lightens toward crown (s≈1)
+fn bark_fill_color(trunk_color: u32, s: f64) -> String {
+    let c_base = darken_color(trunk_color, 0.12);
+    let c_tip = lighten_color(trunk_color, 0.10);
+    ink2_color_hex(mix_color(c_base, c_tip, s.clamp(0.0, 1.0)))
+}
+
+// §5 — height fraction s: 0 at soil (y_root), 1 at crown (y_top)
+fn height_frac_s(y: f64, y_root: f64, y_range: f64) -> f64 {
+    ((y_root - y) / y_range).clamp(0.0, 1.0)
+}
+
+// §5 — depth-based full width (power law, γ=1.8)
+// s=0 at base/soil (thick end), s=1 at crown (thin tips): use (1-s)^γ
+fn ink2_width(s: f64, bigb: f64) -> f64 {
+    let w_max = bigb * 0.050;
+    let w_min = bigb * 0.0050;
+    w_min + (w_max - w_min) * (1.0 - s.clamp(0.0, 1.0)).powf(1.8)
+}
+
+// Cubic Bézier helpers
+fn cubic_pt2(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), p3: (f64, f64), t: f64) -> (f64, f64) {
+    let m = 1.0 - t;
+    (
+        m * m * m * p0.0 + 3.0 * m * m * t * p1.0 + 3.0 * m * t * t * p2.0 + t * t * t * p3.0,
+        m * m * m * p0.1 + 3.0 * m * m * t * p1.1 + 3.0 * m * t * t * p2.1 + t * t * t * p3.1,
+    )
+}
+
+fn cubic_tang2(
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+    t: f64,
+) -> (f64, f64) {
+    let m = 1.0 - t;
+    let dx = 3.0 * (m * m * (p1.0 - p0.0) + 2.0 * m * t * (p2.0 - p1.0) + t * t * (p3.0 - p2.0));
+    let dy = 3.0 * (m * m * (p1.1 - p0.1) + 2.0 * m * t * (p2.1 - p1.1) + t * t * (p3.1 - p2.1));
+    let len = dx.hypot(dy).max(0.001);
+    (dx / len, dy / len)
+}
+
+// §3 + §10 — cubic control points for a branch (parent below child in SVG y)
+fn branch_cubic2(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+) -> ((f64, f64), (f64, f64), (f64, f64), (f64, f64)) {
+    let dx = cx - px;
+    let dy = (py - cy).abs().max(0.001);
+    const K: f64 = 0.42;
+    let horiz = dx.abs() / dy;
+    let (c1, c2) = if horiz > 2.0 {
+        // nearly horizontal: horizontal departure tangent
+        ((px + K * dx, py), (cx - 0.15 * dx, cy + 0.4 * dy))
+    } else if horiz > 1.0 {
+        // blend vertical → horizontal over ratio ∈ [1, 2]
+        let tb = (horiz - 1.0).clamp(0.0, 1.0);
+        let lerp2 = |v: f64, h: f64| v + (h - v) * tb;
+        let c1 = (lerp2(px, px + K * dx), lerp2(py - K * dy, py));
+        let c2 = (
+            lerp2(cx + 0.15 * dx, cx - 0.15 * dx),
+            lerp2(cy + K * dy, cy + 0.4 * dy),
+        );
+        (c1, c2)
+    } else {
+        // nearly vertical: spec §3 default
+        ((px, py - K * dy), (cx + 0.15 * dx, cy + K * dy))
+    };
+    ((px, py), c1, c2, (cx, cy))
+}
+
+// Build a filled tapered SVG path along a cubic with rounded tip cap
+fn ink2_cubic_fill(
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    p3: (f64, f64),
+    hw0: f64,
+    hw1: f64,
+    fill: &str,
+    class: &str,
+    n: usize,
+) -> String {
+    let mut right: Vec<(f64, f64)> = Vec::with_capacity(n + 1);
+    let mut left: Vec<(f64, f64)> = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        let t = i as f64 / n as f64;
+        let (x, y) = cubic_pt2(p0, p1, p2, p3, t);
+        let (tx, ty) = cubic_tang2(p0, p1, p2, p3, t);
+        let hw = hw0 + (hw1 - hw0) * t;
+        right.push((x + -ty * hw, y + tx * hw));
+        left.push((x - -ty * hw, y - tx * hw));
+    }
+    // rounded tip (cubic Bézier semicircle, κ≈0.5523)
+    let (tip_x, tip_y) = p3;
+    let (tang_x, tang_y) = cubic_tang2(p0, p1, p2, p3, 1.0);
+    let nx = -tang_y;
+    let ny = tang_x;
+    let r = hw1.max(0.5);
+    const KC: f64 = 0.5523;
+    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
+    for pt in right.iter().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    d.push_str(&format!(
+        " C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
+        tip_x + nx * r + tang_x * r * KC,
+        tip_y + ny * r + tang_y * r * KC,
+        tip_x + tang_x * r + nx * r * KC,
+        tip_y + tang_y * r + ny * r * KC,
+        tip_x + tang_x * r,
+        tip_y + tang_y * r,
+        tip_x + tang_x * r - nx * r * KC,
+        tip_y + tang_y * r - ny * r * KC,
+        tip_x - nx * r + tang_x * r * KC,
+        tip_y - ny * r + tang_y * r * KC,
+        tip_x - nx * r,
+        tip_y - ny * r,
+    ));
+    for pt in left.iter().rev().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    d.push_str(" Z");
+    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"{class}\"/>\n")
+}
+
+// §3 — filled branch outline with organic kinks
+fn ink2_branch_path(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+    w_p: f64,
+    w_c: f64,
+    fill: &str,
+    bigb: f64,
+    y_root: f64,
+    y_range: f64,
+    seed: u32,
+) -> String {
+    let (c0, c1, c2, c3) = branch_cubic2(px, py, cx, cy);
+    let is_short = (py - cy).abs() < bigb * 0.04 && (cx - px).abs() < bigb * 0.04;
+    let _ = (y_root, y_range); // width uses t-interpolation along branch
+
+    const N: usize = 12;
+    let mut cline: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
+    for i in 0..=N {
+        let t = i as f64 / N as f64;
+        let (x, y) = cubic_pt2(c0, c1, c2, c3, t);
+        let pt = if i > 0 && i < N && !is_short {
+            let (tang_x, tang_y) = cubic_tang2(c0, c1, c2, c3, t);
+            let amp = bigb * 0.018 * ink2_jitter(x, y, seed.wrapping_add(i as u32 * 7));
+            (x + -tang_y * amp, y + tang_x * amp)
+        } else {
+            (x, y)
+        };
+        cline.push(pt);
+    }
+
+    let mut right: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
+    let mut left: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
+    for i in 0..=N {
+        let (x, y) = cline[i];
+        let (tx, ty) = if i == 0 {
+            let (x1, y1) = cline[1];
+            let dl = (x1 - x).hypot(y1 - y).max(0.001);
+            ((x1 - x) / dl, (y1 - y) / dl)
+        } else if i == N {
+            let (xp, yp) = cline[N - 1];
+            let dl = (x - xp).hypot(y - yp).max(0.001);
+            ((x - xp) / dl, (y - yp) / dl)
+        } else {
+            let (xp, yp) = cline[i - 1];
+            let (xn, yn) = cline[i + 1];
+            let dl = (xn - xp).hypot(yn - yp).max(0.001);
+            ((xn - xp) / dl, (yn - yp) / dl)
+        };
+        let hw = 0.5 * (w_p + (w_c - w_p) * (i as f64 / N as f64));
+        right.push((x + -ty * hw, y + tx * hw));
+        left.push((x - -ty * hw, y - tx * hw));
+    }
+
+    // tip semicircle
+    let (tip_x, tip_y) = cline[N];
+    let (xp, yp) = cline[N - 1];
+    let dl = (tip_x - xp).hypot(tip_y - yp).max(0.001);
+    let tx = (tip_x - xp) / dl;
+    let ty_t = (tip_y - yp) / dl;
+    let nx = -ty_t;
+    let ny = tx;
+    let r = (0.5 * w_c).max(0.5);
+    const KC: f64 = 0.5523;
+
+    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
+    for pt in right.iter().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    d.push_str(&format!(
+        " C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
+        tip_x + nx * r + tx * r * KC,
+        tip_y + ny * r + ty_t * r * KC,
+        tip_x + tx * r + nx * r * KC,
+        tip_y + ty_t * r + ny * r * KC,
+        tip_x + tx * r,
+        tip_y + ty_t * r,
+        tip_x + tx * r - nx * r * KC,
+        tip_y + ty_t * r - ny * r * KC,
+        tip_x - nx * r + tx * r * KC,
+        tip_y - ny * r + ty_t * r * KC,
+        tip_x - nx * r,
+        tip_y - ny * r,
+    ));
+    for pt in left.iter().rev().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    d.push_str(" Z");
+    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"tree-branch\"/>\n")
+}
+
+// §6 — white longitudinal bark scratches on thick wood
+fn ink2_bark_scratches(
+    px: f64,
+    py: f64,
+    cx: f64,
+    cy: f64,
+    w_p: f64,
+    w_c: f64,
+    bigb: f64,
+    seed: u32,
+) -> String {
+    let avg_hw = (w_p + w_c) * 0.25;
+    if avg_hw < bigb * 0.009 {
+        return String::new();
+    }
+    let n = ((avg_hw / (bigb * 0.004)) as usize + 1).clamp(3, 40);
+    let (c0, c1, c2, c3) = branch_cubic2(px, py, cx, cy);
+    let seg_len = (cx - px).hypot(cy - py).max(1.0);
+
+    let mut out = String::new();
+    for i in 0..n {
+        let r1 = ink2_rand(
+            px + i as f64 * 1.3,
+            py + i as f64 * 1.7,
+            seed.wrapping_add(i as u32 * 3),
+        );
+        let r2 = ink2_rand(
+            px + i as f64 * 2.1,
+            py + i as f64 * 0.9,
+            seed.wrapping_add(i as u32 * 5 + 1),
+        );
+        let r3 = ink2_rand(
+            cx + i as f64 * 1.1,
+            cy + i as f64 * 2.3,
+            seed.wrapping_add(i as u32 * 7 + 2),
+        );
+
+        let t_c = 0.1 + r1 * 0.8;
+        let (bx, by) = cubic_pt2(c0, c1, c2, c3, t_c);
+        let (tang_x, tang_y) = cubic_tang2(c0, c1, c2, c3, t_c);
+        let nx = -tang_y;
+        let ny = tang_x;
+
+        let hw_t = 0.5 * (w_p + (w_c - w_p) * t_c);
+        // lateral: within ±0.8·hw, biased toward lit side (−0.25·hw)
+        let lat = (r2 - 0.5) * 2.0 * hw_t * 0.8 - hw_t * 0.25;
+
+        let half_l = seg_len * (0.075 + r3 * 0.15);
+        let sx = bx + nx * lat - tang_x * half_l;
+        let sy = by + ny * lat - tang_y * half_l;
+        let ex = bx + nx * lat + tang_x * half_l;
+        let ey = by + ny * lat + tang_y * half_l;
+        let bow = (r2 - 0.5) * half_l * 0.2;
+        let mid_x = (sx + ex) * 0.5 + nx * bow;
+        let mid_y = (sy + ey) * 0.5 + ny * bow;
+
+        let sw = 0.5 + r1 * 1.1;
+        let opacity = 0.55 + r3 * 0.35;
+        out.push_str(&format!(
+            "  <path d=\"M {sx:.2},{sy:.2} Q {mid_x:.2},{mid_y:.2} {ex:.2},{ey:.2}\" \
+             fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"{sw:.2}\" \
+             opacity=\"{opacity:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n"
+        ));
+    }
+    out
+}
+
+// §1 — trunk shaft with bell flare at soil line
+fn ink2_trunk(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32, y_top: f64) -> String {
+    let h_flare = bigb * 0.10;
+    let w_trunk = bigb * 0.050;
+    let w_flare = w_trunk * 1.85;
+    let lean = ink2_jitter(x_trunk, y_root, 101) * bigb * 0.015;
+    let y_shaft_top = y_root - h_flare * 2.2;
+
+    const N: usize = 10;
+    let mut right: Vec<(f64, f64)> = Vec::new();
+    let mut left: Vec<(f64, f64)> = Vec::new();
+    for i in 0..=N {
+        let t = i as f64 / N as f64; // 0 = y_root (soil), 1 = shaft top
+        let y = y_root - t * (y_root - y_shaft_top);
+        let x = x_trunk + lean * t;
+        let hw = if y > y_root - h_flare {
+            // flare zone: power-2.2 swell toward soil
+            let s_f = ((y_root - y) / h_flare).clamp(0.0, 1.0);
+            0.5 * (w_trunk + (w_flare - w_trunk) * (1.0 - s_f).powf(2.2))
+        } else {
+            0.5 * w_trunk
+        };
+        right.push((x + hw, y));
+        left.push((x - hw, y));
+    }
+
+    let y_range = (y_root - y_top).max(1.0);
+    let s_mean = height_frac_s((y_root + y_shaft_top) * 0.5, y_root, y_range);
+    let fill = bark_fill_color(trunk_color, s_mean);
+
+    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
+    for pt in right.iter().skip(1) {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    for pt in left.iter().rev() {
+        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
+    }
+    d.push_str(" Z");
+    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"tree-trunk\"/>\n")
+}
+
+// §2 — dark soil mound seating the trunk at the ground line
+fn ink2_soil_mound(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String {
+    let rx = bigb * 0.050 * 1.85 * 0.5 * 0.9;
+    let ry = rx * 0.55;
+    let fill = ink2_color_hex(darken_color(trunk_color, 0.10));
+    format!(
+        "  <ellipse cx=\"{x_trunk:.2}\" cy=\"{y_root:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" \
+         fill=\"{fill}\" opacity=\"0.75\" class=\"tree-root\"/>\n"
+    )
+}
+
+// §2 — exposed roots fanning below y_root into the extra canvas area
+fn ink2_roots(x_trunk: f64, y_root: f64, root_extra: f64, bigb: f64, trunk_color: u32) -> String {
+    const N_ROOT: usize = 6;
+    let w_max = bigb * 0.050;
+    let fill_base = bark_fill_color(trunk_color, 0.0);
+    let mut out = String::new();
+    for i in 0..N_ROOT {
+        let t = i as f64 / (N_ROOT - 1) as f64;
+        let dir = t * 2.0 - 1.0; // −1..+1
+
+        let r1 = ink2_rand(
+            x_trunk + i as f64 * 7.3,
+            y_root + i as f64 * 3.1,
+            200 + i as u32,
+        );
+        let r2 = ink2_rand(
+            x_trunk + i as f64 * 5.7,
+            y_root - i as f64 * 4.3,
+            201 + i as u32,
+        );
+        let is_central = i == N_ROOT / 2;
+
+        let tip_x = if is_central {
+            x_trunk + dir * bigb * 0.02
+        } else {
+            x_trunk + dir * bigb * (0.30 + r1 * 0.35)
+        };
+        let tip_y = if is_central {
+            y_root + root_extra
+        } else {
+            y_root + root_extra * (0.55 + r2 * 0.45)
+        };
+
+        let start_x = x_trunk + dir * w_max * 0.5 * 1.85 * 0.4;
+        let start_y = y_root + bigb * 0.03;
+        let dx = tip_x - start_x;
+        let dy = tip_y - start_y;
+        let p1 = (start_x + dx * 0.15, start_y + dy * 0.50);
+        let p2 = (start_x + dx * 0.75, tip_y - dy * 0.10);
+
+        out.push_str(&ink2_cubic_fill(
+            (start_x, start_y),
+            p1,
+            p2,
+            (tip_x, tip_y),
+            w_max * 0.45 * 0.5,
+            w_max * 0.04 * 0.5,
+            &fill_base,
+            "tree-root",
+            8,
+        ));
+    }
+    out
+}
+
+// §8 — leaf cluster; returns (back 80%, front 20%)
+fn ink2_leaves(
+    cx: f64,
+    cy: f64,
+    k: usize,
+    leaf_color: u32,
+    bigb: f64,
+    y_top: f64,
+    seed_off: u64,
+) -> (String, String) {
+    let stroke_col = ink2_color_hex(darken_color(leaf_color, 0.25));
+    let r_disc = bigb * 0.06;
+    let leaf_len = bigb * 0.012;
+    let mut back = String::new();
+    let mut front = String::new();
+
+    let mut seed = seed_off
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+
+    for i in 0..k {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let r = r_disc * ((seed & 0xFFFF) as f64 / 65535.0).sqrt();
+        let lx = cx + angle.cos() * r;
+        let ly = (cy + angle.sin() * r * 0.7).max(y_top - bigb * 0.05);
+
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sz = leaf_len * 0.5 * (0.75 + (seed & 0xFF) as f64 / 255.0 * 0.50);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let rot = (seed & 0xFFFF) as f64 / 65535.0 * 180.0;
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let sw = 0.6 + (seed & 0xFF) as f64 / 255.0 * 0.4;
+
+        let elem = format!(
+            "  <ellipse cx=\"{lx:.2}\" cy=\"{ly:.2}\" rx=\"{sz:.2}\" ry=\"{:.2}\" \
+             transform=\"rotate({rot:.1},{lx:.2},{ly:.2})\" fill=\"none\" \
+             stroke=\"{stroke_col}\" stroke-width=\"{sw:.2}\" class=\"tree-leaf\"/>\n",
+            sz * 0.6
+        );
+        if i * 5 < k * 4 {
+            back.push_str(&elem);
+        } else {
+            front.push_str(&elem);
+        }
+    }
+    (back, front)
+}
+
+fn render_ink2_style(branches: &[Branch], prefs: &Prefs) -> String {
+    if branches.is_empty() {
+        return String::new();
+    }
+    let (y_root, y_top) = y_bounds(branches);
+    if y_root <= y_top {
+        return String::new();
+    }
+    let y_range = (y_root - y_top).max(1.0);
+    let bigb = y_range;
+    let trunk_color = prefs.output.style.realistic_tree.trunk_color as u32;
+    let leaf_color = prefs.output.style.realistic_tree.leaf_color as u32;
+    let x_trunk = root_center_x(branches, y_root);
+    let root_extra = y_range * 0.45;
+
+    let leaf_k: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
+        "none" => 0,
+        "low" => 4,
+        "high" => 24,
+        _ => 11,
+    };
+
+    let mut leaves_back = String::new();
+    let mut soil_svg = String::new();
+    let mut roots_svg = String::new();
+    let mut trunk_svg = String::new();
+    let mut wood: Vec<(f64, String)> = Vec::new(); // (sort-key width, svg)
+    let mut bark_svg = String::new();
+    let mut leaves_front = String::new();
+
+    trunk_svg.push_str(&ink2_trunk(x_trunk, y_root, bigb, trunk_color, y_top));
+    roots_svg.push_str(&ink2_roots(x_trunk, y_root, root_extra, bigb, trunk_color));
+    soil_svg.push_str(&ink2_soil_mound(x_trunk, y_root, bigb, trunk_color));
+
+    for (bi, branch) in branches.iter().enumerate() {
+        if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
+            continue;
+        }
+        let px =
+            branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
+        let py =
+            branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
+        let s_p = height_frac_s(py, y_root, y_range);
+        let w_p = ink2_width(s_p, bigb);
+
+        let n_ch = branch.child_pts.len();
+        let mean_cy = branch.child_pts.iter().map(|p| p.1).sum::<f64>() / n_ch as f64;
+
+        // §4 hub at 35% from parent toward mean child y
+        let y_hub = py - 0.35 * (py - mean_cy);
+        let mut cx_sorted: Vec<f64> = branch.child_pts.iter().map(|p| p.0).collect();
+        cx_sorted.sort_by(|a, bv| a.partial_cmp(bv).unwrap_or(std::cmp::Ordering::Equal));
+        let x_hub = cx_sorted[cx_sorted.len() / 2];
+        let s_hub = height_frac_s(y_hub, y_root, y_range);
+        let w_hub = ink2_width(s_hub, bigb).max(w_p);
+
+        // stem: parent → hub
+        let seed_base = bi as u32 * 1000;
+        let s_stem = height_frac_s((py + y_hub) * 0.5, y_root, y_range);
+        let stem_fill = bark_fill_color(trunk_color, s_stem);
+        wood.push((
+            w_p,
+            ink2_branch_path(
+                px, py, x_hub, y_hub, w_p, w_hub, &stem_fill, bigb, y_root, y_range, seed_base,
+            ),
+        ));
+        bark_svg.push_str(&ink2_bark_scratches(
+            px,
+            py,
+            x_hub,
+            y_hub,
+            w_p,
+            w_hub,
+            bigb,
+            seed_base + 500,
+        ));
+
+        // children sorted by x
+        let mut sorted_ch = branch.child_pts.clone();
+        sorted_ch.sort_by(|a, bv| a.0.partial_cmp(&bv.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // §4b da-Vinci width split: w_sub_i = w_hub * sqrt(w_c_i^2 / Σ w_c_j^2)
+        let child_ws: Vec<f64> = sorted_ch
+            .iter()
+            .map(|(_, chy)| ink2_width(height_frac_s(*chy, y_root, y_range), bigb))
+            .collect();
+        let sum_sq: f64 = child_ws.iter().map(|w| w * w).sum::<f64>().max(1e-9);
+        let sub_ws: Vec<f64> = child_ws
+            .iter()
+            .map(|w_c| (w_hub * (w_c * w_c / sum_sq).sqrt()).min(*w_c))
+            .collect();
+
+        // limb fan: hub → each child
+        for (ci, ((chx, chy), (w_c, w_sub))) in sorted_ch
+            .iter()
+            .zip(child_ws.iter().zip(sub_ws.iter()))
+            .enumerate()
+        {
+            let cseed = bi as u32 * 1000 + ci as u32 * 10 + 1;
+            let s_c = height_frac_s(*chy, y_root, y_range);
+            let s_mid = height_frac_s((*chy + y_hub) * 0.5, y_root, y_range);
+            let cfill = bark_fill_color(trunk_color, s_mid);
+            wood.push((
+                *w_sub,
+                ink2_branch_path(
+                    x_hub, y_hub, *chx, *chy, *w_sub, *w_c, &cfill, bigb, y_root, y_range, cseed,
+                ),
+            ));
+            bark_svg.push_str(&ink2_bark_scratches(
+                x_hub,
+                y_hub,
+                *chx,
+                *chy,
+                *w_sub,
+                *w_c,
+                bigb,
+                cseed + 500,
+            ));
+
+            // §8 leaves in crown zone (height fraction > 0.45)
+            if leaf_k > 0 && s_c > 0.45 {
+                let (back, frt) = ink2_leaves(
+                    *chx,
+                    *chy,
+                    leaf_k,
+                    leaf_color,
+                    bigb,
+                    y_top,
+                    (bi * 100 + ci) as u64,
+                );
+                leaves_back.push_str(&back);
+                leaves_front.push_str(&frt);
+            }
+        }
+    }
+
+    // §9 sort wood thick → thin so thinner branches overlay thicker ones
+    wood.sort_by(|a, bv| bv.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    // §9 rendering order: leaves-back → soil → roots → trunk → wood → bark → leaves-front
+    let mut out = String::new();
+    out.push_str(&leaves_back);
+    out.push_str(&soil_svg);
+    out.push_str(&roots_svg);
+    out.push_str(&trunk_svg);
+    for (_, svg) in &wood {
+        out.push_str(svg);
+    }
+    out.push_str(&bark_svg);
+    out.push_str(&leaves_front);
     out
 }
