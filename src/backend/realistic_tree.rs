@@ -1556,12 +1556,12 @@ fn height_frac_s(y: f64, y_root: f64, y_range: f64) -> f64 {
     ((y_root - y) / y_range).clamp(0.0, 1.0)
 }
 
-// §5 — depth-based full width (power law, γ=1.8)
+// §5 — depth-based full width; subtle taper (~2.5:1 ratio, γ=1.2)
 // s=0 at base/soil (thick end), s=1 at crown (thin tips): use (1-s)^γ
 fn ink2_width(s: f64, bigb: f64) -> f64 {
-    let w_max = bigb * 0.050;
-    let w_min = bigb * 0.0050;
-    w_min + (w_max - w_min) * (1.0 - s.clamp(0.0, 1.0)).powf(1.8)
+    let w_max = bigb * 0.022;
+    let w_min = bigb * 0.009;
+    w_min + (w_max - w_min) * (1.0 - s.clamp(0.0, 1.0)).powf(1.2)
 }
 
 // Cubic Bézier helpers
@@ -1599,21 +1599,18 @@ fn branch_cubic2(
     const K: f64 = 0.42;
     let horiz = dx.abs() / dy;
     let (c1, c2) = if horiz > 2.0 {
-        // nearly horizontal: horizontal departure tangent
-        ((px + K * dx, py), (cx - 0.15 * dx, cy + 0.4 * dy))
+        // nearly horizontal departure, vertical arrival (C2.x = cx)
+        ((px + K * dx, py), (cx, cy + 0.6 * dy))
     } else if horiz > 1.0 {
-        // blend vertical → horizontal over ratio ∈ [1, 2]
+        // blend vertical → horizontal departure; arrival stays vertical
         let tb = (horiz - 1.0).clamp(0.0, 1.0);
         let lerp2 = |v: f64, h: f64| v + (h - v) * tb;
         let c1 = (lerp2(px, px + K * dx), lerp2(py - K * dy, py));
-        let c2 = (
-            lerp2(cx + 0.15 * dx, cx - 0.15 * dx),
-            lerp2(cy + K * dy, cy + 0.4 * dy),
-        );
+        let c2 = (cx, lerp2(cy + K * dy, cy + 0.6 * dy));
         (c1, c2)
     } else {
-        // nearly vertical: spec §3 default
-        ((px, py - K * dy), (cx + 0.15 * dx, cy + K * dy))
+        // nearly vertical: vertical arrival (C2.x = cx)
+        ((px, py - K * dy), (cx, cy + K * dy))
     };
     ((px, py), c1, c2, (cx, cy))
 }
@@ -1696,9 +1693,10 @@ fn ink2_branch_path(
     for i in 0..=N {
         let t = i as f64 / N as f64;
         let (x, y) = cubic_pt2(c0, c1, c2, c3, t);
-        let pt = if i > 0 && i < N && !is_short {
+        // Kink only at t≈0.33 and t≈0.67 (2 interior joints, not every sample)
+        let pt = if (i == N / 3 || i == 2 * N / 3) && !is_short {
             let (tang_x, tang_y) = cubic_tang2(c0, c1, c2, c3, t);
-            let amp = bigb * 0.018 * ink2_jitter(x, y, seed.wrapping_add(i as u32 * 7));
+            let amp = bigb * 0.005 * ink2_jitter(x, y, seed.wrapping_add(i as u32 * 7));
             (x + -tang_y * amp, y + tang_x * amp)
         } else {
             (x, y)
@@ -1947,11 +1945,11 @@ fn ink2_leaves(
     k: usize,
     leaf_color: u32,
     bigb: f64,
-    y_top: f64,
+    _y_top: f64,
     seed_off: u64,
 ) -> (String, String) {
     let stroke_col = ink2_color_hex(darken_color(leaf_color, 0.25));
-    let r_disc = bigb * 0.06;
+    let r_disc = bigb * 0.18;
     let leaf_len = bigb * 0.012;
     let mut back = String::new();
     let mut front = String::new();
@@ -1970,7 +1968,7 @@ fn ink2_leaves(
             .wrapping_add(1442695040888963407);
         let r = r_disc * ((seed & 0xFFFF) as f64 / 65535.0).sqrt();
         let lx = cx + angle.cos() * r;
-        let ly = (cy + angle.sin() * r * 0.7).max(y_top - bigb * 0.05);
+        let ly = cy + angle.sin() * r * 0.7;
 
         seed = seed
             .wrapping_mul(6364136223846793005)
@@ -2017,9 +2015,9 @@ fn render_ink2_style(branches: &[Branch], prefs: &Prefs) -> String {
 
     let leaf_k: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
         "none" => 0,
-        "low" => 4,
-        "high" => 24,
-        _ => 11,
+        "low" => 400,
+        "high" => 2400,
+        _ => 1100,
     };
 
     let mut leaves_back = String::new();
@@ -2050,9 +2048,8 @@ fn render_ink2_style(branches: &[Branch], prefs: &Prefs) -> String {
 
         // §4 hub at 35% from parent toward mean child y
         let y_hub = py - 0.35 * (py - mean_cy);
-        let mut cx_sorted: Vec<f64> = branch.child_pts.iter().map(|p| p.0).collect();
-        cx_sorted.sort_by(|a, bv| a.partial_cmp(bv).unwrap_or(std::cmp::Ordering::Equal));
-        let x_hub = cx_sorted[cx_sorted.len() / 2];
+        // Stem rises straight above the parent; limbs fan out from there.
+        let x_hub = px;
         let s_hub = height_frac_s(y_hub, y_root, y_range);
         let w_hub = ink2_width(s_hub, bigb).max(w_p);
 
@@ -2119,16 +2116,44 @@ fn render_ink2_style(branches: &[Branch], prefs: &Prefs) -> String {
                 cseed + 500,
             ));
 
-            // §8 leaves in crown zone (height fraction > 0.45)
-            if leaf_k > 0 && s_c > 0.45 {
+            // Tip cluster
+            if leaf_k > 0 {
                 let (back, frt) = ink2_leaves(
-                    *chx,
-                    *chy,
-                    leaf_k,
-                    leaf_color,
-                    bigb,
-                    y_top,
+                    *chx, *chy, leaf_k, leaf_color, bigb, y_top,
                     (bi * 100 + ci) as u64,
+                );
+                leaves_back.push_str(&back);
+                leaves_front.push_str(&frt);
+            }
+
+            // Along-branch scatter: 6 points along hub→child, leaf_k/5 each
+            if leaf_k > 0 {
+                let along_k = (leaf_k / 5).max(1);
+                for ai in 0..6usize {
+                    let at = (ai as f64 + 0.5) / 6.0;
+                    let alx = x_hub + (*chx - x_hub) * at;
+                    let aly = y_hub + (*chy - y_hub) * at;
+                    let (back, frt) = ink2_leaves(
+                        alx, aly, along_k, leaf_color, bigb, y_top,
+                        (bi * 10000 + ci * 100 + ai) as u64 + 200000,
+                    );
+                    leaves_back.push_str(&back);
+                    leaves_front.push_str(&frt);
+                }
+            }
+            let _ = s_c;
+        }
+
+        // Along-stem scatter: 3 points along parent→hub, leaf_k/8 each
+        if leaf_k > 0 {
+            let stem_k = (leaf_k / 8).max(1);
+            for ai in 0..3usize {
+                let at = (ai as f64 + 0.5) / 3.0;
+                let alx = px + (x_hub - px) * at;
+                let aly = py + (y_hub - py) * at;
+                let (back, frt) = ink2_leaves(
+                    alx, aly, stem_k, leaf_color, bigb, y_top,
+                    (bi * 10000) as u64 + 300000 + ai as u64,
                 );
                 leaves_back.push_str(&back);
                 leaves_front.push_str(&frt);
