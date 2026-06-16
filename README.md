@@ -101,7 +101,7 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
-**Realistic tree branches (experimental):** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Four rendering styles are available:
+**Realistic tree branches (experimental):** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Several rendering styles are available:
 
 | Style | Description |
 |---|---|
@@ -109,6 +109,8 @@ Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_widt
 | `"stroke"` | Layered stroked S-curve Bézier paths with opacity-based taper |
 | `"filter"` | Thick rounded paths with a white highlight for a cylindrical 3D look |
 | `"ink"` | Near-solid black filled branches with white longitudinal bark-scratch strokes; hollow ellipse outlines for leaves (ink-drawing aesthetic) |
+| `"ink2"` | Coherent whole-tree algorithm: trunk with root flare, da-Vinci width splitting at forks, bark scratches, open-ellipse leaf clusters |
+| `"ink3"` | Most refined coherent tree, modelled on a hand-drawn reference: a flared trunk that shows below the root box, a continuous flat-topped leaf canopy, and each child connected by a single continuous tapered branch that runs along the main limb and turns up under its box. Trunk/limbs carry short white bark scratches with a lit side |
 
 ```sh
 # Tapered style with medium leaf density
@@ -117,14 +119,14 @@ genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.style = "tapered"' \
   -o chart.svg
 
-# Ink style — black and white hand-drawn look
+# ink3 style — hand-drawn tree look
 genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.enabled = true' \
-  --pref 'output.style.realistic_tree.style = "ink"' \
+  --pref 'output.style.realistic_tree.style = "ink3"' \
   -o chart.svg
 ```
 
-Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"`), `trunk_color` (hex, ignored by `"ink"`), `leaf_color` (hex, ignored by `"ink"`), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
+Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"` | `"ink2"` | `"ink3"`), `trunk_color` (hex), `leaf_color` (hex), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
 
 ### fan
 
