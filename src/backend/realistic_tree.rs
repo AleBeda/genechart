@@ -8,13 +8,11 @@
 //!   "tapered" — filled closed Bézier paths, width globally decreasing from root to tips (default)
 //!   "stroke"  — layered stroked Bézier paths with global width taper
 //!   "filter"  — two-layer filled paths with a white cylindrical highlight for a 3D rounded look
-//!   "ink"     — near-solid black filled branches with white longitudinal bark-scratch strokes;
-//!               hollow ellipse outlines for leaves (ink-drawing aesthetic)
-//!   "ink2"    — coherent-tree algorithm (realistic_tree_spec.md): trunk+flare, organic
-//!               kinked branches, da-Vinci width split, bark scratches, open-ellipse leaves
-//!   "ink3"    — refined coherent tree: spec-correct widths (trunk-continuous), hub placed
-//!               at the children's median x so low generations form long horizontal main
-//!               limbs, concave fork crotches, soil grass tufts, and a trunk highlight lens
+//!   "ink"     — hand-drawn coherent tree (modelled on the reference in
+//!               tests/fixtures/local/realistic_tree_samples): a flared trunk visible below the
+//!               root box, organic buttress roots, one continuous tapered stroke per child that
+//!               runs along the main limb and turns up under its box, short white bark-grain
+//!               scratches with a lit side, and a continuous flat-topped open-ellipse leaf canopy
 
 use crate::preferences::Prefs;
 use crate::scene::{ConnectorPrimitive, Primitive};
@@ -98,8 +96,6 @@ pub fn render_tree_layer(
         "stroke" => render_stroke_style(&branches, prefs),
         "filter" => render_filter_style(&branches, prefs),
         "ink" => render_ink_style(&branches, prefs),
-        "ink2" => render_ink2_style(&branches, prefs),
-        "ink3" => render_ink3_style(&branches, prefs),
         _ => render_tapered_style(&branches, prefs),
     };
     format!("<g id=\"realistic-tree\" class=\"realistic-tree\">\n{inner}</g>\n")
@@ -324,46 +320,6 @@ fn branch_bar(py: f64, mean_cy: f64, px: f64, child_pts: &[(f64, f64)]) -> (f64,
     let bar_min_x = min_cx.min(px);
     let bar_max_x = max_cx.max(px);
     (bar_y, bar_min_x, bar_max_x)
-}
-
-// ── Cubic Bézier helpers (used by ink style) ─────────────────────────────────
-
-/// Evaluate a cubic Bézier at parameter t ∈ [0, 1].
-fn bezier3(
-    p0x: f64,
-    p0y: f64,
-    p1x: f64,
-    p1y: f64,
-    p2x: f64,
-    p2y: f64,
-    p3x: f64,
-    p3y: f64,
-    t: f64,
-) -> (f64, f64) {
-    let m = 1.0 - t;
-    (
-        m * m * m * p0x + 3.0 * m * m * t * p1x + 3.0 * m * t * t * p2x + t * t * t * p3x,
-        m * m * m * p0y + 3.0 * m * m * t * p1y + 3.0 * m * t * t * p2y + t * t * t * p3y,
-    )
-}
-
-/// Normalised tangent of a cubic Bézier at t.
-fn bezier3_tangent(
-    p0x: f64,
-    p0y: f64,
-    p1x: f64,
-    p1y: f64,
-    p2x: f64,
-    p2y: f64,
-    p3x: f64,
-    p3y: f64,
-    t: f64,
-) -> (f64, f64) {
-    let m = 1.0 - t;
-    let dx = 3.0 * (m * m * (p1x - p0x) + 2.0 * m * t * (p2x - p1x) + t * t * (p3x - p2x));
-    let dy = 3.0 * (m * m * (p1y - p0y) + 2.0 * m * t * (p2y - p1y) + t * t * (p3y - p2y));
-    let len = dx.hypot(dy).max(0.001);
-    (dx / len, dy / len)
 }
 
 // ── Style: tapered ────────────────────────────────────────────────────────────
@@ -844,677 +800,14 @@ fn render_filter_style(branches: &[Branch], prefs: &Prefs) -> String {
     out
 }
 
-// ── Style: ink ────────────────────────────────────────────────────────────────
-//
-// Each branch segment is drawn in two passes:
-//   1. A stroked closed Bézier perimeter outline (build_tapered_d / build_bar_d)
-//      gives the branch a clear delineated edge.
-//   2. Many short ink strokes (12–30 SVG units, ±14° angular noise) scattered
-//      within the branch volume texture the interior.
-// Triangle-distributed perpendicular position weights strokes toward the centre.
-// Leaves are hollow ellipse outlines (fill="none").
+// ── Shared helpers for the "ink" style ───────────────────────────────────────
 
-/// Many short ink strokes scattered within a tapered branch segment.
-fn ink_branch_strokes(
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    hw1: f64,
-    hw2: f64,
-    seed_off: u64,
-) -> String {
-    let dx = x2 - x1;
-    let dy = y2 - y1;
-    let len = dx.hypot(dy).max(0.01);
-    let ux = dx / len;
-    let uy = dy / len;
-    let nx = -uy; // perpendicular
-    let ny = ux;
-
-    let avg_hw = (hw1 + hw2) * 0.5;
-    // ~0.15 strokes per sq-unit of branch cross-section × length
-    let n = ((len * avg_hw * 0.15) as usize + 1).max(8).min(120);
-
-    let mut seed = ((x1 * 1000.0) as u64)
-        .wrapping_add((y1 * 997.0) as u64)
-        .wrapping_add((x2 * 991.0) as u64)
-        .wrapping_add((y2 * 983.0) as u64)
-        .wrapping_add(seed_off);
-    let mut out = String::new();
-
-    // Pass 1: stroked perimeter outline gives a clear branch edge
-    let outline_d = build_tapered_d(x1, y1, x2, y2, hw1, hw2);
-    out.push_str(&format!(
-        "  <path d=\"{outline_d}\" fill=\"none\" stroke=\"#111\" stroke-width=\"1.20\" \
-         stroke-linejoin=\"round\" class=\"tree-branch\"/>\n"
-    ));
-
-    // Pass 2: interior ink strokes for texture
-    for _ in 0..n {
-        // Random position along branch
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let t = (seed & 0xFFFF) as f64 / 65535.0;
-        let along = t * len;
-        let hw_t = hw1 + (hw2 - hw1) * t;
-
-        // Perpendicular offset: triangle distribution → centre-heavy
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u1 = (seed & 0xFFFF) as f64 / 65535.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let u2 = (seed & 0xFFFF) as f64 / 65535.0;
-        let perp_frac = u1 + u2 - 1.0; // range [−1, 1]
-        let perp = perp_frac * hw_t;
-
-        // Centre of this short stroke on the branch surface
-        let mx = x1 + ux * along + nx * perp;
-        let my = y1 + uy * along + ny * perp;
-
-        // Stroke length: 12–30 SVG units
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let slen = 12.0 + (seed & 0xFF) as f64 / 255.0 * 18.0;
-
-        // Angular deviation from branch axis: ±0.25 rad (≈ ±14°)
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let dev = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * 0.50;
-        let cos_d = dev.cos();
-        let sin_d = dev.sin();
-        let sdx = ux * cos_d - uy * sin_d;
-        let sdy = ux * sin_d + uy * cos_d;
-
-        let sx = mx - sdx * slen * 0.5;
-        let sy = my - sdy * slen * 0.5;
-        let ex = mx + sdx * slen * 0.5;
-        let ey = my + sdy * slen * 0.5;
-
-        // Small transverse bow for organic feel
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let bow = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * slen * 0.30;
-        let bx = -sdy;
-        let by = sdx;
-        let c1x = sx + (ex - sx) * 0.33 + bx * bow;
-        let c1y = sy + (ey - sy) * 0.33 + by * bow;
-        let c2x = sx + (ex - sx) * 0.67 + bx * bow;
-        let c2y = sy + (ey - sy) * 0.67 + by * bow;
-
-        // Opacity: denser toward centre, lighter at edges
-        let edge = perp_frac.abs();
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rand_o = (seed & 0xFF) as f64 / 255.0;
-        let opacity = (0.78 - edge * 0.38 + rand_o * 0.12).clamp(0.25, 0.92);
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sw = 0.5 + (seed & 0xFF) as f64 / 255.0 * 1.0; // 0.5–1.5
-
-        out.push_str(&format!(
-            "  <path d=\"M {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" \
-             stroke=\"#111\" stroke-width=\"{:.2}\" opacity=\"{:.2}\" \
-             fill=\"none\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n",
-            sx, sy, c1x, c1y, c2x, c2y, ex, ey, sw, opacity
-        ));
-    }
-    out
-}
-
-/// Hollow ellipse ink-style leaves scattered around (cx, cy).
-fn ink_leaf_cluster(cx: f64, cy: f64, count: usize, seed_off: u64) -> String {
-    let mut seed = ((cx * 1000.0) as u64 ^ (cy * 1000.0) as u64).wrapping_add(seed_off);
-    let mut out = String::new();
-    for _ in 0..count {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
-        let radius = ((seed >> 16) & 0xFFFF) as f64 / 65535.0 * 55.0 + 8.0;
-        let lx = cx + angle.cos() * radius;
-        let ly = cy + angle.sin() * radius * 0.55;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rx = (seed & 0xFF) as f64 / 255.0 * 7.0 + 5.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let ry = rx * (0.38 + (seed & 0xFF) as f64 / 255.0 * 0.28);
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rot = (seed & 0xFFFF) as f64 / 65535.0 * 180.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sw = 0.6 + (seed & 0xFF) as f64 / 255.0 * 0.5;
-        out.push_str(&format!(
-            "  <ellipse cx=\"{0:.2}\" cy=\"{1:.2}\" rx=\"{2:.2}\" ry=\"{3:.2}\" \
-             transform=\"rotate({4:.1},{0:.2},{1:.2})\" \
-             fill=\"none\" stroke=\"#111\" stroke-width=\"{5:.2}\" class=\"tree-leaf\"/>\n",
-            lx, ly, rx, ry, rot, sw
-        ));
-    }
-    out
-}
-
-/// Three stacked ink leaf clouds creating a canopy above (cx, cy).
-fn ink_leaf_canopy(cx: f64, cy: f64, count: usize) -> String {
-    let mut out = String::new();
-    out.push_str(&ink_leaf_cluster(cx, cy, count, 0));
-    out.push_str(&ink_leaf_cluster(cx, cy - 36.0, count * 2 / 3 + 1, 1));
-    out.push_str(&ink_leaf_cluster(cx, cy - 72.0, count / 2 + 1, 2));
-    out
-}
-
-/// Root spread for ink style: scattered short strokes fanning below the root box.
-fn ink_roots(root_x: f64, y_root: f64, root_depth: f64, max_hw: f64, min_hw: f64) -> String {
-    let trunk_hw = max_hw;
-    let trunk_end_y = y_root + root_depth * 0.60;
-    let trunk_end_hw = trunk_hw * 0.82;
-
-    // 1. Visible trunk chunk directly below the root ancestor box.
-    let mut out = ink_smooth_branch(
-        root_x,
-        y_root,
-        root_x,
-        trunk_end_y,
-        trunk_hw,
-        trunk_end_hw,
-        9_001,
-    );
-
-    // 2. Lateral roots: nearly horizontal, long, tapering to thin points.
-    //    (tip_x, tip_y, tip_hw_fraction, seed)
-    let span = root_depth * 1.8;
-    let roots: [(f64, f64, f64, u64); 6] = [
-        (root_x - span, y_root + root_depth * 0.82, 0.03, 9_011),
-        (
-            root_x - span * 0.60,
-            y_root + root_depth * 0.74,
-            0.06,
-            9_012,
-        ),
-        (
-            root_x - span * 0.24,
-            y_root + root_depth * 0.70,
-            0.10,
-            9_013,
-        ),
-        (
-            root_x + span * 0.24,
-            y_root + root_depth * 0.70,
-            0.10,
-            9_014,
-        ),
-        (
-            root_x + span * 0.60,
-            y_root + root_depth * 0.74,
-            0.06,
-            9_015,
-        ),
-        (root_x + span, y_root + root_depth * 0.82, 0.03, 9_016),
-    ];
-
-    for (tip_x, tip_y, tip_frac, seed) in roots.iter() {
-        let end_hw = min_hw * 0.3 + (trunk_end_hw - min_hw) * tip_frac;
-        let dx = tip_x - root_x;
-        let dy = tip_y - trunk_end_y;
-        // Control points give: ~20° departure angle from trunk base, nearly horizontal arrival.
-        out.push_str(&ink_branch(
-            root_x,
-            trunk_end_y,
-            root_x + dx * 0.15,
-            trunk_end_y + dy * 0.50,
-            root_x + dx * 0.75,
-            *tip_y - dy * 0.10,
-            *tip_x,
-            *tip_y,
-            trunk_end_hw,
-            end_hw,
-            *seed,
-        ));
-    }
-    out
-}
-
-/// One continuous bark-striation line following the Bézier path at a perpendicular
-/// offset of `frac × local_hw` from the centre. `frac` ∈ (−1, 1).
-///
-/// At each of the N sample points along the curve, a small per-point noise is added
-/// perpendicular to the line so the striation wiggles like a real wood-grain fiber.
-/// The result is a single connected path rather than scattered marks, so adjacent
-/// striations (called at different `frac` values) are genuinely parallel.
-fn ink_grain_line(
-    p0x: f64,
-    p0y: f64,
-    p1x: f64,
-    p1y: f64,
-    p2x: f64,
-    p2y: f64,
-    p3x: f64,
-    p3y: f64,
-    hw_p: f64,
-    hw_c: f64,
-    frac: f64,
-    t_start: f64,
-    t_end: f64,
-    opacity: f64,
-    stroke_width: f64,
-    color: &str,
-    seed_off: u64,
-) -> String {
-    const N: usize = 20;
-    let mut seed = seed_off;
-    let mut pts: Vec<(f64, f64)> = Vec::with_capacity(N);
-
-    // Sample only within [t_start, t_end]; width follows pressure envelope.
-    for i in 0..N {
-        let t = t_start + (t_end - t_start) * (i as f64 / (N - 1) as f64);
-        let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-        let (tang_x, tang_y) = bezier3_tangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-        let norm_x = -tang_y;
-        let norm_y = tang_x;
-        let hw = hw_p + (hw_c - hw_p) * t;
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let noise = ((seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.20;
-
-        pts.push((
-            bx + norm_x * (frac * hw + noise),
-            by + norm_y * (frac * hw + noise),
-        ));
-    }
-
-    // Build path with random gaps: brief interruptions along the line simulate
-    // the discontinuous quality of real ink strokes on fibrous paper.
-    let mut gap_seed = seed_off.wrapping_mul(1_234_567_891);
-    let mut in_gap = true; // begin with a Move command
-    let mut remaining_skip: usize = 0;
-    let mut d = String::new();
-
-    for (x, y) in &pts {
-        if remaining_skip > 0 {
-            remaining_skip -= 1;
-            in_gap = true;
-            continue;
-        }
-        // ~10 % chance of starting a brief gap at this sample point
-        gap_seed = gap_seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        if gap_seed & 0xFF < 26 {
-            gap_seed = gap_seed
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            remaining_skip = (gap_seed & 1) as usize + 1; // skip 1–2 samples
-            in_gap = true;
-            continue;
-        }
-        if in_gap {
-            d.push_str(&format!("M {x:.2},{y:.2}"));
-            in_gap = false;
-        } else {
-            d.push_str(&format!(" L {x:.2},{y:.2}"));
-        }
-    }
-
-    if d.is_empty() {
-        return String::new();
-    }
-
-    format!(
-        "  <path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{stroke_width:.2}\" \
-         opacity=\"{opacity:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n"
-    )
-}
-
-/// Core ink branch renderer with explicit cubic Bézier control points.
-///
-/// P0=(p0x,p0y)…P3=(p3x,p3y) define the centreline; P1 and P2 are the interior
-/// control points.  Setting P1=P2 at a corner gives a smooth quarter-turn elbow.
-/// Setting them at the 50 % positions gives the standard S-curve shape.
-fn ink_branch(
-    p0x: f64,
-    p0y: f64,
-    p1x: f64,
-    p1y: f64,
-    p2x: f64,
-    p2y: f64,
-    p3x: f64,
-    p3y: f64,
-    hw_p: f64,
-    hw_c: f64,
-    seed_off: u64,
-) -> String {
-    const N: usize = 24;
-
-    let mut outline_seed = ((p0x * 1000.0) as u64)
-        .wrapping_add((p0y * 997.0) as u64)
-        .wrapping_add((p3x * 991.0) as u64)
-        .wrapping_add((p3y * 983.0) as u64)
-        .wrapping_add(seed_off.wrapping_mul(1_000_003));
-    let mut outer: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
-    let mut inner: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
-    for i in 0..=N {
-        let t = i as f64 / N as f64;
-        let (bx, by) = bezier3(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-        let (tx, ty) = bezier3_tangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-        let hw = hw_p + (hw_c - hw_p) * t;
-        outline_seed = outline_seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let noise_o = ((outline_seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.18;
-        outline_seed = outline_seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let noise_i = ((outline_seed & 0xFFFF) as f64 / 65535.0 - 0.5) * hw * 0.18;
-        outer.push((bx + (-ty) * (hw + noise_o), by + tx * (hw + noise_o)));
-        inner.push((bx - (-ty) * (hw + noise_i), by - tx * (hw + noise_i)));
-    }
-
-    let mut d = format!("M {:.2},{:.2}", outer[0].0, outer[0].1);
-    for (x, y) in outer.iter().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", x, y));
-    }
-    d.push_str(&format!(" L {:.2},{:.2}", inner[N].0, inner[N].1));
-    for (x, y) in inner.iter().rev().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", x, y));
-    }
-    d.push_str(" Z");
-
-    let mut out = String::new();
-    out.push_str(&format!(
-        "  <path d=\"{d}\" fill=\"#111\" stroke=\"none\" \
-         stroke-linejoin=\"round\" stroke-linecap=\"round\" class=\"tree-branch\"/>\n"
-    ));
-
-    // Bristle bundle.  Lit-side convention:
-    //   vertical   → right side lit → lit_sign = +1
-    //   horizontal → top side lit  → lit_sign = −1 (normal points down in SVG)
-    let is_horizontal = (p3x - p0x).abs() > (p3y - p0y).abs();
-    let lit_sign: f64 = if is_horizontal { -1.0 } else { 1.0 };
-
-    let avg_hw = (hw_p + hw_c) * 0.5;
-    let n_total = ((avg_hw * 2.0 / 3.0) as usize + 4).max(10).min(36);
-    let n_shadow = (n_total / 4).max(2);
-    let n_lit = n_total - n_shadow;
-    let branch_seed = ((p0x * 1000.0) as u64)
-        .wrapping_add((p0y * 997.0) as u64)
-        .wrapping_add((p3x * 991.0) as u64)
-        .wrapping_add((p3y * 983.0) as u64)
-        .wrapping_add(seed_off.wrapping_mul(2_654_435_761));
-
-    let emit_bristle = |i: usize, frac: f64, opacity: f64, stroke_width: f64| -> String {
-        let mut rseed = branch_seed
-            .wrapping_add(i as u64 * 13_331)
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let length_frac = 0.75 + (rseed & 0xFFFF) as f64 / 65535.0 * 0.25;
-        rseed = rseed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let t_start = (rseed & 0xFFFF) as f64 / 65535.0 * (1.0 - length_frac);
-        let t_end = (t_start + length_frac).min(1.0);
-        ink_grain_line(
-            p0x,
-            p0y,
-            p1x,
-            p1y,
-            p2x,
-            p2y,
-            p3x,
-            p3y,
-            hw_p,
-            hw_c,
-            frac,
-            t_start,
-            t_end,
-            opacity,
-            stroke_width,
-            "#FFF",
-            branch_seed.wrapping_add(i as u64 * 7_919),
-        )
-    };
-
-    for i in 0..n_shadow {
-        let frac = lit_sign * (-0.85 + (i as f64 + 0.5) * 0.80 / n_shadow as f64);
-        let s = emit_bristle(i, frac, 0.22, 0.38);
-        out.push_str(&s);
-    }
-    for i in 0..n_lit {
-        let base_frac = 0.05 + (i as f64 + 0.5) * 0.80 / n_lit as f64;
-        let inner_t = base_frac / 0.85;
-        let opacity = (0.62 - inner_t * 0.28).clamp(0.28, 0.62);
-        let s = emit_bristle(n_shadow + i, lit_sign * base_frac, opacity, 0.65);
-        out.push_str(&s);
-    }
-
-    out
-}
-
-/// S-curve branch using control points at 50 % of the span.  Wrapper around `ink_branch`.
-fn ink_smooth_branch(
-    px: f64,
-    py: f64,
-    cx: f64,
-    cy: f64,
-    hw_p: f64,
-    hw_c: f64,
-    seed_off: u64,
-) -> String {
-    let mid_y = py + (cy - py) * 0.50;
-    ink_branch(
-        px,
-        py,
-        px,
-        mid_y,
-        cx,
-        cy - (cy - py) * 0.50,
-        cx,
-        cy,
-        hw_p,
-        hw_c,
-        seed_off,
-    )
-}
-
-fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
-    let leaf_count: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
-        "none" => 0,
-        "low" => 20,
-        "high" => 80,
-        _ => 50,
-    };
-
-    let (y_root, y_top) = y_bounds(branches);
-    let y_range = (y_root - y_top).max(1.0);
-    const MAX_HW: f64 = 12.0;
-    const MIN_HW: f64 = 1.2;
-
-    let mut out = String::new();
-
-    if y_root > y_top {
-        let rx = root_center_x(branches, y_root);
-        let root_depth = y_range * 0.45;
-        out.push_str(&ink_roots(rx, y_root, root_depth, MAX_HW, MIN_HW));
-    }
-
-    for (bi, branch) in branches.iter().enumerate() {
-        if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
-            continue;
-        }
-
-        let px =
-            branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
-        let py =
-            branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
-        let w_py = width_at(py, y_top, y_range, MAX_HW, MIN_HW);
-
-        let mean_cy =
-            branch.child_pts.iter().map(|p| p.1).sum::<f64>() / branch.child_pts.len() as f64;
-        let (bar_y, bar_min_x, bar_max_x) = branch_bar(py, mean_cy, px, &branch.child_pts);
-        let w_bar = width_at(bar_y, y_top, y_range, MAX_HW, MIN_HW);
-
-        let seed_base = bi as u64 * 100;
-
-        // 1. Vertical trunk from parent attachment up to the horizontal bar.
-        if (py - bar_y).abs() > 1.0 {
-            out.push_str(&ink_smooth_branch(
-                px, py, px, bar_y, w_py, w_bar, seed_base,
-            ));
-        }
-
-        // Sort children by x so we can identify the farthest (leftmost / rightmost).
-        let mut sorted_children: Vec<(f64, f64)> = branch.child_pts.clone();
-        sorted_children.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        let (lx, ly) = *sorted_children.first().unwrap();
-        let (rx, ry) = *sorted_children.last().unwrap();
-
-        // Elbow radius: a few branch-widths, never more than 20 % of the bar span.
-        let bar_span = (bar_max_x - bar_min_x).max(1.0);
-        let elbow_r = (w_bar * 3.5).min(bar_span * 0.20).max(1.0);
-
-        // Which ends of the bar terminate at a child (vs the trunk x)?
-        let left_is_child = (bar_min_x - lx).abs() < 1.0;
-        let right_is_child = (bar_max_x - rx).abs() < 1.0;
-        // A child directly above the parent gets a T-junction (no elbow), so the bar
-        // must NOT be shortened at that end.
-        let left_child_above_parent = (lx - px).abs() < 1.0;
-        let right_child_above_parent = (rx - px).abs() < 1.0;
-
-        // Bar endpoints are pulled inward by elbow_r only where a curved elbow takes over.
-        let bar_x0 = if left_is_child && !left_child_above_parent {
-            bar_min_x + elbow_r
-        } else {
-            bar_min_x
-        };
-        let bar_x1 = if right_is_child && !right_child_above_parent {
-            bar_max_x - elbow_r
-        } else {
-            bar_max_x
-        };
-
-        // 2. Horizontal bar with an S-wave (5× more Y variation than a flat line).
-        if bar_x1 > bar_x0 + 1.0 {
-            let bw = bar_x1 - bar_x0;
-            // Wave sign is seeded per-branch so adjacent bars don't all curve the same way.
-            let wave_seed = (bar_y as u64)
-                .wrapping_mul(997)
-                .wrapping_add(px as u64 * 1013);
-            let wave_sign: f64 = if wave_seed & 1 == 0 { 1.0 } else { -1.0 };
-            let wave = (w_bar * 2.5).min(bw * 0.12) * wave_sign;
-            out.push_str(&ink_branch(
-                bar_x0,
-                bar_y,
-                bar_x0 + bw / 3.0,
-                bar_y - wave,
-                bar_x1 - bw / 3.0,
-                bar_y + wave,
-                bar_x1,
-                bar_y,
-                w_bar,
-                w_bar,
-                seed_base + 1,
-            ));
-        }
-
-        // 3. Stubs / elbows — farthest children get a smooth quarter-turn elbow;
-        //    intermediate children get straight stubs from the bar.
-        for (ci, &(cx, cy)) in sorted_children.iter().enumerate() {
-            let w_cy = width_at(cy, y_top, y_range, MAX_HW, MIN_HW);
-            // Exception: if the child is directly above the parent x, the bar has no
-            // horizontal approach to bend from — use a straight stub instead of an elbow.
-            let child_above_parent = (cx - px).abs() < 1.0;
-            let is_left = left_is_child && (cx - lx).abs() < 1.0 && !child_above_parent;
-            let is_right = right_is_child
-                && (cx - rx).abs() < 1.0
-                && !(is_left && sorted_children.len() == 1)
-                && !child_above_parent;
-
-            if is_left {
-                // Elbow: arrives from the right along the bar, departs upward to the child.
-                // P1 = P2 = corner → horizontal departure, vertical arrival.
-                out.push_str(&ink_branch(
-                    lx + elbow_r,
-                    bar_y,
-                    lx,
-                    bar_y,
-                    lx,
-                    bar_y,
-                    lx,
-                    ly,
-                    w_bar,
-                    w_cy,
-                    seed_base + 2 + ci as u64,
-                ));
-            } else if is_right {
-                // Elbow: arrives from the left along the bar, departs upward to the child.
-                out.push_str(&ink_branch(
-                    rx - elbow_r,
-                    bar_y,
-                    rx,
-                    bar_y,
-                    rx,
-                    bar_y,
-                    rx,
-                    ry,
-                    w_bar,
-                    w_cy,
-                    seed_base + 2 + ci as u64,
-                ));
-            } else {
-                // Intermediate child: straight vertical stub.
-                out.push_str(&ink_smooth_branch(
-                    cx,
-                    bar_y,
-                    cx,
-                    cy,
-                    w_bar,
-                    w_cy,
-                    seed_base + 2 + ci as u64,
-                ));
-            }
-
-            if leaf_count > 0 {
-                out.push_str(&ink_leaf_canopy(cx, cy, leaf_count));
-            }
-        }
-    }
-
-    out
-}
-
-// ── Style: ink2 ──────────────────────────────────────────────────────────────
-//
-// Implements the coherent-tree algorithm (realistic_tree_spec.md):
-// trunk+flare, power-law depth width, organic kinked branches,
-// da-Vinci width splitting at forks, white bark scratches, open-ellipse leaves.
-
-// §0 — deterministic hash PRNG (stable SVG diffs across runs)
-fn ink2_rand(px: f64, py: f64, seed: u32) -> f64 {
+// Deterministic hash PRNG (stable SVG diffs across runs).
+fn ink_rand(px: f64, py: f64, seed: u32) -> f64 {
     let a = (px * 7.0).round();
     let b = (py * 7.0).round();
     let v = (a * 12.9898 + b * 78.233 + seed as f64 * 37.719).sin() * 43758.5453;
     v - v.floor()
-}
-
-fn ink2_jitter(px: f64, py: f64, seed: u32) -> f64 {
-    ink2_rand(px, py, seed) * 2.0 - 1.0
 }
 
 // §7 — color helpers; clamp each channel to [0, 255]
@@ -1546,7 +839,7 @@ fn mix_color(ac: u32, bc: u32, t: f64) -> u32 {
         | lerp_ch(ac & 0xFF, bc & 0xFF)
 }
 
-fn ink2_color_hex(c: u32) -> String {
+fn ink_color_hex(c: u32) -> String {
     format!("#{:06X}", c & 0xFFFFFF)
 }
 
@@ -1554,20 +847,12 @@ fn ink2_color_hex(c: u32) -> String {
 fn bark_fill_color(trunk_color: u32, s: f64) -> String {
     let c_base = darken_color(trunk_color, 0.12);
     let c_tip = lighten_color(trunk_color, 0.10);
-    ink2_color_hex(mix_color(c_base, c_tip, s.clamp(0.0, 1.0)))
+    ink_color_hex(mix_color(c_base, c_tip, s.clamp(0.0, 1.0)))
 }
 
 // §5 — height fraction s: 0 at soil (y_root), 1 at crown (y_top)
 fn height_frac_s(y: f64, y_root: f64, y_range: f64) -> f64 {
     ((y_root - y) / y_range).clamp(0.0, 1.0)
-}
-
-// §5 — depth-based full width; subtle taper (~2.5:1 ratio, γ=1.2)
-// s=0 at base/soil (thick end), s=1 at crown (thin tips): use (1-s)^γ
-fn ink2_width(s: f64, bigb: f64) -> f64 {
-    let w_max = bigb * 0.022;
-    let w_min = bigb * 0.009;
-    w_min + (w_max - w_min) * (1.0 - s.clamp(0.0, 1.0)).powf(1.2)
 }
 
 // Cubic Bézier helpers
@@ -1621,617 +906,47 @@ fn branch_cubic2(
     ((px, py), c1, c2, (cx, cy))
 }
 
-// Build a filled tapered SVG path along a cubic with rounded tip cap
-fn ink2_cubic_fill(
-    p0: (f64, f64),
-    p1: (f64, f64),
-    p2: (f64, f64),
-    p3: (f64, f64),
-    hw0: f64,
-    hw1: f64,
-    fill: &str,
-    class: &str,
-    n: usize,
-) -> String {
-    let mut right: Vec<(f64, f64)> = Vec::with_capacity(n + 1);
-    let mut left: Vec<(f64, f64)> = Vec::with_capacity(n + 1);
-    for i in 0..=n {
-        let t = i as f64 / n as f64;
-        let (x, y) = cubic_pt2(p0, p1, p2, p3, t);
-        let (tx, ty) = cubic_tang2(p0, p1, p2, p3, t);
-        let hw = hw0 + (hw1 - hw0) * t;
-        right.push((x + -ty * hw, y + tx * hw));
-        left.push((x - -ty * hw, y - tx * hw));
-    }
-    // rounded tip (cubic Bézier semicircle, κ≈0.5523)
-    let (tip_x, tip_y) = p3;
-    let (tang_x, tang_y) = cubic_tang2(p0, p1, p2, p3, 1.0);
-    let nx = -tang_y;
-    let ny = tang_x;
-    let r = hw1.max(0.5);
-    const KC: f64 = 0.5523;
-    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
-    for pt in right.iter().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    d.push_str(&format!(
-        " C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
-        tip_x + nx * r + tang_x * r * KC,
-        tip_y + ny * r + tang_y * r * KC,
-        tip_x + tang_x * r + nx * r * KC,
-        tip_y + tang_y * r + ny * r * KC,
-        tip_x + tang_x * r,
-        tip_y + tang_y * r,
-        tip_x + tang_x * r - nx * r * KC,
-        tip_y + tang_y * r - ny * r * KC,
-        tip_x - nx * r + tang_x * r * KC,
-        tip_y - ny * r + tang_y * r * KC,
-        tip_x - nx * r,
-        tip_y - ny * r,
-    ));
-    for pt in left.iter().rev().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    d.push_str(" Z");
-    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"{class}\"/>\n")
-}
-
-// §3 — filled branch outline with organic kinks
-fn ink2_branch_path(
-    px: f64,
-    py: f64,
-    cx: f64,
-    cy: f64,
-    w_p: f64,
-    w_c: f64,
-    fill: &str,
-    bigb: f64,
-    y_root: f64,
-    y_range: f64,
-    seed: u32,
-) -> String {
-    let (c0, c1, c2, c3) = branch_cubic2(px, py, cx, cy);
-    let is_short = (py - cy).abs() < bigb * 0.04 && (cx - px).abs() < bigb * 0.04;
-    let _ = (y_root, y_range); // width uses t-interpolation along branch
-
-    const N: usize = 12;
-    let mut cline: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
-    for i in 0..=N {
-        let t = i as f64 / N as f64;
-        let (x, y) = cubic_pt2(c0, c1, c2, c3, t);
-        // Kink only at t≈0.33 and t≈0.67 (2 interior joints, not every sample)
-        let pt = if (i == N / 3 || i == 2 * N / 3) && !is_short {
-            let (tang_x, tang_y) = cubic_tang2(c0, c1, c2, c3, t);
-            let amp = bigb * 0.005 * ink2_jitter(x, y, seed.wrapping_add(i as u32 * 7));
-            (x + -tang_y * amp, y + tang_x * amp)
-        } else {
-            (x, y)
-        };
-        cline.push(pt);
-    }
-
-    let mut right: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
-    let mut left: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
-    for i in 0..=N {
-        let (x, y) = cline[i];
-        let (tx, ty) = if i == 0 {
-            let (x1, y1) = cline[1];
-            let dl = (x1 - x).hypot(y1 - y).max(0.001);
-            ((x1 - x) / dl, (y1 - y) / dl)
-        } else if i == N {
-            let (xp, yp) = cline[N - 1];
-            let dl = (x - xp).hypot(y - yp).max(0.001);
-            ((x - xp) / dl, (y - yp) / dl)
-        } else {
-            let (xp, yp) = cline[i - 1];
-            let (xn, yn) = cline[i + 1];
-            let dl = (xn - xp).hypot(yn - yp).max(0.001);
-            ((xn - xp) / dl, (yn - yp) / dl)
-        };
-        let hw = 0.5 * (w_p + (w_c - w_p) * (i as f64 / N as f64));
-        right.push((x + -ty * hw, y + tx * hw));
-        left.push((x - -ty * hw, y - tx * hw));
-    }
-
-    // tip semicircle
-    let (tip_x, tip_y) = cline[N];
-    let (xp, yp) = cline[N - 1];
-    let dl = (tip_x - xp).hypot(tip_y - yp).max(0.001);
-    let tx = (tip_x - xp) / dl;
-    let ty_t = (tip_y - yp) / dl;
-    let nx = -ty_t;
-    let ny = tx;
-    let r = (0.5 * w_c).max(0.5);
-    const KC: f64 = 0.5523;
-
-    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
-    for pt in right.iter().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    d.push_str(&format!(
-        " C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2} C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}",
-        tip_x + nx * r + tx * r * KC,
-        tip_y + ny * r + ty_t * r * KC,
-        tip_x + tx * r + nx * r * KC,
-        tip_y + ty_t * r + ny * r * KC,
-        tip_x + tx * r,
-        tip_y + ty_t * r,
-        tip_x + tx * r - nx * r * KC,
-        tip_y + ty_t * r - ny * r * KC,
-        tip_x - nx * r + tx * r * KC,
-        tip_y - ny * r + ty_t * r * KC,
-        tip_x - nx * r,
-        tip_y - ny * r,
-    ));
-    for pt in left.iter().rev().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    d.push_str(" Z");
-    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"tree-branch\"/>\n")
-}
-
-// §6 — white longitudinal bark scratches on thick wood
-fn ink2_bark_scratches(
-    px: f64,
-    py: f64,
-    cx: f64,
-    cy: f64,
-    w_p: f64,
-    w_c: f64,
-    bigb: f64,
-    seed: u32,
-) -> String {
-    let avg_hw = (w_p + w_c) * 0.25;
-    if avg_hw < bigb * 0.009 {
-        return String::new();
-    }
-    let n = ((avg_hw / (bigb * 0.004)) as usize + 1).clamp(3, 40);
-    let (c0, c1, c2, c3) = branch_cubic2(px, py, cx, cy);
-    let seg_len = (cx - px).hypot(cy - py).max(1.0);
-
-    let mut out = String::new();
-    for i in 0..n {
-        let r1 = ink2_rand(
-            px + i as f64 * 1.3,
-            py + i as f64 * 1.7,
-            seed.wrapping_add(i as u32 * 3),
-        );
-        let r2 = ink2_rand(
-            px + i as f64 * 2.1,
-            py + i as f64 * 0.9,
-            seed.wrapping_add(i as u32 * 5 + 1),
-        );
-        let r3 = ink2_rand(
-            cx + i as f64 * 1.1,
-            cy + i as f64 * 2.3,
-            seed.wrapping_add(i as u32 * 7 + 2),
-        );
-
-        let t_c = 0.1 + r1 * 0.8;
-        let (bx, by) = cubic_pt2(c0, c1, c2, c3, t_c);
-        let (tang_x, tang_y) = cubic_tang2(c0, c1, c2, c3, t_c);
-        let nx = -tang_y;
-        let ny = tang_x;
-
-        let hw_t = 0.5 * (w_p + (w_c - w_p) * t_c);
-        // lateral: within ±0.8·hw, biased toward lit side (−0.25·hw)
-        let lat = (r2 - 0.5) * 2.0 * hw_t * 0.8 - hw_t * 0.25;
-
-        let half_l = seg_len * (0.075 + r3 * 0.15);
-        let sx = bx + nx * lat - tang_x * half_l;
-        let sy = by + ny * lat - tang_y * half_l;
-        let ex = bx + nx * lat + tang_x * half_l;
-        let ey = by + ny * lat + tang_y * half_l;
-        let bow = (r2 - 0.5) * half_l * 0.2;
-        let mid_x = (sx + ex) * 0.5 + nx * bow;
-        let mid_y = (sy + ey) * 0.5 + ny * bow;
-
-        let sw = 0.5 + r1 * 1.1;
-        let opacity = 0.55 + r3 * 0.35;
-        out.push_str(&format!(
-            "  <path d=\"M {sx:.2},{sy:.2} Q {mid_x:.2},{mid_y:.2} {ex:.2},{ey:.2}\" \
-             fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"{sw:.2}\" \
-             opacity=\"{opacity:.2}\" stroke-linecap=\"round\" class=\"tree-bark\"/>\n"
-        ));
-    }
-    out
-}
-
-// §1 — trunk shaft with bell flare at soil line
-fn ink2_trunk(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32, y_top: f64) -> String {
-    let h_flare = bigb * 0.10;
-    let w_trunk = bigb * 0.050;
-    let w_flare = w_trunk * 1.85;
-    let lean = ink2_jitter(x_trunk, y_root, 101) * bigb * 0.015;
-    let y_shaft_top = y_root - h_flare * 2.2;
-
-    const N: usize = 10;
-    let mut right: Vec<(f64, f64)> = Vec::new();
-    let mut left: Vec<(f64, f64)> = Vec::new();
-    for i in 0..=N {
-        let t = i as f64 / N as f64; // 0 = y_root (soil), 1 = shaft top
-        let y = y_root - t * (y_root - y_shaft_top);
-        let x = x_trunk + lean * t;
-        let hw = if y > y_root - h_flare {
-            // flare zone: power-2.2 swell toward soil
-            let s_f = ((y_root - y) / h_flare).clamp(0.0, 1.0);
-            0.5 * (w_trunk + (w_flare - w_trunk) * (1.0 - s_f).powf(2.2))
-        } else {
-            0.5 * w_trunk
-        };
-        right.push((x + hw, y));
-        left.push((x - hw, y));
-    }
-
-    let y_range = (y_root - y_top).max(1.0);
-    let s_mean = height_frac_s((y_root + y_shaft_top) * 0.5, y_root, y_range);
-    let fill = bark_fill_color(trunk_color, s_mean);
-
-    let mut d = format!("M {:.2},{:.2}", right[0].0, right[0].1);
-    for pt in right.iter().skip(1) {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    for pt in left.iter().rev() {
-        d.push_str(&format!(" L {:.2},{:.2}", pt.0, pt.1));
-    }
-    d.push_str(" Z");
-    format!("  <path d=\"{d}\" fill=\"{fill}\" class=\"tree-trunk\"/>\n")
-}
-
 // §2 — dark soil mound seating the trunk at the ground line
-fn ink2_soil_mound(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String {
+fn ink_soil_mound(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String {
     let rx = bigb * 0.050 * 1.85 * 0.5 * 0.9;
     let ry = rx * 0.55;
-    let fill = ink2_color_hex(darken_color(trunk_color, 0.10));
+    let fill = ink_color_hex(darken_color(trunk_color, 0.10));
     format!(
         "  <ellipse cx=\"{x_trunk:.2}\" cy=\"{y_root:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" \
          fill=\"{fill}\" opacity=\"0.75\" class=\"tree-root\"/>\n"
     )
 }
 
-// §2 — exposed roots fanning below y_root into the extra canvas area
-fn ink2_roots(x_trunk: f64, y_root: f64, root_extra: f64, bigb: f64, trunk_color: u32) -> String {
-    const N_ROOT: usize = 6;
-    let w_max = bigb * 0.050;
-    let fill_base = bark_fill_color(trunk_color, 0.0);
-    let mut out = String::new();
-    for i in 0..N_ROOT {
-        let t = i as f64 / (N_ROOT - 1) as f64;
-        let dir = t * 2.0 - 1.0; // −1..+1
-
-        let r1 = ink2_rand(
-            x_trunk + i as f64 * 7.3,
-            y_root + i as f64 * 3.1,
-            200 + i as u32,
-        );
-        let r2 = ink2_rand(
-            x_trunk + i as f64 * 5.7,
-            y_root - i as f64 * 4.3,
-            201 + i as u32,
-        );
-        let is_central = i == N_ROOT / 2;
-
-        let tip_x = if is_central {
-            x_trunk + dir * bigb * 0.02
-        } else {
-            x_trunk + dir * bigb * (0.30 + r1 * 0.35)
-        };
-        let tip_y = if is_central {
-            y_root + root_extra
-        } else {
-            y_root + root_extra * (0.55 + r2 * 0.45)
-        };
-
-        let start_x = x_trunk + dir * w_max * 0.5 * 1.85 * 0.4;
-        let start_y = y_root + bigb * 0.03;
-        let dx = tip_x - start_x;
-        let dy = tip_y - start_y;
-        let p1 = (start_x + dx * 0.15, start_y + dy * 0.50);
-        let p2 = (start_x + dx * 0.75, tip_y - dy * 0.10);
-
-        out.push_str(&ink2_cubic_fill(
-            (start_x, start_y),
-            p1,
-            p2,
-            (tip_x, tip_y),
-            w_max * 0.45 * 0.5,
-            w_max * 0.04 * 0.5,
-            &fill_base,
-            "tree-root",
-            8,
-        ));
-    }
-    out
-}
-
-// §8 — leaf cluster; returns (back 80%, front 20%)
-fn ink2_leaves(
-    cx: f64,
-    cy: f64,
-    k: usize,
-    leaf_color: u32,
-    bigb: f64,
-    _y_top: f64,
-    seed_off: u64,
-) -> (String, String) {
-    let stroke_col = ink2_color_hex(darken_color(leaf_color, 0.25));
-    let r_disc = bigb * 0.18;
-    let leaf_len = bigb * 0.012;
-    let mut back = String::new();
-    let mut front = String::new();
-
-    let mut seed = seed_off
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-
-    for i in 0..k {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let angle = (seed & 0xFFFF) as f64 / 65535.0 * std::f64::consts::TAU;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let r = r_disc * ((seed & 0xFFFF) as f64 / 65535.0).sqrt();
-        let lx = cx + angle.cos() * r;
-        let ly = cy + angle.sin() * r * 0.7;
-
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sz = leaf_len * 0.5 * (0.75 + (seed & 0xFF) as f64 / 255.0 * 0.50);
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let rot = (seed & 0xFFFF) as f64 / 65535.0 * 180.0;
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let sw = 0.6 + (seed & 0xFF) as f64 / 255.0 * 0.4;
-
-        let elem = format!(
-            "  <ellipse cx=\"{lx:.2}\" cy=\"{ly:.2}\" rx=\"{sz:.2}\" ry=\"{:.2}\" \
-             transform=\"rotate({rot:.1},{lx:.2},{ly:.2})\" fill=\"none\" \
-             stroke=\"{stroke_col}\" stroke-width=\"{sw:.2}\" class=\"tree-leaf\"/>\n",
-            sz * 0.6
-        );
-        if i * 5 < k * 4 {
-            back.push_str(&elem);
-        } else {
-            front.push_str(&elem);
-        }
-    }
-    (back, front)
-}
-
-fn render_ink2_style(branches: &[Branch], prefs: &Prefs) -> String {
-    if branches.is_empty() {
-        return String::new();
-    }
-    let (y_root, y_top) = y_bounds(branches);
-    if y_root <= y_top {
-        return String::new();
-    }
-    let y_range = (y_root - y_top).max(1.0);
-    let bigb = y_range;
-    let trunk_color = prefs.output.style.realistic_tree.trunk_color as u32;
-    let leaf_color = prefs.output.style.realistic_tree.leaf_color as u32;
-    let x_trunk = root_center_x(branches, y_root);
-    let root_extra = y_range * 0.45;
-
-    let leaf_k: usize = match prefs.output.style.realistic_tree.leaf_density.as_str() {
-        "none" => 0,
-        "low" => 400,
-        "high" => 2400,
-        _ => 1100,
-    };
-
-    let mut leaves_back = String::new();
-    let mut soil_svg = String::new();
-    let mut roots_svg = String::new();
-    let mut trunk_svg = String::new();
-    let mut wood: Vec<(f64, String)> = Vec::new(); // (sort-key width, svg)
-    let mut bark_svg = String::new();
-    let mut leaves_front = String::new();
-
-    trunk_svg.push_str(&ink2_trunk(x_trunk, y_root, bigb, trunk_color, y_top));
-    roots_svg.push_str(&ink2_roots(x_trunk, y_root, root_extra, bigb, trunk_color));
-    soil_svg.push_str(&ink2_soil_mound(x_trunk, y_root, bigb, trunk_color));
-
-    for (bi, branch) in branches.iter().enumerate() {
-        if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
-            continue;
-        }
-        let px =
-            branch.parent_pts.iter().map(|p| p.0).sum::<f64>() / branch.parent_pts.len() as f64;
-        let py =
-            branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
-        let s_p = height_frac_s(py, y_root, y_range);
-        let w_p = ink2_width(s_p, bigb);
-
-        let n_ch = branch.child_pts.len();
-        let mean_cy = branch.child_pts.iter().map(|p| p.1).sum::<f64>() / n_ch as f64;
-
-        // §4 hub at 35% from parent toward mean child y
-        let y_hub = py - 0.35 * (py - mean_cy);
-        // Stem rises straight above the parent; limbs fan out from there.
-        let x_hub = px;
-        let s_hub = height_frac_s(y_hub, y_root, y_range);
-        let w_hub = ink2_width(s_hub, bigb).max(w_p);
-
-        // stem: parent → hub
-        let seed_base = bi as u32 * 1000;
-        let s_stem = height_frac_s((py + y_hub) * 0.5, y_root, y_range);
-        let stem_fill = bark_fill_color(trunk_color, s_stem);
-        wood.push((
-            w_p,
-            ink2_branch_path(
-                px, py, x_hub, y_hub, w_p, w_hub, &stem_fill, bigb, y_root, y_range, seed_base,
-            ),
-        ));
-        bark_svg.push_str(&ink2_bark_scratches(
-            px,
-            py,
-            x_hub,
-            y_hub,
-            w_p,
-            w_hub,
-            bigb,
-            seed_base + 500,
-        ));
-
-        // children sorted by x
-        let mut sorted_ch = branch.child_pts.clone();
-        sorted_ch.sort_by(|a, bv| a.0.partial_cmp(&bv.0).unwrap_or(std::cmp::Ordering::Equal));
-
-        // §4b da-Vinci width split: w_sub_i = w_hub * sqrt(w_c_i^2 / Σ w_c_j^2)
-        let child_ws: Vec<f64> = sorted_ch
-            .iter()
-            .map(|(_, chy)| ink2_width(height_frac_s(*chy, y_root, y_range), bigb))
-            .collect();
-        let sum_sq: f64 = child_ws.iter().map(|w| w * w).sum::<f64>().max(1e-9);
-        let sub_ws: Vec<f64> = child_ws
-            .iter()
-            .map(|w_c| (w_hub * (w_c * w_c / sum_sq).sqrt()).min(*w_c))
-            .collect();
-
-        // limb fan: hub → each child
-        for (ci, ((chx, chy), (w_c, w_sub))) in sorted_ch
-            .iter()
-            .zip(child_ws.iter().zip(sub_ws.iter()))
-            .enumerate()
-        {
-            let cseed = bi as u32 * 1000 + ci as u32 * 10 + 1;
-            let s_c = height_frac_s(*chy, y_root, y_range);
-            let s_mid = height_frac_s((*chy + y_hub) * 0.5, y_root, y_range);
-            let cfill = bark_fill_color(trunk_color, s_mid);
-            wood.push((
-                *w_sub,
-                ink2_branch_path(
-                    x_hub, y_hub, *chx, *chy, *w_sub, *w_c, &cfill, bigb, y_root, y_range, cseed,
-                ),
-            ));
-            bark_svg.push_str(&ink2_bark_scratches(
-                x_hub,
-                y_hub,
-                *chx,
-                *chy,
-                *w_sub,
-                *w_c,
-                bigb,
-                cseed + 500,
-            ));
-
-            // Tip cluster
-            if leaf_k > 0 {
-                let (back, frt) = ink2_leaves(
-                    *chx,
-                    *chy,
-                    leaf_k,
-                    leaf_color,
-                    bigb,
-                    y_top,
-                    (bi * 100 + ci) as u64,
-                );
-                leaves_back.push_str(&back);
-                leaves_front.push_str(&frt);
-            }
-
-            // Along-branch scatter: 6 points along hub→child, leaf_k/5 each
-            if leaf_k > 0 {
-                let along_k = (leaf_k / 5).max(1);
-                for ai in 0..6usize {
-                    let at = (ai as f64 + 0.5) / 6.0;
-                    let alx = x_hub + (*chx - x_hub) * at;
-                    let aly = y_hub + (*chy - y_hub) * at;
-                    let (back, frt) = ink2_leaves(
-                        alx,
-                        aly,
-                        along_k,
-                        leaf_color,
-                        bigb,
-                        y_top,
-                        (bi * 10000 + ci * 100 + ai) as u64 + 200000,
-                    );
-                    leaves_back.push_str(&back);
-                    leaves_front.push_str(&frt);
-                }
-            }
-            let _ = s_c;
-        }
-
-        // Along-stem scatter: 3 points along parent→hub, leaf_k/8 each
-        if leaf_k > 0 {
-            let stem_k = (leaf_k / 8).max(1);
-            for ai in 0..3usize {
-                let at = (ai as f64 + 0.5) / 3.0;
-                let alx = px + (x_hub - px) * at;
-                let aly = py + (y_hub - py) * at;
-                let (back, frt) = ink2_leaves(
-                    alx,
-                    aly,
-                    stem_k,
-                    leaf_color,
-                    bigb,
-                    y_top,
-                    (bi * 10000) as u64 + 300000 + ai as u64,
-                );
-                leaves_back.push_str(&back);
-                leaves_front.push_str(&frt);
-            }
-        }
-    }
-
-    // §9 sort wood thick → thin so thinner branches overlay thicker ones
-    wood.sort_by(|a, bv| bv.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    // §9 rendering order: leaves-back → soil → roots → trunk → wood → bark → leaves-front
-    let mut out = String::new();
-    out.push_str(&leaves_back);
-    out.push_str(&soil_svg);
-    out.push_str(&roots_svg);
-    out.push_str(&trunk_svg);
-    for (_, svg) in &wood {
-        out.push_str(svg);
-    }
-    out.push_str(&bark_svg);
-    out.push_str(&leaves_front);
-    out
-}
-
-// ── Style: ink3 ──────────────────────────────────────────────────────────────
+// ── Style: ink ────────────────────────────────────────────────────────────────
 //
-// Redesigned to match the artist's reference (tests/fixtures/local/
-// realistic_tree_samples). Two ideas drive the look:
+// Hand-drawn coherent tree, modelled on the artist's reference
+// (tests/fixtures/local/realistic_tree_samples). Two ideas drive the look:
 //
-//  1. WOOD as a real tree, not a wiring diagram. Each parent forks at a low hub
-//     into TWO arched main limbs (left + right) that sweep outward and gently up;
-//     short vertical RISERS climb from the limbs into each child box. Wood is
-//     thick at the trunk and tapers outward, so it reads as one continuous tree.
+//  1. WOOD as a real tree, not a wiring diagram. A flared trunk (visible below the
+//     root box) with organic buttress roots; each child is one continuous tapered
+//     stroke that runs along the main limb then turns up sharply under its box.
+//     The visible main limb is the overlap of those strokes shedding branches.
 //
-//  2. FOLIAGE as one continuous canopy, not isolated puff-balls. Instead of a
-//     leaf disc per box, the whole crown is filled with a single flat-topped,
-//     billowy, clump-textured mass of open-ellipse leaves (value-noise density),
-//     drawn behind the boxes — exactly the reference's stippled canopy.
-//
-// Pure ink2 helpers (color, cubic, PRNG, trunk, roots, soil, bark) are reused.
+//  2. FOLIAGE as one continuous canopy, not isolated puff-balls. The whole crown
+//     is filled with a single flat-topped, billowy, clump-textured mass of
+//     open-ellipse leaves (value-noise density), drawn behind the boxes.
 
 // §5 — depth-based full width: thick at base (s=0), thin at crown (s=1), power-law.
-fn ink3_width(s: f64, bigb: f64) -> f64 {
+fn ink_width(s: f64, bigb: f64) -> f64 {
     let w_max = bigb * 0.050;
     let w_min = bigb * 0.005;
     w_min + (w_max - w_min) * (1.0 - s.clamp(0.0, 1.0)).powf(1.8)
 }
 
 // §2 — grass tufts at the soil line, growing upward; gated by caller on density.
-fn ink3_grass(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String {
-    let col = ink2_color_hex(darken_color(trunk_color, 0.40));
+fn ink_grass(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String {
+    let col = ink_color_hex(darken_color(trunk_color, 0.40));
     let spread = bigb * 0.13; // ≈ 1.4 × full flare half-width
     let mut out = String::new();
     for i in 0..24u32 {
-        let r1 = ink2_rand(x_trunk + i as f64 * 3.1, y_root, 700 + i);
-        let r2 = ink2_rand(x_trunk - i as f64 * 2.3, y_root, 740 + i);
-        let r3 = ink2_rand(x_trunk + i as f64 * 1.7, y_root, 780 + i);
+        let r1 = ink_rand(x_trunk + i as f64 * 3.1, y_root, 700 + i);
+        let r2 = ink_rand(x_trunk - i as f64 * 2.3, y_root, 740 + i);
+        let r3 = ink_rand(x_trunk + i as f64 * 1.7, y_root, 780 + i);
         let bx = x_trunk + (r1 * 2.0 - 1.0) * spread;
         let len = bigb * (0.02 + r2 * 0.03);
         let lean = (r3 * 2.0 - 1.0) * len * 0.5;
@@ -2250,7 +965,7 @@ fn ink3_grass(x_trunk: f64, y_root: f64, bigb: f64, trunk_color: u32) -> String 
 }
 
 // Smooth low-frequency wander in ~[-1, 1] for organic branch centrelines/edges.
-fn ink3_wave(t: f64, seed: u32) -> f64 {
+fn ink_wave(t: f64, seed: u32) -> f64 {
     let s = seed as f64;
     let p1 = (s * 0.013).sin() * std::f64::consts::TAU;
     let p2 = (s * 0.027).sin() * std::f64::consts::TAU;
@@ -2261,7 +976,7 @@ fn ink3_wave(t: f64, seed: u32) -> f64 {
 }
 
 // Local unit tangent of a sampled centreline at index `i` (finite difference).
-fn ink3_cl_tangent(cl: &[(f64, f64)], i: usize) -> (f64, f64) {
+fn ink_cl_tangent(cl: &[(f64, f64)], i: usize) -> (f64, f64) {
     let n = cl.len() - 1;
     let (a, b) = if i == 0 {
         (cl[0], cl[1])
@@ -2278,13 +993,13 @@ fn ink3_cl_tangent(cl: &[(f64, f64)], i: usize) -> (f64, f64) {
 
 // Smooth 1-D value noise in [-1, 1] with `freq` random humps over t∈[0,1].
 // More organic than a sum of sines (which reads as a regular wave).
-fn ink3_wander1(t: f64, freq: f64, seed: u32) -> f64 {
+fn ink_wander1(t: f64, freq: f64, seed: u32) -> f64 {
     let g = t * freq;
     let i0 = g.floor();
     let f = g - i0;
     let s = f * f * (3.0 - 2.0 * f);
-    let a = ink2_rand(i0, 7.0, seed) * 2.0 - 1.0;
-    let b = ink2_rand(i0 + 1.0, 7.0, seed) * 2.0 - 1.0;
+    let a = ink_rand(i0, 7.0, seed) * 2.0 - 1.0;
+    let b = ink_rand(i0 + 1.0, 7.0, seed) * 2.0 - 1.0;
     a + (b - a) * s
 }
 
@@ -2293,7 +1008,7 @@ fn ink3_wander1(t: f64, freq: f64, seed: u32) -> f64 {
 // width is near-constant then tapers toward the rounded tip. `w0`/`w1` are full
 // widths. When `sag_only` is set (horizontal limbs), upward excursions are
 // damped so the limb never humps up into the boxes above it.
-fn ink3_fill_cubic(
+fn ink_fill_cubic(
     p0: (f64, f64),
     p1: (f64, f64),
     p2: (f64, f64),
@@ -2317,7 +1032,7 @@ fn ink3_fill_cubic(
         let (bx, by) = cubic_pt2(p0, p1, p2, p3, t);
         let (tx, ty) = cubic_tang2(p0, p1, p2, p3, t);
         let env = (t * pi).sin();
-        let off = ink3_wander1(t, 3.3, seed) * wander * env;
+        let off = ink_wander1(t, 3.3, seed) * wander * env;
         let cx = bx - ty * off;
         let mut cy = by + tx * off;
         if sag_only && cy < by {
@@ -2344,12 +1059,12 @@ fn ink3_fill_cubic(
     let mut left: Vec<(f64, f64)> = Vec::with_capacity(N + 1);
     for i in 0..=N {
         let t = i as f64 / N as f64;
-        let (tx, ty) = ink3_cl_tangent(&cl, i);
+        let (tx, ty) = ink_cl_tangent(&cl, i);
         let nx = -ty;
         let ny = tx;
         let base_hw = half_w(t);
-        let er = (1.0 + ink3_wave(t * 6.5, seed.wrapping_add(101)) * 0.09).max(0.25);
-        let el = (1.0 + ink3_wave(t * 6.5, seed.wrapping_add(202)) * 0.09).max(0.25);
+        let er = (1.0 + ink_wave(t * 6.5, seed.wrapping_add(101)) * 0.09).max(0.25);
+        let el = (1.0 + ink_wave(t * 6.5, seed.wrapping_add(202)) * 0.09).max(0.25);
         let (x, y) = cl[i];
         right.push((x + nx * base_hw * er, y + ny * base_hw * er));
         left.push((x - nx * base_hw * el, y - ny * base_hw * el));
@@ -2357,7 +1072,7 @@ fn ink3_fill_cubic(
 
     // rounded tip at p3
     let (tip_x, tip_y) = cl[N];
-    let (tx, ty) = ink3_cl_tangent(&cl, N);
+    let (tx, ty) = ink_cl_tangent(&cl, N);
     let nx = -ty;
     let ny = tx;
     let r = half_w(1.0).max(0.5);
@@ -2392,7 +1107,7 @@ fn ink3_fill_cubic(
 // Dense white bark grain along the wood axis. Strokes run longitudinally, are
 // brighter/denser on the lit (left) side and fade to a darker shadow side —
 // reproducing the cylindrical highlight and stippled bark of the reference.
-fn ink3_grain(
+fn ink_grain(
     p0: (f64, f64),
     p1: (f64, f64),
     p2: (f64, f64),
@@ -2411,17 +1126,17 @@ fn ink3_grain(
     let mut out = String::new();
     for i in 0..n {
         let fi = i as f64;
-        let r1 = ink2_rand(
+        let r1 = ink_rand(
             p0.0 + fi * 1.3,
             p0.1 + fi * 1.7,
             seed.wrapping_add(i as u32 * 3),
         );
-        let r2 = ink2_rand(
+        let r2 = ink_rand(
             p0.0 + fi * 2.1,
             p0.1 + fi * 0.9,
             seed.wrapping_add(i as u32 * 5 + 1),
         );
-        let r3 = ink2_rand(
+        let r3 = ink_rand(
             p3.0 + fi * 1.1,
             p3.1 + fi * 2.3,
             seed.wrapping_add(i as u32 * 7 + 2),
@@ -2457,8 +1172,8 @@ fn ink3_grain(
 // Irregular flared trunk from the first fork (`top_y`) down to `base_y` — which
 // sits BELOW the root box so a visible length of trunk shows under the oldest
 // ancestor. Strong base flare, wandering outline, dense vertical grain, lit-side
-// highlight lens. Replaces the clean bell-shaped ink2 trunk for ink3.
-fn ink3_trunk2(
+// highlight lens.
+fn ink_trunk(
     x_trunk: f64,
     y_root: f64,
     top_y: f64,
@@ -2477,7 +1192,7 @@ fn ink3_trunk2(
     for i in 0..=N {
         let t = i as f64 / N as f64; // 0 at top (fork), 1 at base (soil)
         let y = top_y + t * h;
-        let cx = x_trunk + ink3_wave(t * 1.7, 731) * bigb * 0.012;
+        let cx = x_trunk + ink_wave(t * 1.7, 731) * bigb * 0.012;
         let near_base = (y - (base_y - h_flare)) / h_flare; // <0 above flare
         let flare = if near_base > 0.0 {
             near_base.clamp(0.0, 1.0).powf(2.0)
@@ -2485,8 +1200,8 @@ fn ink3_trunk2(
             0.0
         };
         let hw = 0.5 * (w_trunk + (w_flare - w_trunk) * flare);
-        let er = (1.0 + ink3_wave(t * 5.0, 742) * 0.10).max(0.3);
-        let el = (1.0 + ink3_wave(t * 5.0, 753) * 0.10).max(0.3);
+        let er = (1.0 + ink_wave(t * 5.0, 742) * 0.10).max(0.3);
+        let el = (1.0 + ink_wave(t * 5.0, 753) * 0.10).max(0.3);
         right.push((cx + hw * er, y));
         left.push((cx - hw * el, y));
     }
@@ -2504,7 +1219,7 @@ fn ink3_trunk2(
 
     // vertical grain over the full trunk height
     let mid_y = (base_y + top_y) * 0.5;
-    out.push_str(&ink3_grain(
+    out.push_str(&ink_grain(
         (x_trunk, base_y),
         (x_trunk, mid_y),
         (x_trunk, mid_y),
@@ -2529,7 +1244,7 @@ fn ink3_trunk2(
 // Exposed roots flaring from the trunk base (`soil_y`) into the soil over
 // `depth`. Chunky and organic near the trunk (buttress-like), tapering to fine
 // points, with grain on the thick part.
-fn ink3_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32) -> String {
+fn ink_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32) -> String {
     let fill = bark_fill_color(trunk_color, 0.0); // darkest, at the base
     let w_flare = bigb * 0.055 * 1.95; // trunk base full width
     const N: usize = 7;
@@ -2539,8 +1254,8 @@ fn ink3_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32
         let t = fi / (N - 1) as f64;
         let dir = t * 2.0 - 1.0; // −1 .. +1
         let central = i == N / 2;
-        let r1 = ink2_rand(x_trunk + fi * 7.3, soil_y + fi * 3.1, 820 + i as u32);
-        let r2 = ink2_rand(x_trunk - fi * 5.7, soil_y - fi * 4.3, 840 + i as u32);
+        let r1 = ink_rand(x_trunk + fi * 7.3, soil_y + fi * 3.1, 820 + i as u32);
+        let r2 = ink_rand(x_trunk - fi * 5.7, soil_y - fi * 4.3, 840 + i as u32);
 
         let (tip_x, tip_y) = if central {
             (
@@ -2564,7 +1279,7 @@ fn ink3_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32
         let p3 = (tip_x, tip_y);
         let w_top = (w_flare * (0.34 - dir.abs() * 0.10)).max(w_flare * 0.14);
         let w_tip = w_flare * 0.02;
-        out.push_str(&ink3_fill_cubic(
+        out.push_str(&ink_fill_cubic(
             p0,
             p1,
             p2,
@@ -2576,7 +1291,7 @@ fn ink3_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32
             820 + i as u32,
             false,
         ));
-        out.push_str(&ink3_grain(
+        out.push_str(&ink_grain(
             p0,
             p1,
             p2,
@@ -2592,7 +1307,7 @@ fn ink3_roots(x_trunk: f64, soil_y: f64, depth: f64, bigb: f64, trunk_color: u32
 
 // Smooth (bilinear, Hermite-faded) value noise on a grid of `scale` units.
 // Returns ~[0,1]; continuous so foliage forms coherent clumps and gaps.
-fn ink3_noise(x: f64, y: f64, scale: f64, seed: u32) -> f64 {
+fn ink_noise(x: f64, y: f64, scale: f64, seed: u32) -> f64 {
     let gx = x / scale;
     let gy = y / scale;
     let x0 = gx.floor();
@@ -2601,7 +1316,7 @@ fn ink3_noise(x: f64, y: f64, scale: f64, seed: u32) -> f64 {
     let fy = gy - y0;
     let sx = fx * fx * (3.0 - 2.0 * fx);
     let sy = fy * fy * (3.0 - 2.0 * fy);
-    let corner = |i: f64, j: f64| ink2_rand((x0 + i) * scale, (y0 + j) * scale, seed);
+    let corner = |i: f64, j: f64| ink_rand((x0 + i) * scale, (y0 + j) * scale, seed);
     let a = corner(0.0, 0.0);
     let b = corner(1.0, 0.0);
     let c = corner(0.0, 1.0);
@@ -2614,7 +1329,7 @@ fn ink3_noise(x: f64, y: f64, scale: f64, seed: u32) -> f64 {
 // One continuous canopy filling the whole crown: a flat-topped, billowy,
 // clump-textured mass of open-ellipse leaves drawn behind the boxes.
 // Returns (back 82 %, front 18 %).
-fn ink3_canopy(
+fn ink_canopy(
     branches: &[Branch],
     y_root: f64,
     y_top: f64,
@@ -2651,11 +1366,11 @@ fn ink3_canopy(
     let top_y = |x: f64| -> f64 {
         let e = ((x - center_x).abs() / half_w).clamp(0.0, 1.0);
         let shoulder = e.powi(4) * band * 0.62; // round only near the edges
-        let billow = (ink3_noise(x, 0.0, bigb * 0.10, 4_001) - 0.5) * bigb * 0.10;
+        let billow = (ink_noise(x, 0.0, bigb * 0.10, 4_001) - 0.5) * bigb * 0.10;
         crown_top + shoulder + billow
     };
 
-    let stroke_col = ink2_color_hex(darken_color(leaf_color, 0.25));
+    let stroke_col = ink_color_hex(darken_color(leaf_color, 0.25));
     let leaf_len = bigb * 0.011;
     let mut back = String::new();
     let mut front = String::new();
@@ -2679,7 +1394,7 @@ fn ink3_canopy(
         }
         let y = ty + rng() * (crown_bot - ty);
         // clump texture: denser where the noise field is high
-        let dens = ink3_noise(x, y, bigb * 0.06, 4_002);
+        let dens = ink_noise(x, y, bigb * 0.06, 4_002);
         if rng() > 0.28 + 0.72 * dens {
             continue;
         }
@@ -2708,7 +1423,7 @@ fn ink3_canopy(
     (back, front)
 }
 
-fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
+fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
     if branches.is_empty() {
         return String::new();
     }
@@ -2757,7 +1472,7 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
     let below_h = root_extra * 0.40;
     let soil_y = y_root + below_h;
     let root_depth = (root_extra - below_h).max(bigb * 0.05);
-    trunk_svg.push_str(&ink3_trunk2(
+    trunk_svg.push_str(&ink_trunk(
         x_trunk,
         y_root,
         trunk_top_y,
@@ -2765,15 +1480,15 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
         bigb,
         trunk_color,
     ));
-    roots_svg.push_str(&ink3_roots(x_trunk, soil_y, root_depth, bigb, trunk_color));
-    soil_svg.push_str(&ink2_soil_mound(x_trunk, soil_y, bigb, trunk_color));
+    roots_svg.push_str(&ink_roots(x_trunk, soil_y, root_depth, bigb, trunk_color));
+    soil_svg.push_str(&ink_soil_mound(x_trunk, soil_y, bigb, trunk_color));
     if total_leaves > 0 {
-        grass_svg.push_str(&ink3_grass(x_trunk, soil_y, bigb, trunk_color));
+        grass_svg.push_str(&ink_grass(x_trunk, soil_y, bigb, trunk_color));
     }
 
     // Continuous canopy behind everything (and a thin front layer for depth).
     let (leaves_back, leaves_front) =
-        ink3_canopy(branches, y_root, y_top, bigb, leaf_color, total_leaves);
+        ink_canopy(branches, y_root, y_top, bigb, leaf_color, total_leaves);
 
     for (bi, branch) in branches.iter().enumerate() {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
@@ -2784,7 +1499,7 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
         let py =
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
         let s_p = height_frac_s(py, y_root, y_range);
-        let w_p = ink3_width(s_p, bigb);
+        let w_p = ink_width(s_p, bigb);
         let seed_base = bi as u32 * 1000;
 
         let n_ch = branch.child_pts.len();
@@ -2797,7 +1512,7 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
         let y_hub = py - 0.35 * (py - mean_cy);
         let x_hub = px;
         let s_hub = height_frac_s(y_hub, y_root, y_range);
-        let w_hub = ink3_width(s_hub, bigb).max(w_p);
+        let w_hub = ink_width(s_hub, bigb).max(w_p);
         // One fill per fork keeps the overlapping strokes seamless.
         let limb_fill = bark_fill_color(trunk_color, s_hub);
 
@@ -2805,11 +1520,11 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
         let (s0, s1, s2, s3) = branch_cubic2(px, py, x_hub, y_hub);
         wood.push((
             1e5 + w_p,
-            ink3_fill_cubic(
+            ink_fill_cubic(
                 s0, s1, s2, s3, w_p, w_hub, &limb_fill, bigb, seed_base, false,
             ),
         ));
-        bark_svg.push_str(&ink3_grain(
+        bark_svg.push_str(&ink_grain(
             s0,
             s1,
             s2,
@@ -2828,7 +1543,7 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
         //    runs of all children form the thick main limb that sheds branches.
         for (ci, &(chx, chy)) in sorted_ch.iter().enumerate() {
             let cseed = seed_base + 10 + ci as u32;
-            let w_c = ink3_width(height_frac_s(chy, y_root, y_range), bigb);
+            let w_c = ink_width(height_frac_s(chy, y_root, y_range), bigb);
             // Both interior control points sit at the child's column on the limb
             // line, so the stroke stays horizontal until it is essentially under
             // the box, then turns up sharply (≈90 % of the bend happens under the
@@ -2841,9 +1556,9 @@ fn render_ink3_style(branches: &[Branch], prefs: &Prefs) -> String {
             let key = 1.0e4 - (chx - x_hub).abs();
             wood.push((
                 key,
-                ink3_fill_cubic(c0, c1, c2, c3, w_hub, w_c, &limb_fill, bigb, cseed, true),
+                ink_fill_cubic(c0, c1, c2, c3, w_hub, w_c, &limb_fill, bigb, cseed, true),
             ));
-            bark_svg.push_str(&ink3_grain(c0, c1, c2, c3, w_hub, w_c, bigb, cseed + 500));
+            bark_svg.push_str(&ink_grain(c0, c1, c2, c3, w_hub, w_c, bigb, cseed + 500));
         }
     }
 
