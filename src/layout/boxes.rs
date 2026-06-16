@@ -1002,7 +1002,10 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
     let highlighted_ids = crate::layout::common::highlight_set(prefs);
 
-    let placed: Vec<(&str, &BoxesIndividualGeo)> = genrep
+    // Sorted by id so the SVG element order is stable across runs (the source
+    // `individuals` is a HashMap); see the "Deterministic emit order" note in
+    // CLAUDE.md.
+    let mut placed: Vec<(&str, &BoxesIndividualGeo)> = genrep
         .individuals
         .iter()
         .filter(|(_, ind)| ind.in_scope)
@@ -1014,6 +1017,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
             }
         })
         .collect();
+    placed.sort_by(|a, b| a.0.cmp(b.0));
 
     if placed.is_empty() {
         return Scene {

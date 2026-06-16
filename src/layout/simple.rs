@@ -698,7 +698,11 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         .filter(|(_, i)| i.in_scope)
         .filter_map(|(id, i)| i.geo.as_ref().map(|g| (id.as_str(), i, g)))
         .collect();
-    entries.sort_by_key(|(_, _, g)| g.line);
+    // Sort by line, breaking ties by id, so the SVG element order is stable
+    // across runs (the source `individuals` is a HashMap, so a line-only sort
+    // would leave same-line entries in random order); see the "Deterministic
+    // emit order" note in CLAUDE.md.
+    entries.sort_by(|a, b| a.2.line.cmp(&b.2.line).then_with(|| a.0.cmp(b.0)));
 
     if entries.is_empty() {
         return Scene {

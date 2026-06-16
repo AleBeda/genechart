@@ -1302,7 +1302,10 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
     // ── 4a: load highlights ──────────────────────────────────────────────────
     let highlighted_ids = crate::layout::common::highlight_set(prefs);
     // ── 4b: collect placed individuals ──────────────────────────────────────
-    let placed: Vec<(&str, &IndividualGeo)> = genrep
+    // Sorted by id so the SVG element order is stable across runs (the source
+    // `individuals` is a HashMap with randomised iteration order); see the
+    // "Deterministic emit order" note in CLAUDE.md.
+    let mut placed: Vec<(&str, &IndividualGeo)> = genrep
         .individuals
         .iter()
         .filter(|(_, ind)| ind.in_scope)
@@ -1314,6 +1317,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
             }
         })
         .collect();
+    placed.sort_by(|a, b| a.0.cmp(b.0));
 
     if placed.is_empty() {
         return Scene {
@@ -1665,7 +1669,12 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
     // ── 4f: connector primitives ─────────────────────────────────────────────
     let mut connector_groups: Vec<Primitive> = Vec::new();
 
-    for (fam_id, fam) in &genrep.families {
+    // Sorted by family id so connector (and realistic-tree branch) element order
+    // is stable across runs; see the "Deterministic emit order" note in CLAUDE.md.
+    let mut sorted_families: Vec<(&String, &crate::parser::genrep::Family<BoxedCouplesGeo>)> =
+        genrep.families.iter().collect();
+    sorted_families.sort_by(|a, b| a.0.cmp(b.0));
+    for (fam_id, fam) in sorted_families {
         if !fam.in_scope {
             continue;
         }

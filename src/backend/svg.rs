@@ -1157,7 +1157,11 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         // positioned 1px below the approximate descender (font_size * 0.16).
         const UNDERLINE_COLOR: &str = "#CCCCCC";
         const UNDERLINE_WIDTH: f64 = 0.5;
-        for (&_row, &(row_y, _max_x, font_size)) in &row_info {
+        // Sort by row so the underline element order is stable across runs
+        // (`row_info` is a HashMap); see the "Deterministic emit order" note in CLAUDE.md.
+        let mut rows: Vec<(i64, (f64, f64, f64))> = row_info.into_iter().collect();
+        rows.sort_by_key(|(row, _)| *row);
+        for (_row, (row_y, _max_x, font_size)) in rows {
             let baseline_svg = to_svg_y(row_y + font_size);
             let underline_y = baseline_svg + font_size * 0.16 + 1.0;
             let line_x1 = to_svg_x(0.0);
