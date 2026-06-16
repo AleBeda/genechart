@@ -223,6 +223,19 @@ fn run() -> anyhow::Result<()> {
     // Store the resolved GEDCOM path for use in title/copyright templates
     prefs.files.gedcom = gedcom_path.display().to_string();
 
+    // Reject an unimplemented realistic_tree style instead of silently falling
+    // back to "tapered".
+    if prefs.output.style.realistic_tree.enabled {
+        let style = &prefs.output.style.realistic_tree.style;
+        if !backend::realistic_tree::is_known_style(style) {
+            anyhow::bail!(
+                "unknown output.style.realistic_tree.style \"{}\"; valid styles: {}",
+                style,
+                backend::realistic_tree::KNOWN_STYLES.join(", "),
+            );
+        }
+    }
+
     // 7. Dump mode: print merged prefs and exit
     if args.prpref || dump_mode {
         prefs.title = Some(format!(

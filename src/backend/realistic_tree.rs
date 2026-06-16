@@ -89,6 +89,18 @@ pub fn root_extra_height(connectors: &[SeededConnector]) -> f64 {
     ((y_root - y_top) * 0.45).max(40.0)
 }
 
+/// The implemented `output.style.realistic_tree.style` names (the empty string
+/// is also accepted and means the default, `"tapered"`).
+pub const KNOWN_STYLES: &[&str] = &["tapered", "stroke", "filter", "ink"];
+
+/// Whether `name` is an implemented realistic-tree style. The empty string maps
+/// to the default `"tapered"` and is considered known; any other unrecognised
+/// name is rejected by the caller (see `main::run`) rather than silently
+/// falling back to `"tapered"`.
+pub fn is_known_style(name: &str) -> bool {
+    name.is_empty() || KNOWN_STYLES.contains(&name)
+}
+
 /// Render the full tree-branch SVG layer.
 ///
 /// Returns an SVG fragment (no outer `<svg>` tag) wrapped in
@@ -120,6 +132,9 @@ pub fn render_tree_layer(
         })
         .collect();
 
+    // Unknown style names are rejected up front in `main::run` (a hard error),
+    // so by the time we get here the name is one of KNOWN_STYLES; `"tapered"`
+    // and the empty default both fall through to the tapered renderer.
     let inner = match prefs.output.style.realistic_tree.style.as_str() {
         "stroke" => render_stroke_style(&branches, prefs),
         "filter" => render_filter_style(&branches, prefs),
@@ -1627,6 +1642,16 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
 mod tests {
     use super::*;
     use crate::scene::{ConnectorPrimitive, GroupPrimitive, Point, Primitive};
+
+    #[test]
+    fn is_known_style_accepts_implemented_and_rejects_unknown() {
+        for s in KNOWN_STYLES {
+            assert!(is_known_style(s), "{s} should be known");
+        }
+        assert!(is_known_style(""), "empty (default) should be known");
+        assert!(!is_known_style("ink2"), "removed style must be rejected");
+        assert!(!is_known_style("bogus"), "unknown style must be rejected");
+    }
 
     #[test]
     fn seed_from_key_is_stable_and_key_sensitive() {

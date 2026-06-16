@@ -144,7 +144,8 @@ copyright = 12.0
 # Replaces straight connector lines with organic tree branches (boxed_couples layout only;
 # root_pos = bottom / default).  Boxes are always rendered on top of the tree graphics.
 enabled = false
-# style: rendering approach for the branches
+# style: rendering approach for the branches (an unknown name is an error when
+# realistic_tree is enabled, not a silent fallback)
 #   "tapered" — filled closed Bézier paths whose width decreases globally from root to tips (default)
 #   "stroke"  — layered stroked S-curve Bézier paths with opacity-based taper
 #   "filter"  — thick rounded paths with a white highlight for a cylindrical 3D look
