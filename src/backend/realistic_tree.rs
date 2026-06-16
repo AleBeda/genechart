@@ -19,31 +19,58 @@ use crate::scene::{ConnectorPrimitive, Primitive};
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Recursively collect all `ConnectorPrimitive` references from a primitive tree.
-pub fn collect_connectors<'a>(primitives: &'a [Primitive], out: &mut Vec<&'a ConnectorPrimitive>) {
+/// One connector paired with a stable seed key (the id of its nearest enclosing
+/// non-empty group, e.g. `"F12-connectors"` in the boxed_couples layout). The key
+/// is derived from the GEDCOM family/individual ids, so any per-branch randomness
+/// keyed off it is reproducible regardless of HashMap emit order — and stable
+/// across preference changes (box size, gaps) that only move coordinates.
+pub type SeededConnector<'a> = (String, &'a ConnectorPrimitive);
+
+/// Recursively collect all `ConnectorPrimitive` references from a primitive tree,
+/// pairing each with the id of its nearest enclosing non-empty group.
+pub fn collect_connectors<'a>(
+    primitives: &'a [Primitive],
+    current_id: &str,
+    out: &mut Vec<SeededConnector<'a>>,
+) {
     for prim in primitives {
         match prim {
-            Primitive::Connector(c) => out.push(c),
-            Primitive::Group(g) => collect_connectors(&g.children, out),
+            Primitive::Connector(c) => out.push((current_id.to_string(), c)),
+            Primitive::Group(g) => {
+                let id = if g.id.is_empty() { current_id } else { &g.id };
+                collect_connectors(&g.children, id, out);
+            }
             _ => {}
         }
     }
+}
+
+/// FNV-1a 32-bit hash of a string — a stable, deterministic seed from a GEDCOM id.
+fn seed_from_key(key: &str) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for b in key.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
 }
 
 /// Extra canvas height (display-space units) to add below the SVG for tree roots.
 ///
 /// Only non-zero for root_pos = bottom charts (the default). Returns 0.0 for empty
 /// connector lists or when parent points are above child points (root_pos = top).
-pub fn root_extra_height(connectors: &[&ConnectorPrimitive]) -> f64 {
+pub fn root_extra_height(connectors: &[SeededConnector]) -> f64 {
     if connectors.is_empty() {
         return 0.0;
     }
     let sample_parent_y = connectors[0]
+        .1
         .parent_points
         .first()
         .map(|p| p.y)
         .unwrap_or(0.0);
     let sample_child_y = connectors[0]
+        .1
         .child_points
         .first()
         .map(|p| p.y)
@@ -53,11 +80,11 @@ pub fn root_extra_height(connectors: &[&ConnectorPrimitive]) -> f64 {
     }
     let y_root: f64 = connectors
         .iter()
-        .flat_map(|c| c.parent_points.iter().map(|p| p.y))
+        .flat_map(|(_, c)| c.parent_points.iter().map(|p| p.y))
         .fold(f64::NEG_INFINITY, f64::max);
     let y_top: f64 = connectors
         .iter()
-        .flat_map(|c| c.child_points.iter().map(|p| p.y))
+        .flat_map(|(_, c)| c.child_points.iter().map(|p| p.y))
         .fold(f64::INFINITY, f64::min);
     ((y_root - y_top) * 0.45).max(40.0)
 }
@@ -67,7 +94,7 @@ pub fn root_extra_height(connectors: &[&ConnectorPrimitive]) -> f64 {
 /// Returns an SVG fragment (no outer `<svg>` tag) wrapped in
 /// `<g id="realistic-tree" class="realistic-tree">…</g>`.
 pub fn render_tree_layer(
-    connectors: &[&ConnectorPrimitive],
+    connectors: &[SeededConnector],
     to_svg_x: &dyn Fn(f64) -> f64,
     to_svg_y: &dyn Fn(f64) -> f64,
     prefs: &Prefs,
@@ -78,7 +105,8 @@ pub fn render_tree_layer(
 
     let branches: Vec<Branch> = connectors
         .iter()
-        .map(|c| Branch {
+        .map(|(seed_key, c)| Branch {
+            seed: seed_from_key(seed_key),
             parent_pts: c
                 .parent_points
                 .iter()
@@ -104,6 +132,9 @@ pub fn render_tree_layer(
 // ── Internal types ────────────────────────────────────────────────────────────
 
 struct Branch {
+    /// Stable per-branch seed derived from the GEDCOM family/individual id, so any
+    /// randomness keyed off it is reproducible regardless of emit order.
+    seed: u32,
     parent_pts: Vec<(f64, f64)>,
     child_pts: Vec<(f64, f64)>,
 }
@@ -1490,7 +1521,7 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
     let (leaves_back, leaves_front) =
         ink_canopy(branches, y_root, y_top, bigb, leaf_color, total_leaves);
 
-    for (bi, branch) in branches.iter().enumerate() {
+    for branch in branches.iter() {
         if branch.parent_pts.is_empty() || branch.child_pts.is_empty() {
             continue;
         }
@@ -1500,7 +1531,9 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             branch.parent_pts.iter().map(|p| p.1).sum::<f64>() / branch.parent_pts.len() as f64;
         let s_p = height_frac_s(py, y_root, y_range);
         let w_p = ink_width(s_p, bigb);
-        let seed_base = bi as u32 * 1000;
+        // Stable seed from the GEDCOM id (not the emit-order index), so the
+        // bark/branch wander is reproducible across runs and preference changes.
+        let seed_base = branch.seed;
 
         let n_ch = branch.child_pts.len();
         let mean_cy = branch.child_pts.iter().map(|p| p.1).sum::<f64>() / n_ch as f64;
@@ -1532,7 +1565,7 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
             w_p,
             w_hub,
             bigb,
-            seed_base + 500,
+            seed_base.wrapping_add(500),
         ));
 
         // 2. One continuous tapered stroke per child. From the hub it runs
@@ -1542,7 +1575,7 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
         //    of direction is smooth and continuous. The overlapping horizontal
         //    runs of all children form the thick main limb that sheds branches.
         for (ci, &(chx, chy)) in sorted_ch.iter().enumerate() {
-            let cseed = seed_base + 10 + ci as u32;
+            let cseed = seed_base.wrapping_add(10).wrapping_add(ci as u32);
             let w_c = ink_width(height_frac_s(chy, y_root, y_range), bigb);
             // Both interior control points sit at the child's column on the limb
             // line, so the stroke stays horizontal until it is essentially under
@@ -1558,7 +1591,16 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
                 key,
                 ink_fill_cubic(c0, c1, c2, c3, w_hub, w_c, &limb_fill, bigb, cseed, true),
             ));
-            bark_svg.push_str(&ink_grain(c0, c1, c2, c3, w_hub, w_c, bigb, cseed + 500));
+            bark_svg.push_str(&ink_grain(
+                c0,
+                c1,
+                c2,
+                c3,
+                w_hub,
+                w_c,
+                bigb,
+                cseed.wrapping_add(500),
+            ));
         }
     }
 
@@ -1579,4 +1621,48 @@ fn render_ink_style(branches: &[Branch], prefs: &Prefs) -> String {
     out.push_str(&leaves_front);
     out.push_str(&grass_svg);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scene::{ConnectorPrimitive, GroupPrimitive, Point, Primitive};
+
+    #[test]
+    fn seed_from_key_is_stable_and_key_sensitive() {
+        // Deterministic across calls, and distinct keys give distinct seeds.
+        assert_eq!(
+            seed_from_key("F12-connectors"),
+            seed_from_key("F12-connectors")
+        );
+        assert_ne!(
+            seed_from_key("F12-connectors"),
+            seed_from_key("F13-connectors")
+        );
+    }
+
+    #[test]
+    fn collect_connectors_uses_enclosing_group_id_as_seed_key() {
+        // Mirror the boxed_couples connector nesting: outer empty group →
+        // "{fam}-connectors" group → Connector.
+        let conn = ConnectorPrimitive {
+            parent_points: vec![Point { x: 0.0, y: 10.0 }],
+            child_points: vec![Point { x: 0.0, y: 0.0 }],
+            bar_y_fraction: 0.5,
+        };
+        let prims = vec![Primitive::Group(GroupPrimitive {
+            id: String::new(),
+            children: vec![Primitive::Group(GroupPrimitive {
+                id: "F7-connectors".to_string(),
+                children: vec![Primitive::Connector(conn)],
+            })],
+        })];
+        let mut out: Vec<SeededConnector> = Vec::new();
+        collect_connectors(&prims, "", &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, "F7-connectors");
+        // The seed key is the GEDCOM-derived family id group, so the resulting
+        // seed is independent of emit order.
+        assert_eq!(seed_from_key(&out[0].0), seed_from_key("F7-connectors"));
+    }
 }

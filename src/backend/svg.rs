@@ -854,13 +854,14 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         prefs.output.style.realistic_tree.enabled && output.is_boxed_couples();
 
     // Collect connectors early so root_extra_height can expand the canvas before we emit the header.
-    let rt_connectors: Vec<&crate::scene::ConnectorPrimitive> = if realistic_tree_active {
-        let mut v = Vec::new();
-        crate::backend::realistic_tree::collect_connectors(&scene.primitives, &mut v);
-        v
-    } else {
-        Vec::new()
-    };
+    let rt_connectors: Vec<crate::backend::realistic_tree::SeededConnector> =
+        if realistic_tree_active {
+            let mut v = Vec::new();
+            crate::backend::realistic_tree::collect_connectors(&scene.primitives, "", &mut v);
+            v
+        } else {
+            Vec::new()
+        };
     let tree_root_extra_h = if realistic_tree_active {
         crate::backend::realistic_tree::root_extra_height(&rt_connectors)
     } else {
