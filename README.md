@@ -108,7 +108,7 @@ Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_widt
 | `"tapered"` (default) | Filled closed Bézier paths; branch width decreases globally from root to tips |
 | `"stroke"` | Layered stroked S-curve Bézier paths with opacity-based taper |
 | `"filter"` | Thick rounded paths with a white highlight for a cylindrical 3D look |
-| `"ink"` | Near-solid black filled branches with white longitudinal bark-scratch strokes; hollow ellipse outlines for leaves (ink-drawing aesthetic) |
+| `"ink"` | Hand-drawn coherent tree, modelled on a hand-drawn reference: a flared trunk that shows below the root box, organic buttress roots, a continuous flat-topped open-ellipse leaf canopy, and each child connected by a single continuous tapered branch that runs along the main limb and turns up under its box. Trunk and limbs carry short white bark scratches with a lit side |
 
 ```sh
 # Tapered style with medium leaf density
@@ -117,14 +117,14 @@ genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.style = "tapered"' \
   -o chart.svg
 
-# Ink style — black and white hand-drawn look
+# ink style — hand-drawn tree look
 genechart family.ged -r I1 --type boxed_couples \
   --pref 'output.style.realistic_tree.enabled = true' \
   --pref 'output.style.realistic_tree.style = "ink"' \
   -o chart.svg
 ```
 
-Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"`), `trunk_color` (hex, ignored by `"ink"`), `leaf_color` (hex, ignored by `"ink"`), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
+Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"`), `trunk_color` (hex), `leaf_color` (hex), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
 
 ### fan
 
