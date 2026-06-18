@@ -132,6 +132,7 @@ fn run() -> anyhow::Result<()> {
             || args.output.is_some()
             || args.root.is_some()
             || args.generations.is_some()
+            || args.plugin_parse.is_some()
             || args.text
             || args.svg
             || args.pdf;
@@ -213,6 +214,16 @@ fn run() -> anyhow::Result<()> {
                 );
                 prefs.output.output_type = t.to_string();
             }
+        }
+
+        // --plugin-parse is shorthand for plugins.parse.all (CLI wins over prefs).
+        if let Some(path) = &args.plugin_parse {
+            let p = path.display().to_string();
+            tracer.emit(
+                "prefs",
+                &format!("PREF OVERRIDE KEY-VALUE plugins.parse.all = \"{p}\""),
+            );
+            prefs.plugins.parse.all = p;
         }
     }
 

@@ -611,6 +611,15 @@ Each value is a path to a Lua script (relative to the current directory; empty =
 disabled). For a given record the `all` script runs first, then the
 type-specific (`indi`/`fam`) script, which sees any edits `all` made.
 
+As a convenience, the **`--plugin-parse <FILE>`** command-line option is a
+shorthand for `plugins.parse.all` (and overrides any `all` value from a
+preferences file). It is handy for a single catch-all script; separate `indi`/
+`fam` scripts are better grouped in a preferences file (see `--preff`):
+
+```sh
+genechart family.ged --plugin-parse scripts/usa.lua
+```
+
 ### Writing a script
 
 A script defines named callback functions. The `indi` script defines
