@@ -118,13 +118,8 @@ fn run() -> anyhow::Result<()> {
         .cloned()
         .collect();
 
-    // 5. Load preferences (merging all sources + --preff file + --pref overrides)
-    let mut prefs = preferences::load(
-        Some(&gedcom_path),
-        args.preff.as_deref(),
-        &pref_overrides,
-        &tracer,
-    )?;
+    // 5. Load preferences (merging all sources + --preff files + --pref overrides)
+    let mut prefs = preferences::load(Some(&gedcom_path), &args.preff, &pref_overrides, &tracer)?;
 
     // 6. Apply CLI shortcuts (override preference-file values).
     //    Each shortcut that is set emits a trace line so --trace prefs shows

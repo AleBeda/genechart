@@ -2,7 +2,7 @@
 
 A command-line tool that reads a [GEDCOM 5.5.1](https://gedcom.io/) genealogical file and generates a family-tree chart as text, SVG, or PDF.
 
-**Version**: v0.6.4
+**Version**: v0.6.5
 
 ## Installation
 
@@ -38,7 +38,7 @@ genechart [OPTIONS] [GEDCOM_FILE]
 | `--pref '<key name="val">'` | Override any preference inline (TOML syntax, repeatable) |
 | `--pref` | Bare `--pref` (no value): dump merged preferences to stdout and exit |
 | `--prpref` | Print the fully-resolved preferences as TOML and exit; combine with `-o` to see type inference |
-| `--preff <FILE>` | Load an explicit TOML preferences file |
+| `--preff <FILE>` | Load an explicit TOML preferences file (repeatable; files apply in order, a later file overriding an earlier one) |
 | `--trace [COMPONENT]` | Print structured diagnostics to stderr; bare `--trace` traces all |
 | `-h` / `--help` | Show help |
 | `--version` | Show version |
@@ -239,7 +239,7 @@ Preferences are read from (lowest to highest priority):
 2. User home (`~/.genechart.toml`)
 3. Directory TOML (`genechart.toml` in the same directory as the GEDCOM file)
 4. File TOML (same basename as the GEDCOM file, e.g. `family.toml` for `family.ged`)
-5. `--preff <FILE>` — an explicit preferences file
+5. `--preff <FILE>` — explicit preferences file(s); may be given more than once and are applied in command-line order, so a later `--preff` overrides conflicting preferences from an earlier one
 6. `--pref` command-line overrides
 
 Unknown preference keys in `--pref` are a hard error (the command aborts with a message naming the bad key). Unknown keys in TOML config files produce a warning and are ignored.

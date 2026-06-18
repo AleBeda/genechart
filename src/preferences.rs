@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use toml::Value;
 
 const DEFAULTS_TOML: &str = include_str!("defaults.toml");
@@ -50,7 +50,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        load(None, None, &[], &crate::trace::Tracer::disabled())
+        load(None, &[], &[], &crate::trace::Tracer::disabled())
             .expect("embedded defaults.toml must be valid")
     }
 }
@@ -464,11 +464,11 @@ pub struct BoxedCouplesSpacingPrefs {
 /// 2. `~/.genechart.toml`
 /// 3. `<gedcom_dir>/genechart.toml`
 /// 4. `<gedcom_basename>.toml`
-/// 5. `preff_path` (the `--preff` file, if supplied — errors if the path does not exist)
+/// 5. `preff_paths` (the `--preff` files, applied in order; each errors if the path does not exist)
 /// 6. `pref_overrides` (each `--pref` assignment string)
 pub fn load(
     gedcom_path: Option<&Path>,
-    preff_path: Option<&Path>,
+    preff_paths: &[PathBuf],
     pref_overrides: &[String],
     tracer: &crate::trace::Tracer,
 ) -> Result<Prefs> {
@@ -498,8 +498,9 @@ pub fn load(
         merge_file(&mut base, &ged.with_extension("toml"), tracer);
     }
 
-    // Level 5: --preff explicit file
-    if let Some(preff) = preff_path {
+    // Level 5: --preff explicit files, applied in command-line order so a later
+    // file overrides conflicting preferences from an earlier one.
+    for preff in preff_paths {
         merge_file_required(&mut base, preff, tracer)?;
     }
 
@@ -778,7 +779,7 @@ mod tests {
 
     #[test]
     fn noclobber_defaults_false() {
-        let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
+        let prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
         assert_eq!(prefs.output.noclobber, false);
     }
 
@@ -807,7 +808,7 @@ mod tests {
 
     #[test]
     fn defaults_load() {
-        let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
+        let prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
         assert_eq!(prefs.scope.generations, 4);
         assert_eq!(prefs.scope.direction, "descendants");
         assert_eq!(prefs.layout.layout_type, "simple");
@@ -819,7 +820,7 @@ mod tests {
 
     #[test]
     fn new_preferences_load() {
-        let prefs = load(None, None, &[], &crate::trace::Tracer::disabled()).unwrap();
+        let prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
         assert_eq!(prefs.show.last_gen_spouses, false);
         assert_eq!(prefs.show.id, false);
         assert_eq!(prefs.output.style.text.names, 0x000);
@@ -870,7 +871,7 @@ mod tests {
     fn missing_file_silent() {
         let result = load(
             Some(Path::new("/nonexistent/path/family.ged")),
-            None,
+            &[],
             &[],
             &crate::trace::Tracer::disabled(),
         );
@@ -889,7 +890,13 @@ mod tests {
     fn preff_overrides_basename_toml() {
         let tmp = std::env::temp_dir().join("genechart_test_preff.toml");
         fs::write(&tmp, "scope.generations = 42\n").unwrap();
-        let prefs = load(None, Some(&tmp), &[], &crate::trace::Tracer::disabled()).unwrap();
+        let prefs = load(
+            None,
+            std::slice::from_ref(&tmp),
+            &[],
+            &crate::trace::Tracer::disabled(),
+        )
+        .unwrap();
         assert_eq!(
             prefs.scope.generations, 42,
             "--preff should override defaults"
@@ -903,7 +910,7 @@ mod tests {
         fs::write(&tmp, "scope.generations = 42\n").unwrap();
         let prefs = load(
             None,
-            Some(&tmp),
+            std::slice::from_ref(&tmp),
             &["scope.generations = 99".into()],
             &crate::trace::Tracer::disabled(),
         )
@@ -916,10 +923,41 @@ mod tests {
     }
 
     #[test]
+    fn later_preff_overrides_earlier_preff() {
+        // Two --preff files setting the same key; the second must win, and a key
+        // set only by the first must survive.
+        let a = std::env::temp_dir().join("genechart_test_preff_a.toml");
+        let b = std::env::temp_dir().join("genechart_test_preff_b.toml");
+        fs::write(
+            &a,
+            "scope.generations = 42\nscope.direction = \"ancestors\"\n",
+        )
+        .unwrap();
+        fs::write(&b, "scope.generations = 7\n").unwrap();
+        let prefs = load(
+            None,
+            &[a.clone(), b.clone()],
+            &[],
+            &crate::trace::Tracer::disabled(),
+        )
+        .unwrap();
+        assert_eq!(
+            prefs.scope.generations, 7,
+            "later --preff should override an earlier one"
+        );
+        assert_eq!(
+            prefs.scope.direction, "ancestors",
+            "a key set only in the earlier --preff should survive"
+        );
+        let _ = fs::remove_file(&a);
+        let _ = fs::remove_file(&b);
+    }
+
+    #[test]
     fn preff_missing_file_is_error() {
         let result = load(
             None,
-            Some(Path::new("/nonexistent/preff_xyz.toml")),
+            &[PathBuf::from("/nonexistent/preff_xyz.toml")],
             &[],
             &crate::trace::Tracer::disabled(),
         );
@@ -987,7 +1025,7 @@ mod tests {
     fn load_with_bad_pref_is_error() {
         let result = load(
             None,
-            None,
+            &[],
             &["scope.generatins = 5".into()],
             &crate::trace::Tracer::disabled(),
         );

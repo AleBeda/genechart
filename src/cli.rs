@@ -55,8 +55,10 @@ pub struct Args {
     pub prefs: Vec<String>,
 
     /// TOML preferences file to load after the gedcom-basename file and before --pref overrides
+    /// (repeatable; files are applied in the order given, so a later file overrides conflicting
+    /// preferences from an earlier one)
     #[arg(long = "preff", value_name = "FILE")]
-    pub preff: Option<PathBuf>,
+    pub preff: Vec<PathBuf>,
 
     /// Print the fully-resolved preferences as TOML and exit (no chart generated).
     /// Combine with `-o` to see how the output type would be inferred.
@@ -201,9 +203,25 @@ mod tests {
     #[test]
     fn preff_arg() {
         let args = Args::try_parse_from(["genechart", "--preff", "/tmp/my.toml"]).unwrap();
+        assert_eq!(args.preff, vec![std::path::PathBuf::from("/tmp/my.toml")]);
+    }
+
+    #[test]
+    fn preff_arg_repeatable_preserves_order() {
+        let args = Args::try_parse_from([
+            "genechart",
+            "--preff",
+            "/tmp/a.toml",
+            "--preff",
+            "/tmp/b.toml",
+        ])
+        .unwrap();
         assert_eq!(
-            args.preff.as_deref(),
-            Some(std::path::Path::new("/tmp/my.toml"))
+            args.preff,
+            vec![
+                std::path::PathBuf::from("/tmp/a.toml"),
+                std::path::PathBuf::from("/tmp/b.toml"),
+            ]
         );
     }
 
