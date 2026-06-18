@@ -41,6 +41,15 @@ alt_name   = "NAM2"     # individual: alternate/romanized name
 relig_name = "NAMH"     # individual: religious or transliterated name
 relig_marr = "JMAR"     # family: religious or alternate marriage record reference
 
+[plugins.parse]
+# Experimental Lua plugins (only effective in builds compiled with `--features lua`;
+# configuring a plugin in a build without Lua support is an error). Each value is a
+# path to a Lua script file (empty = disabled). The `all` script runs before the
+# type-specific `indi`/`fam` scripts. See README "Lua plugins (experimental)".
+indi = ""  # script defining on_individual(ind), run for every individual
+fam  = ""  # script defining on_family(fam), run for every family
+all  = ""  # script defining both on_individual and on_family, run first
+
 [layout]
 type = "simple" # Valid values: "simple", "boxed_couples", "fan", "fancy", "boxes"
 root_pos = "bottom" # Valid values: "bot[tom]", "top"

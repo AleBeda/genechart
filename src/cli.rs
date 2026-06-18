@@ -5,7 +5,11 @@ use std::path::PathBuf;
 #[command(
     name = "genechart",
     version,
-    about = "Genealogical chart generator from GEDCOM files"
+    about = "Genealogical chart generator from GEDCOM files",
+    after_help = "Most behaviour is configured via TOML preferences (files and --pref), \
+                  not flags. Experimental: Lua parse-time plugins are set under \
+                  [plugins.parse] and require a build with `--features lua` (see README); \
+                  --plugin-parse <FILE> is a shorthand for plugins.parse.all."
 )]
 pub struct Args {
     /// Path to the .ged file (defaults to first *.ged in current directory)
@@ -59,6 +63,11 @@ pub struct Args {
     /// preferences from an earlier one)
     #[arg(long = "preff", value_name = "FILE")]
     pub preff: Vec<PathBuf>,
+
+    /// Lua script run for every individual and family at parse time — shorthand
+    /// for the `plugins.parse.all` preference (requires a build with `--features lua`)
+    #[arg(long = "plugin-parse", value_name = "FILE")]
+    pub plugin_parse: Option<PathBuf>,
 
     /// Print the fully-resolved preferences as TOML and exit (no chart generated).
     /// Combine with `-o` to see how the output type would be inferred.
@@ -204,6 +213,12 @@ mod tests {
     fn preff_arg() {
         let args = Args::try_parse_from(["genechart", "--preff", "/tmp/my.toml"]).unwrap();
         assert_eq!(args.preff, vec![std::path::PathBuf::from("/tmp/my.toml")]);
+    }
+
+    #[test]
+    fn plugin_parse_arg() {
+        let args = Args::try_parse_from(["genechart", "--plugin-parse", "foo.lua"]).unwrap();
+        assert_eq!(args.plugin_parse, Some(std::path::PathBuf::from("foo.lua")));
     }
 
     #[test]
