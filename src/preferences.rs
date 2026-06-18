@@ -46,6 +46,8 @@ pub struct Prefs {
     pub diagnostics: DiagnosticsPrefs,
     #[serde(default)]
     pub custom: CustomPrefs,
+    #[serde(default)]
+    pub plugins: PluginsPrefs,
 }
 
 impl Default for Prefs {
@@ -180,6 +182,28 @@ pub struct CustomGedcomPrefs {
 pub struct CustomPrefs {
     #[serde(default)]
     pub gedcom: CustomGedcomPrefs,
+}
+
+/// Experimental plugin configuration. Each field is a Lua script path (empty =
+/// disabled). Only effective in builds compiled with `--features lua`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct PluginsPrefs {
+    #[serde(default)]
+    pub parse: ParsePluginsPrefs,
+}
+
+/// Parse-time Lua hooks. `all` runs before the type-specific `indi`/`fam`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ParsePluginsPrefs {
+    /// Script defining `on_individual(ind)`, run for every individual.
+    #[serde(default)]
+    pub indi: String,
+    /// Script defining `on_family(fam)`, run for every family.
+    #[serde(default)]
+    pub fam: String,
+    /// Script defining both `on_individual` and `on_family`, run before `indi`/`fam`.
+    #[serde(default)]
+    pub all: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

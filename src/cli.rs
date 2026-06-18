@@ -5,7 +5,10 @@ use std::path::PathBuf;
 #[command(
     name = "genechart",
     version,
-    about = "Genealogical chart generator from GEDCOM files"
+    about = "Genealogical chart generator from GEDCOM files",
+    after_help = "Most behaviour is configured via TOML preferences (files and --pref), \
+                  not flags. Experimental: Lua parse-time plugins are set under \
+                  [plugins.parse] and require a build with `--features lua` (see README)."
 )]
 pub struct Args {
     /// Path to the .ged file (defaults to first *.ged in current directory)

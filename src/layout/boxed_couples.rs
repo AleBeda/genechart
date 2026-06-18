@@ -3301,7 +3301,8 @@ mod tests {
             prefs.layout.boxed_couples.gap_height = 80.0;
             prefs.layout.boxed_couples.box_width_2_spouses = box_w2;
 
-            let mut genrep = parse(&ged_path).expect("could not parse fixture_large.ged");
+            let mut genrep = parse(&ged_path, &crate::plugins::PluginEngine::disabled())
+                .expect("could not parse fixture_large.ged");
             compute_scope(&mut genrep, Some("I506"), "descendants", Some(99));
 
             let bc = BoxedCouplesLayout

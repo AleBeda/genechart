@@ -4,6 +4,7 @@ mod format;
 mod layout;
 mod parser;
 mod photos;
+mod plugins;
 mod preferences;
 mod scene;
 mod text_metrics;
@@ -246,6 +247,10 @@ fn run() -> anyhow::Result<()> {
     // 8. Parse GEDCOM (with optional merge from further files)
     parser::set_diagnostics(prefs.diagnostics.clone());
     parser::set_parser_tags(prefs.custom.gedcom.tags.clone());
+    // Build the plugin engine (loads/compiles any configured Lua scripts; errors
+    // here are fatal). A build without the `lua` feature errors if plugins are set.
+    let plugin_engine =
+        plugins::PluginEngine::from_prefs(&prefs.plugins.parse, &prefs.diagnostics)?;
 
     let gedcom_dir = gedcom_path.parent().unwrap_or(std::path::Path::new("."));
     let mut further_pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
@@ -281,9 +286,9 @@ fn run() -> anyhow::Result<()> {
     }
 
     let mut genrep = if further_pairs.is_empty() {
-        parser::parse(&gedcom_path)?
+        parser::parse(&gedcom_path, &plugin_engine)?
     } else {
-        parser::parse_and_merge(&gedcom_path, &further_pairs)?
+        parser::parse_and_merge(&gedcom_path, &further_pairs, &plugin_engine)?
     };
 
     // 9. Compute scope

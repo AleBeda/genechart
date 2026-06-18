@@ -1,6 +1,6 @@
 [package]
 name = "genechart"
-version = "0.6.5"
+version = "0.7.0"
 edition = "2024"
 description = "Genealogical chart generator from GEDCOM files"
 license = "MIT"
@@ -19,6 +19,9 @@ fontdb = "0.23"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 base64 = "0.22"
 rayon = "1"
+# Optional: Lua plugin engine (enable with `--features lua`). Vendored Lua 5.4 is
+# MIT-licensed and compiled from source (needs a C compiler via the `cc` crate).
+mlua = { version = "0.10", features = ["lua54", "vendored"], optional = true }
 
 [profile.dev]
 opt-level = 0
@@ -30,3 +33,6 @@ strip = true
 
 [features]
 bc_debug = []
+# Experimental Lua plugin system (parse-time hooks). Default-off so normal
+# builds need no C compiler. See README "Lua plugins (experimental)".
+lua = ["dep:mlua"]

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use std::sync::OnceLock;
 
+use crate::plugins::{PluginEngine, UnparsedTag};
 use crate::preferences::{CustomGedcomTagsPrefs, DiagnosticsPrefs};
 use crate::util::matches_direction;
 use genrep::{Event, Family, GedDate, Genrep, Individual};
@@ -118,10 +119,15 @@ fn parse_line(line: &str) -> Option<(u32, Option<String>, String, String)> {
 }
 
 /// Commit the current record-in-progress to the output maps.
+///
+/// Runs any configured parse-time plugins on the finished record (passing the
+/// per-record `unparsed` tags), then clears the buffer for the next record.
 fn commit_record(
     ctx: &mut RecordCtx,
     individuals: &mut HashMap<String, Individual<()>>,
     families: &mut HashMap<String, Family<()>>,
+    engine: &PluginEngine,
+    unparsed: &mut Vec<UnparsedTag>,
 ) {
     let old = std::mem::replace(ctx, RecordCtx::None);
     match old {
@@ -131,13 +137,16 @@ fn commit_record(
                 indi.given = given;
                 indi.surname = surname;
             }
+            engine.run_individual(&mut indi, unparsed);
             individuals.insert(indi.id.clone(), indi);
         }
-        RecordCtx::Fam(fam) => {
+        RecordCtx::Fam(mut fam) => {
+            engine.run_family(&mut fam, unparsed);
             families.insert(fam.id.clone(), fam);
         }
         _ => {}
     }
+    unparsed.clear();
 }
 
 /// Append a CONC/CONT continuation to the last string field that was set.
@@ -234,10 +243,13 @@ fn apply_continuation(ctx: &mut RecordCtx, slot: TextSlot, prefix: &str, value: 
 // ── public API ───────────────────────────────────────────────────────────────
 
 /// Read a UTF-8 GEDCOM 5.5.1 file and return the internal representation.
-pub fn parse(path: &Path) -> anyhow::Result<Genrep> {
+///
+/// `engine` runs configured parse-time plugins per record; pass
+/// `&PluginEngine::disabled()` when plugins are not in use.
+pub fn parse(path: &Path, engine: &PluginEngine) -> anyhow::Result<Genrep> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("cannot read {}: {}", path.display(), e))?;
-    parse_str(&content)
+    parse_str_with(&content, engine)
 }
 
 /// Parse the main GEDCOM and merge further GEDCOMs into it.
@@ -247,8 +259,9 @@ pub fn parse(path: &Path) -> anyhow::Result<Genrep> {
 pub fn parse_and_merge(
     main_path: &Path,
     further: &[(std::path::PathBuf, std::path::PathBuf)],
+    engine: &PluginEngine,
 ) -> anyhow::Result<Genrep> {
-    let mut genrep = parse(main_path)?;
+    let mut genrep = parse(main_path, engine)?;
     let main_filename = main_path.file_name().unwrap_or_default().to_string_lossy();
 
     const PREFIX_LETTERS: &[u8] = b"BCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -258,7 +271,7 @@ pub fn parse_and_merge(
         }
         let prefix = PREFIX_LETTERS[i] as char;
         let alias = merge::read_alias_file(alias_path)?;
-        let further_genrep = parse(ged_path)?;
+        let further_genrep = parse(ged_path, engine)?;
         let further_filename = ged_path.file_name().unwrap_or_default().to_string_lossy();
         let (remapped, orig_ids) = merge::remap_genrep(further_genrep, &alias, prefix);
         merge::merge_into(
@@ -273,8 +286,16 @@ pub fn parse_and_merge(
     Ok(genrep)
 }
 
+/// Parse GEDCOM text with no plugins (convenience wrapper used by tests).
+#[cfg(test)]
 pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
+    parse_str_with(content, &PluginEngine::disabled())
+}
+
+pub(crate) fn parse_str_with(content: &str, engine: &PluginEngine) -> anyhow::Result<Genrep> {
     let tags = parser_tags();
+    // Only collect unparsed tags (for plugins) when a plugin is actually active.
+    let collect_unparsed = engine.active();
 
     let mut individuals: HashMap<String, Individual<()>> = HashMap::new();
     let mut families: HashMap<String, Family<()>> = HashMap::new();
@@ -284,6 +305,8 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
     let mut event_ctx = EventCtx::None;
     let mut text_slot = TextSlot::None;
     let mut warned_tags: HashSet<String> = HashSet::new();
+    // GEDCOM lines of the current record that the parser does not map to a field.
+    let mut unparsed: Vec<UnparsedTag> = Vec::new();
 
     for (lineno, line) in content.lines().enumerate() {
         let n = lineno + 1;
@@ -301,7 +324,13 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
         };
 
         if level == 0 {
-            commit_record(&mut ctx, &mut individuals, &mut families);
+            commit_record(
+                &mut ctx,
+                &mut individuals,
+                &mut families,
+                engine,
+                &mut unparsed,
+            );
             event_ctx = EventCtx::None;
             text_slot = TextSlot::None;
 
@@ -473,6 +502,15 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             }
                         }
                         _ => {
+                            if collect_unparsed
+                                && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
+                            {
+                                unparsed.push(UnparsedTag {
+                                    level,
+                                    tag: tag.clone(),
+                                    value: value.clone(),
+                                });
+                            }
                             if warned_tags.insert(tag.clone()) {
                                 diag_warn!("unknown tag {tag} at line {n}");
                             }
@@ -540,16 +578,41 @@ pub(crate) fn parse_str(content: &str) -> anyhow::Result<Genrep> {
                             EventCtx::None => {}
                         },
                         _ => {
+                            if collect_unparsed
+                                && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
+                            {
+                                unparsed.push(UnparsedTag {
+                                    level,
+                                    tag: tag.clone(),
+                                    value: value.clone(),
+                                });
+                            }
                             text_slot = TextSlot::None;
                         } // reset on unknown sub-fields so CONT can't bleed
                     }
                 }
-                _ => {} // level 3+: silently skip
+                _ => {
+                    // level 3+: capture for plugins, otherwise skip.
+                    if collect_unparsed && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
+                    {
+                        unparsed.push(UnparsedTag {
+                            level,
+                            tag: tag.clone(),
+                            value: value.clone(),
+                        });
+                    }
+                }
             }
         }
     }
 
-    commit_record(&mut ctx, &mut individuals, &mut families);
+    commit_record(
+        &mut ctx,
+        &mut individuals,
+        &mut families,
+        engine,
+        &mut unparsed,
+    );
 
     // Repair incomplete FAMS cross-references: if a FAM record names a HUSB or WIFE
     // that does not already list that family in their fams, add it. This makes parsing
