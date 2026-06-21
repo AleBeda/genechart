@@ -3,8 +3,8 @@
 ## Source and attribution
 
 `shakespeare.ged` is copied from the [D-Jeffrey/gedcom-samples](https://github.com/D-Jeffrey/gedcom-samples)
-repository. Included for educational and demonstration purposes. All genealogical data is
-historical and publicly known.
+repository, which is dual-licensed **MIT OR CC0-1.0** (`SPDX-License-Identifier: MIT OR CC0-1.0`).
+This copy is redistributed under CC0-1.0. All genealogical data is historical and publicly known.
 
 ## Scope
 

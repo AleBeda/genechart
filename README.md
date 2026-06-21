@@ -101,30 +101,10 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
-**Realistic tree branches (experimental):** when `layout.root_pos = "bottom"` (the default), you can replace the straight connector lines with organic-looking tree branches via `output.style.realistic_tree.enabled = true`. Four rendering styles are available:
-
-| Style | Description |
-|---|---|
-| `"tapered"` (default) | Filled closed Bézier paths; branch width decreases globally from root to tips |
-| `"stroke"` | Layered stroked S-curve Bézier paths with opacity-based taper |
-| `"filter"` | Thick rounded paths with a white highlight for a cylindrical 3D look |
-| `"ink"` | Hand-drawn coherent tree, modelled on a hand-drawn reference: a flared trunk that shows below the root box, organic buttress roots, a continuous flat-topped open-ellipse leaf canopy, and each child connected by a single continuous tapered branch that runs along the main limb and turns up under its box. Trunk and limbs carry short white bark scratches with a lit side |
-
-```sh
-# Tapered style with medium leaf density
-genechart family.ged -r I1 --type boxed_couples \
-  --pref 'output.style.realistic_tree.enabled = true' \
-  --pref 'output.style.realistic_tree.style = "tapered"' \
-  -o chart.svg
-
-# ink style — hand-drawn tree look
-genechart family.ged -r I1 --type boxed_couples \
-  --pref 'output.style.realistic_tree.enabled = true' \
-  --pref 'output.style.realistic_tree.style = "ink"' \
-  -o chart.svg
-```
-
-Configuration: `[output.style.realistic_tree]` — `enabled` (bool), `style` (`"tapered"` | `"stroke"` | `"filter"` | `"ink"`), `trunk_color` (hex), `leaf_color` (hex), `leaf_density` (`"none"` | `"low"` | `"medium"` | `"high"`).
+**Realistic tree branches (experimental, work in progress):** the `boxed_couples` layout
+can optionally replace its straight connectors with organic-looking tree branches. This
+feature is still rough and its output is not yet satisfactory — see
+[`docs/realistic-tree.md`](docs/realistic-tree.md) for styles and configuration.
 
 ### fan
 
@@ -584,235 +564,34 @@ cargo test  --features lua   # run the plugin tests too
 
 ## Lua Plugins (experimental)
 
-genechart can run small **Lua scripts** that post-process each record as it is
-parsed — for example to fold a non-standard GEDCOM tag into a name, or to
-normalise place strings. This is **opt-in at build time** behind the `lua` Cargo
-feature (it pulls in [`mlua`](https://crates.io/crates/mlua) with a vendored,
-MIT-licensed Lua 5.4 that is compiled from source, so the build needs a C
-compiler):
+genechart can run small **Lua scripts** that post-process each record as it is parsed —
+for example to fold a non-standard GEDCOM tag into a name, or to normalise place strings.
+This is **opt-in at build time** behind the `lua` Cargo feature (`cargo build --features
+lua`, which compiles a vendored Lua 5.4 and needs a C compiler).
 
-```sh
-cargo build --release --features lua
-```
-
-A binary built **without** the feature will refuse to run if a plugin is
-configured (rather than silently ignore it).
-
-### Configuration
-
-```toml
-[plugins.parse]
-indi = "scripts/nickname.lua"  # runs on_individual(ind) for every individual
-fam  = ""                      # runs on_family(fam) for every family
-all  = "scripts/usa.lua"       # runs on_individual AND on_family, BEFORE indi/fam
-```
-
-Each value is a path to a Lua script (relative to the current directory; empty =
-disabled). For a given record the `all` script runs first, then the
-type-specific (`indi`/`fam`) script, which sees any edits `all` made.
-
-As a convenience, the **`--plugin-parse <FILE>`** command-line option is a
-shorthand for `plugins.parse.all` (and overrides any `all` value from a
-preferences file). It is handy for a single catch-all script; separate `indi`/
-`fam` scripts are better grouped in a preferences file (see `--preff`):
-
-```sh
-genechart family.ged --plugin-parse scripts/usa.lua
-```
-
-### Writing a script
-
-A script defines named callback functions. The `indi` script defines
-`on_individual`, the `fam` script defines `on_family`, and the `all` script
-defines both. Each callback receives a table describing the record and returns
-either `nil` (no change) or a table of fields to change.
-
-Record table (individual): `id`, `given`, `surname`, `sex`, `living`,
-`alt_name`, `relig_name`, `notes` (array), `fams`/`famc` (arrays, read-only),
-`birth`/`death` (`{date=, place=}` or nil), and `unparsed` — an array of
-`{level, tag, value}` for every GEDCOM line the parser did not map to a field
-(this is how you reach tags like `NICK`). Family table: `id`, `husband`, `wife`,
-`children` (read-only), `marriage` (`{date=, place=}`), `relig_marr`, `notes`,
-`unparsed`.
-
-Returnable (changeable) fields are **text/scalar and event fields only**:
-`given`, `surname`, `sex`, `living`, `alt_name`, `relig_name`, `notes`, and
-`birth`/`death`/`marriage` (`{date=, place=}`, merged into the existing event).
-Structural fields (`id`, `fams`, `famc`, `husband`, `wife`, `children`) are
-read-only and ignored if returned (with a warning when `diagnostics.warnings`).
-
-`print(...)` from a script writes to genechart's **stdout** — handy for progress
-messages, but note it will interleave with text-chart output sent to stdout, so
-prefer `-o file` for the chart when a script prints. A script that fails to
-load/compile is a fatal error; a runtime error in a callback is reported and
-that record is left unchanged.
-
-### Example — append a nickname to the given name
-
-`scripts/nickname.lua` (see `tests/fixtures/plugins/nickname.lua`):
-
-```lua
-local targets = { I1 = true }  -- limit to these individual ids
-
-function on_individual(ind)
-  if not targets[ind.id] or not ind.given then return end
-  for _, u in ipairs(ind.unparsed) do
-    if u.tag == "NICK" and u.value ~= "" then
-      return { given = ind.given .. ' "' .. u.value .. '"' }
-    end
-  end
-end
-```
-
-```sh
-genechart family.ged --text \
-  --pref 'plugins.parse.indi = "scripts/nickname.lua"'
-# 1. Robert "Bob" Smith ...
-```
-
-### Example — normalise US places
-
-`scripts/usa.lua` (see `tests/fixtures/plugins/usa.lua`) appends `", USA"` to any
-birth/death/marriage place ending in a US two-letter state code, for both
-individuals and families. Run it as the `all` plugin:
-
-```sh
-genechart family.ged --text --pref 'plugins.parse.all = "scripts/usa.lua"'
-# ... × 01 Jan 1970, Chicago, IL, USA  ⚭ 02 Feb 1925, Reno, NV, USA
-```
-
-The plugin system is designed to grow — later hooks (e.g. at layout or
-SVG-output time) can reuse the same machinery.
-
-> **License note:** the `lua` feature statically links Lua 5.4, which is
-> distributed under the MIT license. Retain Lua's copyright notice when
-> redistributing a binary built with `--features lua`.
+See [`docs/lua-plugins.md`](docs/lua-plugins.md) for configuration, the scripting API, and
+worked examples.
 
 ## Placement Debug Logging (`bc_debug`)
 
-### Why this matters
+The `boxed_couples` placement algorithm is the most complex part of the codebase, and
+placement bugs are hard to diagnose from the code alone. The optional `bc_debug` Cargo
+feature emits a CSV trace of every placement decision (which node moved, by how much, in
+which pass) so overlaps can be tracked to their root cause. This is a contributor/debugging
+tool with zero cost in normal builds.
 
-The `boxed_couples` layout placement algorithm is one of the most complex parts of the
-codebase, and placement bugs are among the hardest to diagnose. The algorithm operates
-in three recursive passes over a tree that can easily span hundreds of nodes and a dozen
-generations:
-
-1. **`place_descendants`** — a single left-to-right, depth-first traversal that assigns
-   every individual's initial position using a right-envelope constraint system.
-2. **`compact_pass`** — a top-down sweep that closes excess gaps between siblings by
-   shifting left-packed subtrees rightward.
-3. **`recenter_pass`** — a bottom-up sweep that re-centres parents over their children
-   after compaction has moved those children.
-4. **`fix_overlaps_pass`** — a final per-generation scan that corrects any cross-family
-   overlaps introduced by the interaction between the three passes above.
-
-The root difficulty is that each pass reads positions left by the previous one. A
-subtle error in pass 1 (say, a miscalculated right-envelope depth) is silently amplified
-by passes 2 and 3, so a node that was initially placed by 65 units can end up 65 units
-too far right after recenter — while its sibling-in-a-different-subtree was placed
-against the *pre-recenter* position, causing the two to overlap.
-
-The situation is further complicated by **multi-spouse boxes**. An individual with one
-in-scope spouse gets a normal-width box; two spouses get a wider `box_w2` box with a
-different connector offset; three spouses get an even wider `box_w3` box where the parent
-is centred over the *median* of the second spouse's children rather than aligned to the
-first child's connector. Each box type feeds a different centering formula in every pass,
-and the formulas interact across generation levels through the `global_right` tracking
-array and the `fill_env_from_global` mechanism. A GEDCOM file with only single-spouse
-couples can mask a formula error that only surfaces when a three-spouse box appears
-somewhere in the subtree — and even then, only when the subtree is wide enough for
-the compact and recenter passes to produce a cascading shift.
-
-Because these interactions are determined entirely by the runtime data in the GEDCOM
-file, **it is essentially impossible to reproduce a placement bug by inspecting the code
-alone**. The only reliable way to diagnose it is to observe the actual sequence of
-placement decisions — which node was placed where, by which pass, and what prior
-position it had before it was moved.
-
-### Enabling the log
-
-Compile with the `bc_debug` Cargo feature. This is a compile-time flag; **no logging
-code is present in a normal build**, so there is zero runtime cost unless the feature
-is explicitly enabled.
-
-```sh
-# Run with debug logging enabled; log goes to /tmp/bc_debug.log by default
-BC_DEBUG_LOG=/path/to/my.log cargo run --features bc_debug -- family.ged \
-  --preff family.toml --type boxed_couples -o chart.svg
-```
-
-The `BC_DEBUG_LOG` environment variable controls the output file path. If unset, the
-log is written to `/tmp/bc_debug.log`. A confirmation line is printed to stderr when the
-feature is active:
-
-```
-bc_debug: logging to /tmp/bc_debug.log
-```
-
-### Log format
-
-The log is a CSV file with one header row followed by one row per placement event:
-
-```
-op,id,x_before,x_after,dx,generation,source
-PLACE,I1511,,7585.0,7585.0,2,src/layout/boxed_couples.rs:1069
-SHIFT,I1580,7290.0,7420.0,130.0,4,src/layout/boxed_couples.rs:407/compact
-RECENTER,I1513,7585.0,7650.0,65.0,3,src/layout/boxed_couples.rs:612
-SHIFT,I1501,7805.0,7870.0,65.0,2,src/layout/boxed_couples.rs:407/fix_overlap
-```
-
-| Column | Meaning |
-|--------|---------|
-| `op` | Operation type: `PLACE`, `SHIFT`, or `RECENTER` |
-| `id` | Individual ID (e.g. `I1511`) |
-| `x_before` | x coordinate before the operation (empty for `PLACE`) |
-| `x_after` | x coordinate after the operation |
-| `dx` | Change in x (empty for `PLACE`) |
-| `generation` | Generation depth from the root (0 = root) |
-| `source` | Source file and line, plus caller context for `SHIFT` |
-
-The `source` field for `SHIFT` events appends a slash-separated context label that
-identifies which caller triggered the shift:
-
-| Context label | Cause |
-|---|---|
-| `place/align` | `place_descendants` shifted a child subtree so the parent can sit at `x_default` |
-| `compact` | `compact_siblings` closed an excess gap between siblings |
-| `fix_overlap` | `fix_overlaps_pass` resolved a cross-family overlap |
-
-### Diagnostic workflow
-
-A typical session for diagnosing a placement overlap:
-
-```sh
-# 1. Generate the chart with logging
-BC_DEBUG_LOG=/tmp/bug.log cargo run --features bc_debug -- family.ged \
-  --preff family.toml -o /tmp/chart.svg
-
-# 2. Identify overlapping individuals
-python3 .claude/util/analyze_svg.py /tmp/chart.svg --overlaps
-
-# 3. Trace the placement history of both individuals
-grep "I1511\|I1501" /tmp/bug.log
-
-# 4. Follow the sequence of operations to find the root cause
-#    Look for a RECENTER that moves a node rightward after its right
-#    sibling was already PLACED at a position that assumed the old x.
-```
-
-The combination of the debug log (which shows *when* and *how much* each node moved)
-and the SVG analysis script (which shows the *final* positions and any overlaps) lets
-you pinpoint the exact pass and the exact node that caused the problem without
-re-running any code.
+See [`docs/debugging-boxed-couples.md`](docs/debugging-boxed-couples.md) for the full
+rationale, log format, and diagnostic workflow.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see `LICENSE`. Third-party components (and the vendored Lua 5.4 bundled when built
+with `--features lua`) are documented in `THIRD_PARTY_NOTICES.md`.
 
 ## Author's Note
 This is my first attempt at a non-trivial project that is almost completely vibe-coded. I am not proficient in Rust, which I can read but can't (yet) write fluently. I am aware that the LLM-generated code is baroque and often more complicated than necessary. However, using AI allowed me to get the job done, the alternative being no project at all, as I don't have the time to hand-code it myself.
 
-For this project, I used mostly *Claude Sonnet 4.6*, with some tasks delegated to *Haiku 4.5* for more efficient use of the token budget. I also used *qwen3.6:27b-coding-nvfp4* running on Ollama locally on my MacBook Pro M3 (40-core GPU with 400GB/s memory bandwidth) with 36GB of RAM. The local model ran surprisingly well, but it is orders of magnitude slower than Claude and sometimes gets stuck because of context rot. Qwen also had problems with the Edit tool, so I had to vibe-code alternative file-editing tools. In either case, I ran the models from *Claude Code* launched in a terminal inside Visual Studio Code.
+For this project, I used mostly *Claude Sonnet 4.6*, with some tasks delegated to *Haiku 4.5* for more efficient use of the token budget. For more complex tasks I used *Opus 4.8*. I also used *qwen3.6:27b-coding-nvfp4* running on Ollama locally on my MacBook Pro M3 (40-core GPU with 400GB/s memory bandwidth) with 36GB of RAM. The local model ran surprisingly well, but it is orders of magnitude slower than Claude and sometimes gets stuck because of context rot. Qwen also had problems with the Edit tool, so I had to vibe-code alternative file-editing tools. In either case, I ran the models from *Claude Code* launched in a terminal inside Visual Studio Code.
 
 During the course of the project I improved my prompting. My initial prompts were more terse and attempted to tackle larger problems. Over time I learned to make smaller incremental changes and to provide detailed descriptions, often supplemented with bug duplication instructions. It is an ongoing journey of learning to interact with non-human intelligence.
 

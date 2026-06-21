@@ -471,7 +471,6 @@ mod lua_impl {
         use super::super::UnparsedTag;
         use super::*;
         use crate::parser::genrep::{Event, Individual};
-        use crate::preferences::DiagnosticsPrefs;
 
         fn engine_from_src(all: &str, indi: &str, fam: &str) -> PluginEngine {
             // Build an engine directly from inline scripts (bypass file IO).

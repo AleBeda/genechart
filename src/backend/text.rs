@@ -83,7 +83,7 @@ impl TextGrid {
         }
     }
 
-    fn to_rendered_string(self) -> String {
+    fn to_rendered_string(&self) -> String {
         let mut lines: Vec<String> = self
             .data
             .iter()
@@ -95,7 +95,7 @@ impl TextGrid {
                 s.trim_end_matches(' ').to_string()
             })
             .collect();
-        while lines.last().map_or(false, |l| l.is_empty()) {
+        while lines.last().is_some_and(|l| l.is_empty()) {
             lines.pop();
         }
         lines.join("\n")
@@ -490,7 +490,7 @@ fn render_bc_text_pass(
         // Assign text rows sequentially from box_row0 + 1.
         // MarriageData gets a blank row before and after it.
         let mut current_row = box_row0 + 1;
-        for (_key, group) in &y_groups {
+        for group in y_groups.values() {
             if current_row >= grid.rows || current_row >= box_row1 {
                 break;
             }
@@ -761,7 +761,7 @@ fn render_scene_text(scene: &Scene, prefs: &Prefs, fallback_shift: usize) -> Str
     }
 
     // Trim trailing empty lines
-    while lines.last().map_or(false, |l| l.is_empty()) {
+    while lines.last().is_some_and(|l| l.is_empty()) {
         lines.pop();
     }
 

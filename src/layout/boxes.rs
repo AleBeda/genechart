@@ -1647,9 +1647,9 @@ mod tests {
             .individuals
             .get(key)
             .and_then(|i| i.geo.as_ref())
-            .and_then(|g| {
+            .map(|g| {
                 let BoxesGeo::Individual(geo) = g;
-                Some(geo.clone())
+                geo.clone()
             })
             .unwrap_or_else(|| panic!("individual {key} not found or has no geo"))
     }

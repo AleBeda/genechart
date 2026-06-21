@@ -1,3 +1,16 @@
+// The layout and rendering modules thread many positional parameters through
+// recursive placement/emit routines, index sub-ranges of grid rows by number,
+// and return small fixed tuples of coordinates. Clippy flags these as style
+// issues, but rewriting them (parameter structs, iterator adapters, type
+// aliases) would obscure algorithms that are correct and deliberately written
+// this way. Allow the affected lints crate-wide rather than scatter the code
+// with local `#[allow]` attributes.
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::only_used_in_recursion)]
+
 mod backend;
 mod cli;
 mod format;

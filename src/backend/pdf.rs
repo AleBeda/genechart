@@ -98,7 +98,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             )
         };
 
-        return Ok(single_page_with_links(
+        return single_page_with_links(
             &tree,
             &html_links,
             total_w,
@@ -109,7 +109,7 @@ pub fn render_to_bytes(output: &LayoutOutput, prefs: &Prefs) -> Result<Vec<u8>> 
             page_h_pt,
             chart_top_offset,
             MARGIN,
-        )?);
+        );
     }
 
     // Multi-page tiling — requires a known paper size.

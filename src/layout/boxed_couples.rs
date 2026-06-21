@@ -1423,7 +1423,7 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
                 .filter(|(_, f)| f.in_scope)
                 .filter(|(_, f)| {
                     spouse_id_from_family_bc(ind_id, f)
-                        .map_or(false, |id| pruned_spouse_ids.contains(&id))
+                        .is_some_and(|id| pruned_spouse_ids.contains(&id))
                 })
                 .collect();
         let is_three_spouse = geo.width > bc.box_width_2_spouses + 1.0;
@@ -2010,7 +2010,7 @@ fn emit_spouse_primitives(
     sp_section_top: f64,
     sp: &crate::parser::genrep::Individual<BoxedCouplesGeo>,
     fam: &crate::parser::genrep::Family<BoxedCouplesGeo>,
-    fam_id: &String,
+    fam_id: &str,
     prefs: &Prefs,
     section_width: f64,
     font_size: f64,

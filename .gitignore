@@ -1,6 +1,9 @@
 /target
-.claude/settings.local.json
+.DS_Store
+**/.DS_Store
 # Cargo.lock is omitted here; for a binary crate the Rust community recommends
 # committing it, but the decision is left to the project owner.
 # Cargo.lock
-tests/fixtures/local/*
+/tests/fixtures/local/
+/.claude/
+/TODO.md

@@ -837,7 +837,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         // Individual ID — emitted first so the text backend writes it at col 0
         // before any other content fills the line.
         if prefs.show.id {
-            let id_str = format!("{id}");
+            let id_str = id.to_string();
             let id_w = id_str.chars().count() as f64 * char_width_px;
             primitives.push(Primitive::Text(TextPrimitive {
                 content: id_str,

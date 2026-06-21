@@ -22,4 +22,5 @@ cargo install --path .
 
 | Directory | Source | What it demonstrates |
 |-----------|--------|----------------------|
-| `kennedy/` | Kennedy family, 70 individuals, 5 generations | All layout types; photos; highlights; TOML auto-load |
+| `kennedy/` | Kennedy family, 70 individuals, 5 generations | All layout types; photos; highlights; multi-GEDCOM merge; TOML auto-load |
+| `shakespeare/` | Shakespeare family, 31 individuals, 4 generations | `boxed_couples`, `fan`, `fancy`, `simple` layouts; highlights; TOML auto-load |

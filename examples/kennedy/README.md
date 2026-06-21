@@ -3,8 +3,14 @@
 ## Source and attribution
 
 `kennedy.ged` is copied from the [findmypast/gedcom-samples](https://github.com/findmypast/gedcom-samples)
-repository. That repository has no license file; this copy is included for educational and
-demonstration purposes only. All genealogical data is historical and publicly known.
+repository, which states that its public sample files "can be downloaded and used as is" but
+provides **no formal license**. This copy is included for educational and demonstration
+purposes; all genealogical data is historical and publicly known. If the absence of an explicit
+license is a concern for your use, substitute a sample from a clearly-licensed collection such
+as [D-Jeffrey/gedcom-samples](https://github.com/D-Jeffrey/gedcom-samples) (MIT OR CC0-1.0).
+
+The bundled portraits in `photos/` are all public domain in the United States; see
+[`photos/CREDITS.md`](photos/CREDITS.md) for per-image author, date, and source.
 
 ## Scope
 
@@ -80,8 +86,8 @@ individual has a photo shows it centered above the name and dates. Settings are 
 `kennedy_boxes_photos.toml` (boxes layout, `root_pos = "top"`, embedded photos, crop scale,
 80×80 canvas units).
 
-Six Wikipedia portraits are included in `photos/` and mapped to individual IDs via
-`photos.index`:
+Six public-domain portraits (from Wikimedia Commons; see [`photos/CREDITS.md`](photos/CREDITS.md))
+are included in `photos/` and mapped to individual IDs via `photos.index`:
 
 | File | Individual |
 |------|-----------|

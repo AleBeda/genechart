@@ -804,7 +804,7 @@ mod tests {
     #[test]
     fn noclobber_defaults_false() {
         let prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
-        assert_eq!(prefs.output.noclobber, false);
+        assert!(!prefs.output.noclobber);
     }
 
     #[test]
@@ -845,8 +845,8 @@ mod tests {
     #[test]
     fn new_preferences_load() {
         let prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
-        assert_eq!(prefs.show.last_gen_spouses, false);
-        assert_eq!(prefs.show.id, false);
+        assert!(!prefs.show.last_gen_spouses);
+        assert!(!prefs.show.id);
         assert_eq!(prefs.output.style.text.names, 0x000);
         assert_eq!(prefs.output.style.text.dates, 0x000);
         assert_eq!(prefs.output.style.text.id, 0xE00);

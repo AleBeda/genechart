@@ -293,11 +293,11 @@ fn place_anc_subtree(
         let father_id = fam
             .husband_id
             .as_ref()
-            .filter(|fid| genrep.get_individual(fid).map_or(false, |i| i.in_scope));
+            .filter(|fid| genrep.get_individual(fid).is_some_and(|i| i.in_scope));
         let mother_id = fam
             .wife_id
             .as_ref()
-            .filter(|mid| genrep.get_individual(mid).map_or(false, |i| i.in_scope));
+            .filter(|mid| genrep.get_individual(mid).is_some_and(|i| i.in_scope));
 
         let mut y_cursor = y_start;
         let mut father_y: Option<f64> = None;
@@ -751,7 +751,7 @@ fn emit_anc_subtree(
         let father_id = fam
             .husband_id
             .as_deref()
-            .filter(|fid| genrep.get_individual(fid).map_or(false, |i| i.in_scope));
+            .filter(|fid| genrep.get_individual(fid).is_some_and(|i| i.in_scope));
         let father_key =
             father_id.map(|fid| anc_instance_key(fid, *visit_count.get(fid).unwrap_or(&0)));
         let father_geo = father_key
@@ -761,7 +761,7 @@ fn emit_anc_subtree(
         let mother_id = fam
             .wife_id
             .as_deref()
-            .filter(|mid| genrep.get_individual(mid).map_or(false, |i| i.in_scope));
+            .filter(|mid| genrep.get_individual(mid).is_some_and(|i| i.in_scope));
         let mother_key =
             mother_id.map(|mid| anc_instance_key(mid, *visit_count.get(mid).unwrap_or(&0)));
         let mother_geo = mother_key

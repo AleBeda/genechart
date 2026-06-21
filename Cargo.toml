@@ -4,7 +4,8 @@ version = "0.7.0"
 edition = "2024"
 description = "Genealogical chart generator from GEDCOM files"
 license = "MIT"
-repository = "https://github.com/PLACEHOLDER/genechart"
+repository = "https://github.com/AleBeda/genechart"
+rust-version = "1.85"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

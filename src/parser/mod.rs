@@ -99,8 +99,8 @@ fn parse_line(line: &str) -> Option<(u32, Option<String>, String, String)> {
     let level: u32 = iter.next()?.trim().parse().ok()?;
     let rest = iter.next().unwrap_or("").trim_start();
 
-    let (xref, rest) = if rest.starts_with('@') {
-        if let Some(pos) = rest[1..].find('@') {
+    let (xref, rest) = if let Some(after_at) = rest.strip_prefix('@') {
+        if let Some(pos) = after_at.find('@') {
             let xref = rest[..pos + 2].to_string();
             let rest = rest[pos + 2..].trim_start();
             (Some(xref), rest)
@@ -154,11 +154,12 @@ fn apply_continuation(ctx: &mut RecordCtx, slot: TextSlot, prefix: &str, value: 
     match slot {
         TextSlot::None => {}
         TextSlot::RawName => {
-            if let RecordCtx::Indi { raw_name, .. } = ctx {
-                if let Some(s) = raw_name {
-                    s.push_str(prefix);
-                    s.push_str(value);
-                }
+            if let RecordCtx::Indi {
+                raw_name: Some(s), ..
+            } = ctx
+            {
+                s.push_str(prefix);
+                s.push_str(value);
             }
         }
         TextSlot::BirthDate => {
