@@ -116,6 +116,8 @@ genechart family.ged -r I1 --type fan -o chart.svg
 
 Configuration: `[layout.fan]` — `ring_height` (radial thickness of each inner ring), `ring_gap` (gap between rings), `outer_ring_height` (radial thickness of outer radial-text rings), `radial_gen` (generation index at which to switch to radial text; 0 = all radial).
 
+Wedge appearance is styled via `[output.style.wedges]` — `width` (stroke width), `border` (stroke color), `background` (fill color) — with the same meaning as `[output.style.boxes]`. Colors accept transparency (see [Colors and transparency](#colors-and-transparency)).
+
 ### fancy
 
 Cascading layout (SVG/PDF only). Supports both descendants and ancestors directions. In descendants mode, each direct descendant is left-aligned by generation at a fixed horizontal distance, with spouses listed below each individual and children branching to the right via curved connectors. In ancestors mode, the root is at the left and ancestors grow rightward, one column per generation.
@@ -326,6 +328,17 @@ alignment_lines = true
 [output.style]
 dot_leaders = true
 
+[output.style.boxes]
+width = 0.5
+border = 0x222         # colours are hex: 0xRGB / 0xRGBA / 0xRRGGBB / 0xRRGGBBAA (alpha-last)
+background = 0xFFF
+radius = 0.0
+
+[output.style.wedges]  # fan-layout wedges; same keys/meaning as [output.style.boxes]
+width = 0.5
+border = 0x222
+background = 0xFFF      # e.g. 0xFFF8 → ~53%-opaque white (4-digit hex = RGBA)
+
 [output.style.spacing]
 title = 12.0         # Vertical space (canvas units) between the title text and the chart
 copyright = 12.0     # Vertical space (canvas units) between the copyright text and the chart
@@ -342,6 +355,23 @@ copyright = ""
 ```
 
 Format strings use `{key}` placeholders: `{firstname}`, `{lastname}`, `{sex}`, `{date}`, `{location}`. See [Date Formatting](#date-formatting) below for date pattern syntax.
+
+### Colors and transparency
+
+Every color preference is a hex integer, written widest-meaningful-first:
+
+| Form | Meaning |
+|---|---|
+| `0xRGB` (3 digits) | fully opaque, e.g. `0x222` |
+| `0xRGBA` (4 digits) | RGB + **alpha-last**, e.g. `0xF008` = red at ~53% opacity, `0xFFFF` = opaque white |
+| `0xRRGGBB` (6 digits) | fully opaque, full 24-bit, e.g. `0x224466` |
+| `0xRRGGBBAA` (8 digits) | 24-bit RGB + alpha, e.g. `0x22446680` |
+
+Transparency works in both SVG and PDF output and applies to **any** color preference
+(box/wedge border & background, connectors, highlight color & background, the ID color, and
+poster alignment lines). Limitation: a color whose most-significant hex digit is `0` is
+indistinguishable from a shorter form (e.g. a translucent *black* cannot be expressed), so
+keep a non-zero leading digit.
 
 ## Date Formatting
 

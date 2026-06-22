@@ -386,6 +386,8 @@ pub struct StylePrefs {
     #[serde(default)]
     pub boxes: BoxStylePrefs,
     #[serde(default)]
+    pub wedges: WedgeStylePrefs,
+    #[serde(default)]
     pub connectors: ConnectorStylePrefs,
     #[serde(default)]
     pub fonts: FontPrefs,
@@ -433,6 +435,16 @@ pub struct BoxStylePrefs {
     pub background: i64,
     #[serde(default, deserialize_with = "de_f64")]
     pub radius: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct WedgeStylePrefs {
+    #[serde(default, deserialize_with = "de_f64")]
+    pub width: f64,
+    #[serde(default)]
+    pub border: i64,
+    #[serde(default)]
+    pub background: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -851,6 +863,9 @@ mod tests {
         assert_eq!(prefs.output.style.text.dates, 0x000);
         assert_eq!(prefs.output.style.text.id, 0xE00);
         assert_eq!(prefs.output.style.fonts.id, "Courier 8");
+        assert_eq!(prefs.output.style.wedges.width, 0.5);
+        assert_eq!(prefs.output.style.wedges.border, 0x222);
+        assert_eq!(prefs.output.style.wedges.background, 0xFFF);
     }
 
     #[test]

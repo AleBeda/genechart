@@ -134,12 +134,31 @@ pub(crate) fn paper_size_mm(prefs: &Prefs) -> Option<(f64, f64)> {
     Some(if landscape { (h, w) } else { (w, h) })
 }
 
-/// Convert a 12-bit 0xRGB colour preference value to a CSS hex string.
+/// Convert a `0xRGB` / `0xRGBA` / `0xRRGGBB` / `0xRRGGBBAA` colour preference value to a
+/// CSS hex string. The intended width is inferred by magnitude:
+/// `<= 0xFFF` → 3-digit RGB (opaque); `<= 0xFFFF` → 4-digit RGBA (alpha-last);
+/// `<= 0xFFFFFF` → 6-digit RRGGBB (opaque); otherwise 8-digit RRGGBBAA.
+///
+/// Limitation: a colour whose most-significant hex digit is `0` collapses to the next
+/// smaller width (e.g. `0x00FF00` == `0xFF00` reads as 4-digit RGBA, and a translucent
+/// *black* cannot be distinguished from a 3-digit value). Keep a non-zero leading nibble.
 pub(crate) fn hex_color(val: i64) -> String {
-    let r = (val >> 8) & 0xF;
-    let g = (val >> 4) & 0xF;
-    let b = val & 0xF;
-    format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
+    if val <= 0xFFF {
+        let r = (val >> 8) & 0xF;
+        let g = (val >> 4) & 0xF;
+        let b = val & 0xF;
+        format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
+    } else if val <= 0xFFFF {
+        let r = (val >> 12) & 0xF;
+        let g = (val >> 8) & 0xF;
+        let b = (val >> 4) & 0xF;
+        let a = val & 0xF;
+        format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}{a:X}{a:X}")
+    } else if val <= 0xFFFFFF {
+        format!("#{val:06X}")
+    } else {
+        format!("#{val:08X}")
+    }
 }
 
 /// Renders text split at U+2000 into Latin/symbol segments; `anchor_x` is the left/center/right edge per `align`.
@@ -838,6 +857,23 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     };
     let box_radius = prefs.output.style.boxes.radius;
 
+    // Wedge style prefs (fan layout); same semantics as boxes, default width 0.5.
+    let wedge_fill = if prefs.output.style.wedges.background != 0 {
+        hex_color(prefs.output.style.wedges.background)
+    } else {
+        "white".to_string()
+    };
+    let wedge_stroke = if prefs.output.style.wedges.border != 0 {
+        hex_color(prefs.output.style.wedges.border)
+    } else {
+        "black".to_string()
+    };
+    let wedge_sw = if prefs.output.style.wedges.width > 0.0 {
+        prefs.output.style.wedges.width
+    } else {
+        0.5
+    };
+
     // Connector style prefs
     let conn_color = hex_color(prefs.output.style.connectors.border);
     let conn_width = if prefs.output.style.connectors.width > 0.0 {
@@ -952,7 +988,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                     w.radius_outer,
                 );
                 out.push_str(&format!(
-                    "  <path d=\"{path}\" fill=\"{box_fill}\" stroke=\"{box_stroke}\" stroke-width=\"0.5\" class=\"wedge\"/>\n"
+                    "  <path d=\"{path}\" fill=\"{wedge_fill}\" stroke=\"{wedge_stroke}\" stroke-width=\"{wedge_sw}\" class=\"wedge\"/>\n"
                 ));
                 let ring_height = w.radius_outer - w.radius_inner;
                 let mid_r = (w.radius_inner + w.radius_outer) / 2.0;
@@ -1443,9 +1479,74 @@ mod tests {
 
     #[test]
     fn test_hex_color() {
+        // 3-digit RGB (opaque) — unchanged behaviour.
         assert_eq!(hex_color(0x000), "#000000");
         assert_eq!(hex_color(0xFFF), "#FFFFFF");
         assert_eq!(hex_color(0x222), "#222222");
+        // 4-digit RGBA (alpha-last) — queue #98 examples.
+        assert_eq!(hex_color(0xFFFF), "#FFFFFFFF"); // opaque white
+        assert_eq!(hex_color(0xF008), "#FF000088"); // red ~53%
+        // 6-digit RRGGBB (opaque, full 24-bit).
+        assert_eq!(hex_color(0x3D2B1F), "#3D2B1F");
+        // 8-digit RRGGBBAA.
+        assert_eq!(hex_color(0x12345678), "#12345678");
+    }
+
+    fn fan_wedge_output() -> LayoutOutput {
+        let scene = crate::scene::Scene {
+            primitives: vec![crate::scene::Primitive::Wedge(
+                crate::scene::WedgePrimitive {
+                    cx: 100.0,
+                    cy: 100.0,
+                    angle_center: 90.0,
+                    angle_span: 30.0,
+                    radius_inner: 20.0,
+                    radius_outer: 60.0,
+                    label: None,
+                    label_attrs: vec![],
+                    radial_text: false,
+                    individual_id: "I1".to_string(),
+                    birth_line: None,
+                    death_line: None,
+                },
+            )],
+            canvas_bounds: crate::scene::Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 200.0,
+                h: 200.0,
+            },
+        };
+        LayoutOutput::Fan(scene)
+    }
+
+    #[test]
+    fn test_svg_wedge_style_defaults() {
+        // Defaults mirror boxes: border 0x222, background 0xFFF, width 0.5.
+        let out = render_to_string(&fan_wedge_output(), &Prefs::default()).unwrap();
+        let line = out
+            .lines()
+            .find(|l| l.contains("class=\"wedge\""))
+            .expect("wedge path emitted");
+        assert!(line.contains("stroke=\"#222222\""), "got: {line}");
+        assert!(line.contains("fill=\"#FFFFFF\""), "got: {line}");
+        assert!(line.contains("stroke-width=\"0.5\""), "got: {line}");
+    }
+
+    #[test]
+    fn test_svg_wedge_style_from_prefs_with_alpha() {
+        let mut prefs = Prefs::default();
+        prefs.output.style.wedges.border = 0xF008; // 4-digit RGBA → #FF000088
+        prefs.output.style.wedges.background = 0xABC; // 3-digit opaque → #AABBCC
+        prefs.output.style.wedges.width = 2.0;
+        let out = render_to_string(&fan_wedge_output(), &prefs).unwrap();
+        let line = out
+            .lines()
+            .find(|l| l.contains("class=\"wedge\""))
+            .expect("wedge path emitted");
+        assert!(line.contains("stroke=\"#FF000088\""), "got: {line}");
+        assert!(line.contains("fill=\"#AABBCC\""), "got: {line}");
+        assert!(line.contains("stroke-width=\"2\""), "got: {line}");
     }
 
     #[test]

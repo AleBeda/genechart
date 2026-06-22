@@ -10,6 +10,13 @@ in the git tags `v0.1.0` … `v0.7.0`.
 
 ## [Unreleased]
 
+### Added
+- `[output.style.wedges]` preferences (`width`, `border`, `background`) to style the `fan`
+  layout's wedges independently, with the same meaning as `[output.style.boxes]`.
+- Color transparency: color preferences now accept 4-digit (`0xRGBA`) and 8-digit
+  (`0xRRGGBBAA`) hex with an **alpha-last** channel, in addition to the existing 3-digit and
+  6-digit opaque forms. Applies to every color preference and works in both SVG and PDF output.
+
 ## [0.7.0] — 2026-06-18
 
 First public release. Capabilities at this point:

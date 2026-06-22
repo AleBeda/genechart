@@ -120,6 +120,13 @@ border = 0x222
 background = 0xFFF
 radius = 0.0
 
+[output.style.wedges]
+# Fan-layout wedge styling (same meaning as boxes). Colors accept alpha
+# (4- or 8-digit hex, alpha-last), e.g. background = 0xFFF8 for translucent.
+width = 0.5
+border = 0x222
+background = 0xFFF
+
 [output.style.connectors]
 width = 0.1
 border = 0x000
