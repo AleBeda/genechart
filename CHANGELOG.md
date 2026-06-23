@@ -13,6 +13,8 @@ in the git tags `v0.1.0` … `v0.7.0`.
 ### Fixed
 - `output.style.text.names` and `output.style.text.dates` were defined but ignored; name and
   date text now use these colors (in all hex forms, including alpha).
+- Box layouts (`boxed_couples`, `boxes`) now draw boxes on top of connectors, so thick
+  connectors no longer visibly overshoot and overlap the box edges.
 
 ### Added
 - `output.style.text.gen_numbers` and `output.style.text.notes` color preferences (default

@@ -1583,8 +1583,10 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         },
     };
 
-    let mut primitives = box_groups;
-    primitives.extend(connector_groups);
+    // Connectors first, then boxes, so boxes render on top of the connectors. Thick
+    // connectors overshoot their nominal endpoints and would otherwise overlap the boxes.
+    let mut primitives = connector_groups;
+    primitives.extend(box_groups);
 
     Scene {
         primitives,

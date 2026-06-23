@@ -1808,8 +1808,11 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
         h: content_h,
     };
 
-    let mut primitives = box_groups;
-    primitives.extend(connector_groups);
+    // Connectors first, then boxes, so boxes (and their text) render on top of the
+    // connectors. Thick connectors overshoot their nominal endpoints and would otherwise
+    // visibly overlap the boxes.
+    let mut primitives = connector_groups;
+    primitives.extend(box_groups);
 
     Scene {
         primitives,
