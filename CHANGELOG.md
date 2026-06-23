@@ -10,7 +10,13 @@ in the git tags `v0.1.0` … `v0.7.0`.
 
 ## [Unreleased]
 
+### Fixed
+- `output.style.text.names` and `output.style.text.dates` were defined but ignored; name and
+  date text now use these colors (in all hex forms, including alpha).
+
 ### Added
+- `output.style.text.gen_numbers` and `output.style.text.notes` color preferences (default
+  opaque black `0x000`) for the generation-number prefix and GEDCOM note text.
 - `[output.style.wedges]` preferences (`width`, `border`, `background`) to style the `fan`
   layout's wedges independently, with the same meaning as `[output.style.boxes]`.
 - Color transparency: color preferences now accept 4-digit (`0xRGBA`) and 8-digit

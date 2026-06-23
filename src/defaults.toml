@@ -134,6 +134,8 @@ border = 0x000
 [output.style.text]
 names = 0x000
 dates = 0x000
+gen_numbers = 0x000
+notes = 0x000
 id = 0xE00
 
 [output.style.text.highlights]

@@ -364,6 +364,10 @@ pub struct TextStylePrefs {
     #[serde(default)]
     pub dates: i64,
     #[serde(default)]
+    pub gen_numbers: i64,
+    #[serde(default)]
+    pub notes: i64,
+    #[serde(default)]
     pub id: i64,
     #[serde(default)]
     pub highlights: HighlightsPrefs,
@@ -862,6 +866,8 @@ mod tests {
         assert_eq!(prefs.output.style.text.names, 0x000);
         assert_eq!(prefs.output.style.text.dates, 0x000);
         assert_eq!(prefs.output.style.text.id, 0xE00);
+        assert_eq!(prefs.output.style.text.gen_numbers, 0x000);
+        assert_eq!(prefs.output.style.text.notes, 0x000);
         assert_eq!(prefs.output.style.fonts.id, "Courier 8");
         assert_eq!(prefs.output.style.wedges.width, 0.5);
         assert_eq!(prefs.output.style.wedges.border, 0x222);

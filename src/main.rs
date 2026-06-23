@@ -73,8 +73,10 @@ fn hexify_color_fields(toml: &str) -> String {
         "border",
         "color",
         "dates",
+        "gen_numbers",
         "id",
         "names",
+        "notes",
     ];
     let mut out = String::with_capacity(toml.len());
     for line in toml.lines() {

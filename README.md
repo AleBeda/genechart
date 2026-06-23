@@ -349,6 +349,13 @@ dates = "Arial 10"
 title = "Georgia 24"
 copyright = "Arial 8"
 
+[output.style.text]   # text colours (hex; alpha supported). 0x000 = opaque black.
+names = 0x000         # individual & spouse names
+dates = 0x000         # birth / death / marriage lines
+gen_numbers = 0x000   # generation-number prefix (simple layout)
+notes = 0x000         # GEDCOM note lines
+id = 0xE00            # the ID column (when show.id = true)
+
 [output.text]
 title = "{gedcom}"
 copyright = ""
@@ -368,8 +375,10 @@ Every color preference is a hex integer, written widest-meaningful-first:
 | `0xRRGGBBAA` (8 digits) | 24-bit RGB + alpha, e.g. `0x22446680` |
 
 Transparency works in both SVG and PDF output and applies to **any** color preference
-(box/wedge border & background, connectors, highlight color & background, the ID color, and
-poster alignment lines). Limitation: a color whose most-significant hex digit is `0` is
+(box/wedge border & background, connectors, the text colors — names, dates, generation
+numbers, notes, and id — highlight color & background, and poster alignment lines). The text
+colors `output.style.text.names` and `output.style.text.dates` (and the new `gen_numbers` /
+`notes`) are honored in SVG/PDF output. Limitation: a color whose most-significant hex digit is `0` is
 indistinguishable from a shorter form (e.g. a translucent *black* cannot be expressed), so
 keep a non-zero leading digit.
 

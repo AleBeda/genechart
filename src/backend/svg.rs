@@ -457,8 +457,22 @@ fn color_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> String {
     if is_highlighted(attrs) {
         return hex_color(prefs.output.style.text.highlights.color);
     }
+    let text = &prefs.output.style.text;
+    // 0 ⇒ unset ⇒ literal "black" (keeps default output byte-identical); otherwise the
+    // hex value (supports 3/4/6/8-digit forms incl. alpha via `hex_color`).
+    let pick = |c: i64| {
+        if c != 0 {
+            hex_color(c)
+        } else {
+            "black".to_string()
+        }
+    };
     match semantic_attr(attrs) {
-        TextAttr::IndividualId => hex_color(prefs.output.style.text.id),
+        TextAttr::IndividualName | TextAttr::SpouseName => pick(text.names),
+        TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData => pick(text.dates),
+        TextAttr::GenerationNum => pick(text.gen_numbers),
+        TextAttr::NoteText => pick(text.notes),
+        TextAttr::IndividualId => hex_color(text.id),
         _ => "black".to_string(),
     }
 }
@@ -1547,6 +1561,45 @@ mod tests {
         assert!(line.contains("stroke=\"#FF000088\""), "got: {line}");
         assert!(line.contains("fill=\"#AABBCC\""), "got: {line}");
         assert!(line.contains("stroke-width=\"2\""), "got: {line}");
+    }
+
+    #[test]
+    fn test_color_for_attr() {
+        let mut prefs = Prefs::default();
+        prefs.output.style.text.names = 0xF00; // 3-digit
+        prefs.output.style.text.dates = 0x0F0;
+        prefs.output.style.text.gen_numbers = 0x00F;
+        prefs.output.style.text.notes = 0x1234ABCD; // 8-digit RRGGBBAA
+        prefs.output.style.text.id = 0xE00;
+
+        assert_eq!(
+            color_for_attr(&[TextAttr::IndividualName], &prefs),
+            "#FF0000"
+        );
+        assert_eq!(color_for_attr(&[TextAttr::SpouseName], &prefs), "#FF0000");
+        assert_eq!(color_for_attr(&[TextAttr::BirthData], &prefs), "#00FF00");
+        assert_eq!(color_for_attr(&[TextAttr::DeathData], &prefs), "#00FF00");
+        assert_eq!(color_for_attr(&[TextAttr::MarriageData], &prefs), "#00FF00");
+        assert_eq!(
+            color_for_attr(&[TextAttr::GenerationNum], &prefs),
+            "#0000FF"
+        );
+        assert_eq!(color_for_attr(&[TextAttr::NoteText], &prefs), "#1234ABCD");
+        assert_eq!(color_for_attr(&[TextAttr::IndividualId], &prefs), "#EE0000");
+        // Highlighted wins over the per-kind color.
+        assert_eq!(
+            color_for_attr(&[TextAttr::IndividualName, TextAttr::Highlighted], &prefs),
+            hex_color(prefs.output.style.text.highlights.color)
+        );
+
+        // 4-digit alpha and the 0 ⇒ "black" fallback.
+        prefs.output.style.text.names = 0x2228;
+        assert_eq!(
+            color_for_attr(&[TextAttr::IndividualName], &prefs),
+            "#22222288"
+        );
+        prefs.output.style.text.dates = 0x000;
+        assert_eq!(color_for_attr(&[TextAttr::BirthData], &prefs), "black");
     }
 
     #[test]
