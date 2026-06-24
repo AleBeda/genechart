@@ -370,6 +370,16 @@ pub struct TextStylePrefs {
     #[serde(default)]
     pub id: i64,
     #[serde(default)]
+    pub title: i64,
+    #[serde(default)]
+    pub copyright: i64,
+    #[serde(default)]
+    pub row_rule: i64,
+    #[serde(default)]
+    pub note_bar: i64,
+    #[serde(default)]
+    pub note_link: i64,
+    #[serde(default)]
     pub highlights: HighlightsPrefs,
 }
 
@@ -868,6 +878,12 @@ mod tests {
         assert_eq!(prefs.output.style.text.id, 0xE00);
         assert_eq!(prefs.output.style.text.gen_numbers, 0x000);
         assert_eq!(prefs.output.style.text.notes, 0x000);
+        assert_eq!(prefs.output.style.text.title, 0x000);
+        assert_eq!(prefs.output.style.text.copyright, 0x000);
+        assert_eq!(prefs.output.style.text.row_rule, 0xCCC);
+        assert_eq!(prefs.output.style.text.note_bar, 0xCCC);
+        assert_eq!(prefs.output.style.text.note_link, 0x06C);
+        assert!(prefs.diagnostics.errors);
         assert_eq!(prefs.output.style.fonts.id, "Courier 8");
         assert_eq!(prefs.output.style.wedges.width, 0.5);
         assert_eq!(prefs.output.style.wedges.border, 0x222);

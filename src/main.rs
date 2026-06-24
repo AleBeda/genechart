@@ -72,11 +72,16 @@ fn hexify_color_fields(toml: &str) -> String {
         "background",
         "border",
         "color",
+        "copyright",
         "dates",
         "gen_numbers",
         "id",
         "names",
+        "note_bar",
+        "note_link",
         "notes",
+        "row_rule",
+        "title",
     ];
     let mut out = String::with_capacity(toml.len());
     for line in toml.lines() {
@@ -245,113 +250,127 @@ fn run() -> anyhow::Result<()> {
     // Store the resolved GEDCOM path for use in title/copyright templates
     prefs.files.gedcom = gedcom_path.display().to_string();
 
-    // Reject an unimplemented realistic_tree style instead of silently falling
-    // back to "tapered".
-    if prefs.output.style.realistic_tree.enabled {
-        let style = &prefs.output.style.realistic_tree.style;
-        if !backend::realistic_tree::is_known_style(style) {
-            anyhow::bail!(
-                "unknown output.style.realistic_tree.style \"{}\"; valid styles: {}",
-                style,
-                backend::realistic_tree::KNOWN_STYLES.join(", "),
-            );
+    // From here on, errors from the output pipeline are gated by diagnostics.errors.
+    // Errors raised earlier (CLI parsing, GEDCOM path resolution, preference loading)
+    // happen before this point and are always reported via main().
+    let show_errors = prefs.diagnostics.errors;
+    let result: anyhow::Result<()> = (|| {
+        // Reject an unimplemented realistic_tree style instead of silently falling
+        // back to "tapered".
+        if prefs.output.style.realistic_tree.enabled {
+            let style = &prefs.output.style.realistic_tree.style;
+            if !backend::realistic_tree::is_known_style(style) {
+                anyhow::bail!(
+                    "unknown output.style.realistic_tree.style \"{}\"; valid styles: {}",
+                    style,
+                    backend::realistic_tree::KNOWN_STYLES.join(", "),
+                );
+            }
         }
-    }
 
-    // 7. Dump mode: print merged prefs and exit
-    if args.prpref || dump_mode {
-        prefs.title = Some(format!(
-            "Resolved preferences — {}",
-            current_utc_timestamp()
-        ));
-        let serialized = toml::to_string_pretty(&prefs)
-            .unwrap_or_else(|_| toml::to_string(&prefs).unwrap_or_default());
-        print!("{}", hexify_color_fields(&serialized));
-        return Ok(());
-    }
+        // 7. Dump mode: print merged prefs and exit
+        if args.prpref || dump_mode {
+            prefs.title = Some(format!(
+                "Resolved preferences — {}",
+                current_utc_timestamp()
+            ));
+            let serialized = toml::to_string_pretty(&prefs)
+                .unwrap_or_else(|_| toml::to_string(&prefs).unwrap_or_default());
+            print!("{}", hexify_color_fields(&serialized));
+            return Ok(());
+        }
 
-    // 8. Parse GEDCOM (with optional merge from further files)
-    parser::set_diagnostics(prefs.diagnostics.clone());
-    parser::set_parser_tags(prefs.custom.gedcom.tags.clone());
-    // Build the plugin engine (loads/compiles any configured Lua scripts; errors
-    // here are fatal). A build without the `lua` feature errors if plugins are set.
-    let plugin_engine =
-        plugins::PluginEngine::from_prefs(&prefs.plugins.parse, &prefs.diagnostics)?;
+        // 8. Parse GEDCOM (with optional merge from further files)
+        parser::set_diagnostics(prefs.diagnostics.clone());
+        parser::set_parser_tags(prefs.custom.gedcom.tags.clone());
+        // Build the plugin engine (loads/compiles any configured Lua scripts; errors
+        // here are fatal). A build without the `lua` feature errors if plugins are set.
+        let plugin_engine =
+            plugins::PluginEngine::from_prefs(&prefs.plugins.parse, &prefs.diagnostics)?;
 
-    let gedcom_dir = gedcom_path.parent().unwrap_or(std::path::Path::new("."));
-    let mut further_pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+        let gedcom_dir = gedcom_path.parent().unwrap_or(std::path::Path::new("."));
+        let mut further_pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
 
-    if !args.merge.is_empty() {
-        // CLI --merge takes precedence over preferences; collect pairs
-        for chunk in args.merge.chunks(2) {
-            if chunk.len() == 2 {
+        if !args.merge.is_empty() {
+            // CLI --merge takes precedence over preferences; collect pairs
+            for chunk in args.merge.chunks(2) {
+                if chunk.len() == 2 {
+                    further_pairs.push((
+                        resolve_rel_path(&chunk[0], gedcom_dir),
+                        resolve_rel_path(&chunk[1], gedcom_dir),
+                    ));
+                }
+            }
+        } else {
+            // Fall back to preference-based merge pairs
+            let mfiles = &prefs.files.merge;
+            let maliases = &prefs.files.merge_aliases;
+            if mfiles.len() > maliases.len() {
+                anyhow::bail!(
+                    "files.merge_aliases must have at least as many entries as files.merge \
+                 ({} merge files, {} alias files)",
+                    mfiles.len(),
+                    maliases.len()
+                );
+            }
+            for (ged_str, alias_str) in mfiles.iter().zip(maliases.iter()) {
                 further_pairs.push((
-                    resolve_rel_path(&chunk[0], gedcom_dir),
-                    resolve_rel_path(&chunk[1], gedcom_dir),
+                    resolve_rel_path(ged_str, gedcom_dir),
+                    resolve_rel_path(alias_str, gedcom_dir),
                 ));
             }
         }
-    } else {
-        // Fall back to preference-based merge pairs
-        let mfiles = &prefs.files.merge;
-        let maliases = &prefs.files.merge_aliases;
-        if mfiles.len() > maliases.len() {
-            anyhow::bail!(
-                "files.merge_aliases must have at least as many entries as files.merge \
-                 ({} merge files, {} alias files)",
-                mfiles.len(),
-                maliases.len()
-            );
+
+        let mut genrep = if further_pairs.is_empty() {
+            parser::parse(&gedcom_path, &plugin_engine)?
+        } else {
+            parser::parse_and_merge(&gedcom_path, &further_pairs, &plugin_engine)?
+        };
+
+        // 9. Compute scope
+        let root_id = (!prefs.scope.root.is_empty()).then_some(prefs.scope.root.as_str());
+        let gens = (prefs.scope.generations > 0).then_some(prefs.scope.generations);
+        parser::compute_scope_opts(
+            &mut genrep,
+            root_id,
+            &prefs.scope.direction,
+            gens,
+            prefs.show.last_gen_spouses,
+        );
+
+        // 10. Run layout
+        #[cfg(feature = "bc_debug")]
+        layout::boxed_couples::bc_debug_init();
+        let layout_output = layout::run_layout(&genrep, &prefs)?;
+        #[cfg(feature = "bc_debug")]
+        layout::boxed_couples::bc_debug_flush();
+
+        // 11. Open output (file or stdout)
+        let mut writer: Box<dyn std::io::Write> = if prefs.output.path.is_empty() {
+            Box::new(std::io::stdout())
+        } else {
+            let path = std::path::Path::new(&prefs.output.path);
+            if prefs.output.noclobber && path.exists() {
+                anyhow::bail!("output file already exists: {}", prefs.output.path);
+            }
+            Box::new(std::fs::File::create(&prefs.output.path)?)
+        };
+
+        // 12. Render
+        match prefs.output.output_type.to_lowercase().as_str() {
+            "svg" => backend::svg::SvgRenderer.render(&layout_output, &prefs, &mut writer)?,
+            "pdf" => backend::pdf::PdfRenderer.render(&layout_output, &prefs, &mut writer)?,
+            _ => backend::text::TextRenderer.render(&layout_output, &prefs, &mut writer)?,
         }
-        for (ged_str, alias_str) in mfiles.iter().zip(maliases.iter()) {
-            further_pairs.push((
-                resolve_rel_path(ged_str, gedcom_dir),
-                resolve_rel_path(alias_str, gedcom_dir),
-            ));
+
+        Ok(())
+    })();
+
+    if let Err(e) = result {
+        if show_errors {
+            eprintln!("Error: {e:#}");
         }
+        std::process::exit(1);
     }
-
-    let mut genrep = if further_pairs.is_empty() {
-        parser::parse(&gedcom_path, &plugin_engine)?
-    } else {
-        parser::parse_and_merge(&gedcom_path, &further_pairs, &plugin_engine)?
-    };
-
-    // 9. Compute scope
-    let root_id = (!prefs.scope.root.is_empty()).then_some(prefs.scope.root.as_str());
-    let gens = (prefs.scope.generations > 0).then_some(prefs.scope.generations);
-    parser::compute_scope_opts(
-        &mut genrep,
-        root_id,
-        &prefs.scope.direction,
-        gens,
-        prefs.show.last_gen_spouses,
-    );
-
-    // 10. Run layout
-    #[cfg(feature = "bc_debug")]
-    layout::boxed_couples::bc_debug_init();
-    let layout_output = layout::run_layout(&genrep, &prefs)?;
-    #[cfg(feature = "bc_debug")]
-    layout::boxed_couples::bc_debug_flush();
-
-    // 11. Open output (file or stdout)
-    let mut writer: Box<dyn std::io::Write> = if prefs.output.path.is_empty() {
-        Box::new(std::io::stdout())
-    } else {
-        let path = std::path::Path::new(&prefs.output.path);
-        if prefs.output.noclobber && path.exists() {
-            anyhow::bail!("output file already exists: {}", prefs.output.path);
-        }
-        Box::new(std::fs::File::create(&prefs.output.path)?)
-    };
-
-    // 12. Render
-    match prefs.output.output_type.to_lowercase().as_str() {
-        "svg" => backend::svg::SvgRenderer.render(&layout_output, &prefs, &mut writer)?,
-        "pdf" => backend::pdf::PdfRenderer.render(&layout_output, &prefs, &mut writer)?,
-        _ => backend::text::TextRenderer.render(&layout_output, &prefs, &mut writer)?,
-    }
-
     Ok(())
 }

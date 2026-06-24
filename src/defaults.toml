@@ -137,6 +137,11 @@ dates = 0x000
 gen_numbers = 0x000
 notes = 0x000
 id = 0xE00
+title = 0x000        # chart title text
+copyright = 0x000    # copyright notice text
+row_rule = 0xCCC     # row-rule underlines (simple layout dot-leaders)
+note_bar = 0xCCC     # vertical bar beside a NOTE block
+note_link = 0x06C    # <a href> links in notes (expands to #0066CC)
 
 [output.style.text.highlights]
 color = 0x00D

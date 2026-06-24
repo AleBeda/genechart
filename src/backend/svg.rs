@@ -45,10 +45,6 @@ fn svg_text_full(
     )
 }
 
-fn svg_text(x: f64, y: f64, text: &str, family: &str, size: f64) -> String {
-    svg_text_full(x, y, text, family, size, "normal", "black", "")
-}
-
 fn svg_line(x1: f64, y1: f64, x2: f64, y2: f64, color: &str, width: f64, class: &str) -> String {
     let cls = if class.is_empty() {
         String::new()
@@ -158,6 +154,16 @@ pub(crate) fn hex_color(val: i64) -> String {
         format!("#{val:06X}")
     } else {
         format!("#{val:08X}")
+    }
+}
+
+/// A color preference where `0` means "unset" and renders as literal `"black"` (keeps
+/// default output byte-identical); any non-zero value goes through [`hex_color`].
+pub(crate) fn color_or_black(val: i64) -> String {
+    if val != 0 {
+        hex_color(val)
+    } else {
+        "black".to_string()
     }
 }
 
@@ -458,15 +464,7 @@ fn color_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> String {
         return hex_color(prefs.output.style.text.highlights.color);
     }
     let text = &prefs.output.style.text;
-    // 0 ⇒ unset ⇒ literal "black" (keeps default output byte-identical); otherwise the
-    // hex value (supports 3/4/6/8-digit forms incl. alpha via `hex_color`).
-    let pick = |c: i64| {
-        if c != 0 {
-            hex_color(c)
-        } else {
-            "black".to_string()
-        }
-    };
+    let pick = |c: i64| color_or_black(c);
     match semantic_attr(attrs) {
         TextAttr::IndividualName | TextAttr::SpouseName => pick(text.names),
         TextAttr::BirthData | TextAttr::DeathData | TextAttr::MarriageData => pick(text.dates),
@@ -797,6 +795,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
             let cw = font_size * CHAR_WIDTH_RATIO;
             let anchor_x = (ctx.to_svg_x)(link.bbox.x);
             let baseline_svg = (ctx.to_svg_y)(link.bbox.y + link.bbox.h);
+            let link_color = hex_color(ctx.prefs.output.style.text.note_link);
             out.push_str(&format!(
                 "  <a href=\"{}\" class=\"note_link\" style=\"text-decoration:underline;\">\n",
                 xml_escape(&link.href)
@@ -810,7 +809,7 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 font_size,
                 weight,
                 cw,
-                "#0066CC",
+                &link_color,
                 None,
                 &TextAlign::Left,
                 &class_for_attrs(&link.attrs),
@@ -951,27 +950,37 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
     let viewbox = format!("0 0 {total_w:.1} {total_h:.1}");
     let mut out = svg_header(&canvas_w, &canvas_h, &viewbox);
 
+    // Title / copyright colors (0 ⇒ default "black").
+    let title_color = color_or_black(prefs.output.style.text.title);
+    let copy_color = color_or_black(prefs.output.style.text.copyright);
+
     // Title
     if !title_text.is_empty() {
         let y = MARGIN + title_font_size;
-        out.push_str(&svg_text(
+        out.push_str(&svg_text_full(
             MARGIN,
             y,
             &title_text,
             &title_font_family,
             title_font_size,
+            "normal",
+            &title_color,
+            "title",
         ));
     }
 
     // Copyright
     if !copy_text.is_empty() {
         let y = total_h - MARGIN;
-        out.push_str(&svg_text(
+        out.push_str(&svg_text_full(
             MARGIN,
             y,
             &copy_text,
             &copy_font_family,
             copy_font_size,
+            "normal",
+            &copy_color,
+            "copyright",
         ));
     }
 
@@ -1152,9 +1161,10 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 let x_svg = to_svg_x(bar.x);
                 let y1_svg = to_svg_y(bar.top_y);
                 let y2_svg = to_svg_y(bar.bottom_y);
+                let bar_color = hex_color(prefs.output.style.text.note_bar);
                 out.push_str(&format!(
                     "  <line x1=\"{x:.1}\" y1=\"{y1:.1}\" x2=\"{x:.1}\" y2=\"{y2:.1}\" \
-                     stroke=\"#cccccc\" stroke-width=\"2\" stroke-linecap=\"round\" class=\"note_bar\"/>\n",
+                     stroke=\"{bar_color}\" stroke-width=\"2\" stroke-linecap=\"round\" class=\"note_bar\"/>\n",
                     x = x_svg,
                     y1 = y1_svg,
                     y2 = y2_svg,
@@ -1205,7 +1215,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
 
         // Emit one solid thin line per row, from left margin to canvas right edge,
         // positioned 1px below the approximate descender (font_size * 0.16).
-        const UNDERLINE_COLOR: &str = "#CCCCCC";
+        let underline_color = hex_color(prefs.output.style.text.row_rule);
         const UNDERLINE_WIDTH: f64 = 0.5;
         // Sort by row so the underline element order is stable across runs
         // (`row_info` is a HashMap); see the "Deterministic emit order" note in CLAUDE.md.
@@ -1222,7 +1232,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 x1 = line_x1,
                 y = underline_y,
                 x2 = line_x2,
-                color = UNDERLINE_COLOR,
+                color = underline_color,
                 width = UNDERLINE_WIDTH
             ));
         }
@@ -1504,6 +1514,14 @@ mod tests {
         assert_eq!(hex_color(0x3D2B1F), "#3D2B1F");
         // 8-digit RRGGBBAA.
         assert_eq!(hex_color(0x12345678), "#12345678");
+    }
+
+    #[test]
+    fn test_color_or_black() {
+        assert_eq!(color_or_black(0), "black"); // unset ⇒ literal black (byte-stable default)
+        assert_eq!(color_or_black(0xCCC), "#CCCCCC"); // row_rule / note_bar default
+        assert_eq!(color_or_black(0x06C), "#0066CC"); // note_link default
+        assert_eq!(color_or_black(0xF008), "#FF000088"); // alpha passes through
     }
 
     fn fan_wedge_output() -> LayoutOutput {

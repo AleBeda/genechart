@@ -375,7 +375,7 @@ pub fn emit_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
 
 fn emit_desc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let highlighted_ids = highlight_set(prefs);
-    let conn_color = hex_color_fancy(prefs.output.style.connectors.border);
+    let conn_color = crate::backend::svg::hex_color(prefs.output.style.connectors.border);
     let conn_width = if prefs.output.style.connectors.width > 0.0 {
         prefs.output.style.connectors.width
     } else {
@@ -444,7 +444,7 @@ fn emit_desc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
 
 fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
     let highlighted_ids = highlight_set(prefs);
-    let conn_color = hex_color_fancy(prefs.output.style.connectors.border);
+    let conn_color = crate::backend::svg::hex_color(prefs.output.style.connectors.border);
     let conn_width = prefs.output.style.connectors.width.max(0.1);
 
     let n_lh = name_lh(prefs);
@@ -506,13 +506,6 @@ fn emit_anc_scene(genrep: &Genrep<FancyGeo>, prefs: &Prefs) -> Scene {
             h: max_y,
         },
     }
-}
-
-fn hex_color_fancy(val: i64) -> String {
-    let r = (val >> 8) & 0xF;
-    let g = (val >> 4) & 0xF;
-    let b = val & 0xF;
-    format!("#{r:X}{r:X}{g:X}{g:X}{b:X}{b:X}")
 }
 
 /// Font metrics and text lines computed by [`build_ind_text_lines`].

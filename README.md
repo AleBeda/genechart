@@ -355,6 +355,11 @@ dates = 0x000         # birth / death / marriage lines
 gen_numbers = 0x000   # generation-number prefix (simple layout)
 notes = 0x000         # GEDCOM note lines
 id = 0xE00            # the ID column (when show.id = true)
+title = 0x000         # chart title
+copyright = 0x000     # copyright notice
+row_rule = 0xCCC      # row-rule underlines (simple layout)
+note_bar = 0xCCC      # vertical bar beside a note block
+note_link = 0x06C     # note hyperlinks (#0066CC)
 
 [output.text]
 title = "{gedcom}"
@@ -374,13 +379,12 @@ Every color preference is a hex integer, written widest-meaningful-first:
 | `0xRRGGBB` (6 digits) | fully opaque, full 24-bit, e.g. `0x224466` |
 | `0xRRGGBBAA` (8 digits) | 24-bit RGB + alpha, e.g. `0x22446680` |
 
-Transparency works in both SVG and PDF output and applies to **any** color preference
-(box/wedge border & background, connectors, the text colors — names, dates, generation
-numbers, notes, and id — highlight color & background, and poster alignment lines). The text
-colors `output.style.text.names` and `output.style.text.dates` (and the new `gen_numbers` /
-`notes`) are honored in SVG/PDF output. Limitation: a color whose most-significant hex digit is `0` is
-indistinguishable from a shorter form (e.g. a translucent *black* cannot be expressed), so
-keep a non-zero leading digit.
+Transparency works in both SVG and PDF output and applies to **any** color preference:
+box/wedge border & background, connectors, the text colors (names, dates, generation numbers,
+notes, id, title, copyright), the row-rule underline, note bar, note hyperlink, highlight color
+& background, and poster alignment lines. Limitation: a color whose most-significant hex digit
+is `0` is indistinguishable from a shorter form (e.g. a translucent *black* cannot be
+expressed), so keep a non-zero leading digit.
 
 ## Date Formatting
 

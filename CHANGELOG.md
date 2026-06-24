@@ -15,10 +15,18 @@ in the git tags `v0.1.0` … `v0.7.0`.
   date text now use these colors (in all hex forms, including alpha).
 - Box layouts (`boxed_couples`, `boxes`) now draw boxes on top of connectors, so thick
   connectors no longer visibly overshoot and overlap the box edges.
+- The `fancy` layout's connector color now supports the full hex range (4-/6-/8-digit and
+  alpha); it previously used a 3-digit-only converter, unlike every other layout.
 
 ### Added
 - `output.style.text.gen_numbers` and `output.style.text.notes` color preferences (default
   opaque black `0x000`) for the generation-number prefix and GEDCOM note text.
+- `output.style.text.title`, `…copyright`, `…row_rule`, `…note_bar`, and `…note_link` color
+  preferences (defaults match the previous hardcoded colors), so the chart title, copyright,
+  row-rule underline, note bar, and note hyperlinks are all configurable.
+- `diagnostics.errors` is now honored: setting it to `false` suppresses error messages from the
+  output pipeline (errors raised before preferences load are still reported). `diagnostics.info`
+  and `diagnostics.debug` remain reserved for future use.
 - `[output.style.wedges]` preferences (`width`, `border`, `background`) to style the `fan`
   layout's wedges independently, with the same meaning as `[output.style.boxes]`.
 - Color transparency: color preferences now accept 4-digit (`0xRGBA`) and 8-digit
