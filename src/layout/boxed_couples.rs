@@ -757,12 +757,11 @@ fn recenter_pass(
             recenter_pass(child_id, genrep, box_w, box_w2, box_w3, gap_w, out, max_x);
         }
 
-        let n = all_children.len();
-        let new_x = if n % 2 == 1 {
-            get_x_of(&all_children[n / 2], out)
-        } else {
-            (get_x_of(&all_children[n / 2 - 1], out) + get_x_of(&all_children[n / 2], out)) / 2.0
-        };
+        // Geometric centre: mean of the first and last child's x (queue #102); must match
+        // the formula in `place_descendants`.
+        let new_x = (get_x_of(&all_children[0], out)
+            + get_x_of(&all_children[all_children.len() - 1], out))
+            / 2.0;
         let final_x = max_center_x.map_or(new_x, |m| new_x.min(m));
 
         if let Some(ind) = out.get_mut(ind_id) {
@@ -879,12 +878,12 @@ fn place_descendants(
                     );
                 }
 
-                let n = children.len();
-                let x_mid = if n % 2 == 1 {
-                    get_x_of(&children[n / 2], out)
-                } else {
-                    (get_x_of(&children[n / 2 - 1], out) + get_x_of(&children[n / 2], out)) / 2.0
-                };
+                // Geometric centre: mean of the first and last child's x (queue #102).
+                // For 1–2 children this equals the old median; for 3+ it removes the
+                // lopsidedness when sibling subtrees differ in width.
+                let x_mid = (get_x_of(&children[0], out)
+                    + get_x_of(&children[children.len() - 1], out))
+                    / 2.0;
                 if x_mid < x_default {
                     let shift = x_default - x_mid;
                     bc_set_shift_ctx!("place/align");
@@ -2866,6 +2865,58 @@ mod tests {
         assert!(
             matches!(i6.geo, Some(BoxedCouplesGeo::Individual(_))),
             "I6 must have an IndividualGeo, not None"
+        );
+    }
+
+    #[test]
+    fn single_spouse_parent_geometric_centre() {
+        // Three children: C1 (I3) and C2 (I4) each have their own family with 2 children
+        // (wide subtrees), C3 (I5) is a leaf. The wide subtrees push the children apart
+        // unevenly, so the median child (I4) is NOT the geometric midpoint. Queue #102:
+        // the parent must sit at (first_child + last_child) / 2, not over the median child.
+        use crate::parser::{compute_scope, parse_str};
+        use crate::preferences::Prefs;
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Dad /A/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Mom /A/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /A/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F2@\n\
+0 @I3W@ INDI\n1 NAME C1w /B/\n1 SEX F\n1 FAMS @F2@\n\
+0 @I4@ INDI\n1 NAME C2 /A/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @I4W@ INDI\n1 NAME C2w /B/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME C3 /A/\n1 SEX M\n1 FAMC @F1@\n\
+0 @I6@ INDI\n1 NAME G1 /A/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I7@ INDI\n1 NAME G2 /A/\n1 SEX M\n1 FAMC @F2@\n\
+0 @I8@ INDI\n1 NAME G3 /A/\n1 SEX M\n1 FAMC @F3@\n\
+0 @I9@ INDI\n1 NAME G4 /A/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n1 CHIL @I5@\n\
+0 @F2@ FAM\n1 HUSB @I3@\n1 WIFE @I3W@\n1 CHIL @I6@\n1 CHIL @I7@\n\
+0 @F3@ FAM\n1 HUSB @I4@\n1 WIFE @I4W@\n1 CHIL @I8@\n1 CHIL @I9@\n\
+0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.scope.generations = 3;
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope(&mut genrep, Some("I1"), "descendants", Some(3));
+        let bc = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+
+        let x1 = ind_geo(&bc, "I1").x;
+        let x3 = ind_geo(&bc, "I3").x;
+        let x4 = ind_geo(&bc, "I4").x;
+        let x5 = ind_geo(&bc, "I5").x;
+        let midpoint = (x3 + x5) / 2.0;
+        assert!(
+            (x1 - midpoint).abs() < 1e-6,
+            "parent x={x1} should be the midpoint of first/last child = {midpoint} (I3={x3}, I5={x5})"
+        );
+        assert!(
+            (x1 - x4).abs() > 1.0,
+            "parent x={x1} must differ from the median child I4 x={x4} (proves the fix)"
         );
     }
 

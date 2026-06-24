@@ -11,6 +11,10 @@ in the git tags `v0.1.0` … `v0.7.0`.
 ## [Unreleased]
 
 ### Fixed
+- Single-spouse parents in the `boxes` and `boxed_couples` layouts are now centered on the
+  geometric midpoint of their first and last child, instead of over the median child. This
+  removes the lopsided parent position when sibling subtrees differ greatly in width. (Output is
+  unchanged for parents with one or two children, or evenly-spaced children.)
 - `output.style.text.names` and `output.style.text.dates` were defined but ignored; name and
   date text now use these colors (in all hex forms, including alpha).
 - Box layouts (`boxed_couples`, `boxes`) now draw boxes on top of connectors, so thick

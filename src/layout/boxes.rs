@@ -579,12 +579,10 @@ fn recenter_pass_desc(
         return;
     }
 
-    let n = children1.len();
-    let x_spouse1 = if n % 2 == 1 {
-        get_x_of(&children1[n / 2], out)
-    } else {
-        (get_x_of(&children1[n / 2 - 1], out) + get_x_of(&children1[n / 2], out)) / 2.0
-    };
+    // Geometric centre: mean of the first and last child's x (queue #102); must match the
+    // formula in `place_descendants`.
+    let x_spouse1 =
+        (get_x_of(&children1[0], out) + get_x_of(&children1[children1.len() - 1], out)) / 2.0;
 
     let new_x = x_spouse1 - (box_w + gap_w);
 
@@ -803,13 +801,9 @@ fn place_descendants(
                 if placed_c1.is_empty() {
                     x_default + (box_w + gap_w)
                 } else {
-                    let n = placed_c1.len();
-                    if n % 2 == 1 {
-                        get_x_of(&placed_c1[n / 2], out)
-                    } else {
-                        (get_x_of(&placed_c1[n / 2 - 1], out) + get_x_of(&placed_c1[n / 2], out))
-                            / 2.0
-                    }
+                    // Geometric centre: mean of the first and last child's x (queue #102).
+                    (get_x_of(&placed_c1[0], out) + get_x_of(&placed_c1[placed_c1.len() - 1], out))
+                        / 2.0
                 }
             } else {
                 x_default + (box_w + gap_w)
