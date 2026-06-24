@@ -308,6 +308,7 @@ mod tests {
             alt_name: None,
             relig_name: None,
             living: None,
+            nickname: None,
             notes: vec![],
             in_scope: true,
             geo: None,

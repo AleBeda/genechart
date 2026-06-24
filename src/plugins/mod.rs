@@ -516,6 +516,7 @@ mod lua_impl {
                 alt_name: None,
                 relig_name: None,
                 living: None,
+                nickname: None,
                 notes: vec![],
                 in_scope: false,
                 geo: None,

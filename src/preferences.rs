@@ -83,6 +83,8 @@ pub struct ShowPrefs {
     #[serde(default)]
     pub generation_num: bool,
     #[serde(default)]
+    pub nickname: bool,
+    #[serde(default)]
     pub sex: bool,
     #[serde(default)]
     pub birth: bool,
@@ -146,6 +148,8 @@ impl Default for PhotosPrefs {
 pub struct FormatPrefs {
     #[serde(default)]
     pub individual: String,
+    #[serde(default)]
+    pub individual_nickname: String, // used in lieu of `individual` when show.nickname && nickname set
     #[serde(default)]
     pub birth: String,
     #[serde(default)]

@@ -354,6 +354,7 @@ pub(crate) fn parse_str_with(content: &str, engine: &PluginEngine) -> anyhow::Re
                             alt_name: Option::None,
                             relig_name: Option::None,
                             living: Option::None,
+                            nickname: Option::None,
                             notes: Vec::new(),
                             in_scope: false,
                             geo: Option::None,
@@ -409,6 +410,25 @@ pub(crate) fn parse_str_with(content: &str, engine: &PluginEngine) -> anyhow::Re
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
                                 indi.sex = value.chars().next();
                             }
+                        }
+                        // Nickname: standard GEDCOM NICK, accepted at level 1 (flat) or level 2
+                        // (under NAME, see below). The tag is matched literally (standard tag).
+                        // Also captured as an unparsed tag so Lua plugins that read `unparsed`
+                        // still see it.
+                        "NICK" => {
+                            if let RecordCtx::Indi { indi, .. } = &mut ctx {
+                                indi.nickname = Some(value.clone());
+                            }
+                            if collect_unparsed
+                                && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
+                            {
+                                unparsed.push(UnparsedTag {
+                                    level,
+                                    tag: tag.clone(),
+                                    value: value.clone(),
+                                });
+                            }
+                            text_slot = TextSlot::None;
                         }
                         "BIRT" => {
                             if let RecordCtx::Indi { indi, .. } = &mut ctx {
@@ -578,6 +598,23 @@ pub(crate) fn parse_str_with(content: &str, engine: &PluginEngine) -> anyhow::Re
                             }
                             EventCtx::None => {}
                         },
+                        // `2 NICK` under `1 NAME` (the GEDCOM 5.5.1 standard location). Also kept
+                        // in `unparsed` (when plugins are active) for backward compatibility.
+                        "NICK" => {
+                            if let RecordCtx::Indi { indi, .. } = &mut ctx {
+                                indi.nickname = Some(value.clone());
+                            }
+                            if collect_unparsed
+                                && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
+                            {
+                                unparsed.push(UnparsedTag {
+                                    level,
+                                    tag: tag.clone(),
+                                    value: value.clone(),
+                                });
+                            }
+                            text_slot = TextSlot::None;
+                        }
                         _ => {
                             if collect_unparsed
                                 && matches!(ctx, RecordCtx::Indi { .. } | RecordCtx::Fam(_))
@@ -1109,6 +1146,34 @@ mod tests {
 
         let f1 = gr.get_family("F1").unwrap();
         assert_eq!(f1.relig_marr.as_deref(), Some("ref-12345"));
+    }
+
+    #[test]
+    fn test_nickname_parsed() {
+        let ged = "\
+0 @I1@ INDI
+1 NAME John /Doe/
+2 NICK Johnny
+0 @I2@ INDI
+1 NAME Bob /Roe/
+1 NICK Bobby
+0 @I3@ INDI
+1 NAME Plain /Jane/
+0 TRLR
+";
+        let gr = parse_str(ged).unwrap();
+        // 2 NICK under NAME (standard).
+        assert_eq!(
+            gr.get_individual("I1").unwrap().nickname.as_deref(),
+            Some("Johnny")
+        );
+        // flat 1 NICK.
+        assert_eq!(
+            gr.get_individual("I2").unwrap().nickname.as_deref(),
+            Some("Bobby")
+        );
+        // no NICK.
+        assert_eq!(gr.get_individual("I3").unwrap().nickname, None);
     }
 
     #[test]

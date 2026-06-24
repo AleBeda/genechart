@@ -244,6 +244,7 @@ direction = "descendants"
 
 [show]
 generation_num = true
+nickname = false        # format individuals who have a GEDCOM NICK with format.individual_nickname
 sex = true
 birth = true
 death = true
@@ -268,6 +269,7 @@ downsample = 72.0       # max DPI for embedded images; 0.0 = no downsampling
 
 [format]
 individual = "{firstname} {lastname} {sex}"
+individual_nickname = "{firstname} \"{nickname}\" {lastname} {sex}"  # used when show.nickname and a NICK exists
 birth = "* {date:%d %b %Y}, {location}"
 death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"
@@ -371,6 +373,8 @@ copyright = ""
 ```
 
 Format strings use `{key}` placeholders: `{firstname}`, `{lastname}`, `{sex}`, `{date}`, `{location}`. See [Date Formatting](#date-formatting) below for date pattern syntax.
+
+**Nicknames:** when `show.nickname = true`, any individual with a non-empty GEDCOM `NICK` (read from `2 NICK` under the `NAME` line, or a flat `1 NICK`) is rendered with `format.individual_nickname` instead of `format.individual`. That template additionally supports the `{nickname}` placeholder. Individuals without a nickname are always formatted with `format.individual`.
 
 ### Colors and transparency
 

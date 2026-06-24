@@ -277,7 +277,15 @@ pub fn format_name<G>(indi: &Individual<G>, prefs: &Prefs) -> String {
             String::new()
         },
     );
-    strfmt::strfmt(&prefs.format.individual, &vars)
+    // Nickname: expose {nickname} and, when enabled and present, format with the dedicated template.
+    let nick = indi.nickname.as_deref().map(str::trim).unwrap_or("");
+    vars.insert("nickname".into(), nick.to_string());
+    let template = if prefs.show.nickname && !nick.is_empty() {
+        &prefs.format.individual_nickname
+    } else {
+        &prefs.format.individual
+    };
+    strfmt::strfmt(template, &vars)
         .unwrap_or_else(|_| {
             format!(
                 "{} {}",
@@ -531,10 +539,33 @@ mod tests {
             alt_name: None,
             relig_name: None,
             living: None,
+            nickname: None,
             notes: vec![],
             in_scope: true,
             geo: None,
         }
+    }
+
+    #[test]
+    fn nickname_template_selection() {
+        let mut prefs = Prefs::default();
+        prefs.format.individual = "{firstname} {lastname}".into();
+        prefs.format.individual_nickname = "{firstname} \"{nickname}\" {lastname}".into();
+
+        let mut indi = make_test_individual("Robert", "Smith", 'M');
+        indi.nickname = Some("Bob".into());
+
+        // show.nickname = false → plain template, no nickname.
+        prefs.show.nickname = false;
+        assert_eq!(format_name(&indi, &prefs), "Robert Smith");
+
+        // show.nickname = true + nickname present → nickname template.
+        prefs.show.nickname = true;
+        assert_eq!(format_name(&indi, &prefs), "Robert \"Bob\" Smith");
+
+        // show.nickname = true but no nickname → plain template.
+        let plain = make_test_individual("Jane", "Doe", 'F');
+        assert_eq!(format_name(&plain, &prefs), "Jane Doe");
     }
 
     #[test]

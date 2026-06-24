@@ -155,6 +155,9 @@ pub fn merge_into(
             if mi.living.is_none() {
                 mi.living = fi.living;
             }
+            if mi.nickname.is_none() {
+                mi.nickname = fi.nickname;
+            }
             // Union family links (deduplicated)
             for fid in fi.fams {
                 if !mi.fams.contains(&fid) {
@@ -219,6 +222,7 @@ mod tests {
             alt_name: None,
             relig_name: None,
             living: None,
+            nickname: None,
             notes: Vec::new(),
             in_scope: false,
             geo: None,

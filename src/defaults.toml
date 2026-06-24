@@ -14,6 +14,7 @@ direction = "descendants" # Valid values: "desc[endants]", "anc[estors]" = "ped[
 
 [show]
 generation_num = true
+nickname = false
 sex = true
 birth = true
 death = true
@@ -27,6 +28,7 @@ photo = false # Show photo in the top portion of the box (boxes layout only)
 
 [format]
 individual = "{firstname} {lastname} {sex}"
+individual_nickname = "{firstname} “{nickname}” {lastname} {sex}"
 birth = "* {date:%d %b %Y}, {location}"
 death = "× {date:%d %b %Y}, {location}"
 marriage = "⚭ {date:%d %b %Y}, {location}"

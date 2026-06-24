@@ -31,6 +31,7 @@ pub struct Individual<G = ()> {
     pub alt_name: Option<String>, // alternate name (tag configured via custom.gedcom.tags.alt_name)
     pub relig_name: Option<String>, // religious/transliterated name (tag via custom.gedcom.tags.relig_name)
     pub living: Option<bool>,       // living flag (tag via custom.gedcom.tags.living)
+    pub nickname: Option<String>,   // nickname (standard GEDCOM NICK tag, level 1 or 2 under NAME)
     pub notes: Vec<String>,
     pub in_scope: bool,
     pub geo: Option<G>,
