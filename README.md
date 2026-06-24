@@ -101,6 +101,8 @@ genechart family.ged -r I1 --type boxed_couples -o chart.svg
 
 Configuration: `[layout.boxed_couples]` — `box_width`, `box_height`, `gap_width`, `gap_height`, `box_width_2_spouses`.
 
+**Name autocompress:** in the `boxes` and `boxed_couples` layouts, a name too wide for its box is compressed horizontally (narrower glyphs, same height) down to `output.style.spacing.names_autocompress` (default `0.85`; set `>= 1.0` to disable). It shrinks only as much as needed to fit; if even the floor isn't enough it shrinks to the floor and overflows anyway. With `diagnostics.info` enabled, each compressed name logs its id, name, and effective percentage; with `diagnostics.warnings` enabled, any name that still doesn't fit logs an overflow percentage.
+
 **Realistic tree branches (experimental, work in progress):** the `boxed_couples` layout
 can optionally replace its straight connectors with organic-looking tree branches. This
 feature is still rough and its output is not yet satisfactory — see
@@ -342,6 +344,8 @@ background = 0xFFF      # e.g. 0xFFF8 → ~53%-opaque white (4-digit hex = RGBA)
 [output.style.spacing]
 title = 12.0         # Vertical space (canvas units) between the title text and the chart
 copyright = 12.0     # Vertical space (canvas units) between the copyright text and the chart
+names_autocompress = 0.85  # boxes/boxed_couples: compress over-long names horizontally to
+                           # at most this X-fraction so they fit the box; >= 1.0 disables it
 
 [output.style.fonts]
 names = "Georgia 14"

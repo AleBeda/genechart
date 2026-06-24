@@ -19,6 +19,9 @@ in the git tags `v0.1.0` … `v0.7.0`.
   alpha); it previously used a 3-digit-only converter, unlike every other layout.
 
 ### Added
+- `output.style.spacing.names_autocompress` (default `0.85`): in the `boxes` and
+  `boxed_couples` layouts, names too wide for their box are compressed horizontally to fit
+  (down to this fraction; `>= 1.0` disables it), with optional `info`/`warning` diagnostics.
 - `output.style.text.gen_numbers` and `output.style.text.notes` color preferences (default
   opaque black `0x000`) for the generation-number prefix and GEDCOM note text.
 - `output.style.text.title`, `…copyright`, `…row_rule`, `…note_bar`, and `…note_link` color

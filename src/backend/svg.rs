@@ -14,6 +14,10 @@ const MARGIN: f64 = 20.0;
 /// Lists only symbol fonts so usvg doesn't try the primary Latin font first.
 const SYMBOL_FONT_FAMILY: &str = "'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif";
 
+/// Clearance (canvas units, per side) a name must keep from its box edges before it is
+/// considered to overflow / be eligible for autocompression.
+const NAME_CLEARANCE: f64 = 2.0;
+
 // ── Low-level SVG primitives ──────────────────────────────────────────────────
 
 fn xml_escape(s: &str) -> String {
@@ -242,6 +246,33 @@ fn render_mixed_text(
         ));
         cur_x += w;
     }
+}
+
+/// Total rendered width of `text`, measured the same way `render_mixed_text` lays it out:
+/// exact glyph metrics for Latin runs, a char-count estimate for symbol runs (≥ U+2000).
+fn mixed_text_width(text: &str, primary_family: &str, font_size: f64, is_bold: bool) -> f64 {
+    if text.is_empty() {
+        return 0.0;
+    }
+    let cw = font_size * CHAR_WIDTH_RATIO;
+    let base_font = primary_family
+        .split(',')
+        .next()
+        .unwrap_or(primary_family)
+        .trim()
+        .trim_matches('\'')
+        .trim_matches('"');
+    split_at_u2000(text)
+        .iter()
+        .map(|(seg, is_sym)| {
+            if *is_sym {
+                seg.chars().count() as f64 * cw
+            } else {
+                font_metrics::measure_text_w(seg, base_font, font_size, is_bold)
+                    .unwrap_or_else(|| seg.chars().count() as f64 * cw)
+            }
+        })
+        .sum()
 }
 
 /// Like `render_mixed_text` but for text centered at x=0 inside a rotated `<g>`.
@@ -496,6 +527,9 @@ struct BcSvgCtx<'a> {
     conn_width: f64,
     prefs: &'a Prefs,
     skip_connectors: bool,
+    /// True for the `boxes` / `boxed_couples` layouts: name text is fit-checked against its box
+    /// (and autocompressed per `output.style.spacing.names_autocompress`).
+    box_name_autocompress: bool,
 }
 
 fn render_fancy_highlight_rect(
@@ -553,7 +587,12 @@ fn render_fancy_conn_group(
 }
 
 /// Recursively render a `Primitive::Group` and its children to SVG.
-fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mut String) {
+fn render_bc_primitive(
+    p: &crate::scene::Primitive,
+    ctx: &BcSvgCtx<'_>,
+    out: &mut String,
+    current_id: &str,
+) {
     use crate::scene::Primitive;
     match p {
         Primitive::Box(b) => {
@@ -602,6 +641,48 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 };
                 (t.content.clone(), ax)
             };
+
+            // Name autocompress (boxes / boxed_couples only): horizontally shrink a name that
+            // does not fit its box, and/or warn that it overflows. `bbox.w` is the box/section
+            // width available to the name.
+            let is_name = matches!(
+                semantic_attr(&t.attrs),
+                TextAttr::IndividualName | TextAttr::SpouseName
+            );
+            let mut x_scale = 1.0_f64;
+            if ctx.box_name_autocompress && is_name {
+                let available = t.bbox.w - 2.0 * NAME_CLEARANCE;
+                let measured =
+                    mixed_text_width(&content, &font_family, font_size, weight == "bold");
+                let pref = ctx.prefs.output.style.spacing.names_autocompress;
+                if available > 0.0 && measured > available && pref < 1.0 {
+                    x_scale = (available / measured).max(pref.clamp(0.05, 1.0));
+                }
+                let person_id = current_id.strip_suffix("-name").unwrap_or(current_id);
+                if x_scale < 1.0 && ctx.prefs.diagnostics.info {
+                    eprintln!(
+                        "info: name compressed to {pct}% to fit box: {person_id} \"{content}\"",
+                        pct = (x_scale * 100.0).round() as i64
+                    );
+                }
+                let rendered = measured * x_scale;
+                if available > 0.0 && rendered > available + 0.5 && ctx.prefs.diagnostics.warnings {
+                    let over = (((rendered / available) - 1.0) * 100.0).round().max(1.0) as i64;
+                    eprintln!("warning: name {over}% too wide for box: {person_id} \"{content}\"");
+                }
+            }
+
+            // Wrap a compressed name in a group that scales it horizontally about its anchor
+            // (box centre for centred names), so the Y size and the anchor position are preserved.
+            let scaled = x_scale < 1.0;
+            if scaled {
+                out.push_str(&format!(
+                    "  <g transform=\"translate({ax:.3},0) scale({sx:.4},1) translate({nax:.3},0)\">\n",
+                    ax = anchor_x,
+                    sx = x_scale,
+                    nax = -anchor_x,
+                ));
+            }
             render_mixed_text(
                 out,
                 anchor_x,
@@ -616,6 +697,9 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 &t.align,
                 &class_for_attrs(&t.attrs),
             );
+            if scaled {
+                out.push_str("  </g>\n");
+            }
         }
         Primitive::Connector(c) => {
             if ctx.skip_connectors || c.child_points.is_empty() {
@@ -680,8 +764,15 @@ fn render_bc_primitive(p: &crate::scene::Primitive, ctx: &BcSvgCtx<'_>, out: &mu
                 format!(" id=\"{}\"", xml_escape(&g.id))
             };
             out.push_str(&format!("<g{id_attr}>\n"));
+            // Carry the nearest non-empty group id down to descendants so name text can be
+            // attributed to a person (used by name autocompress diagnostics).
+            let child_id = if g.id.is_empty() {
+                current_id
+            } else {
+                g.id.as_str()
+            };
             for child in &g.children {
-                render_bc_primitive(child, ctx, out);
+                render_bc_primitive(child, ctx, out, child_id);
             }
             out.push_str("</g>\n");
         }
@@ -929,6 +1020,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
         conn_width,
         prefs,
         skip_connectors: realistic_tree_active,
+        box_name_autocompress: output.is_boxes() || output.is_boxed_couples(),
     };
 
     // SVG dimensions
@@ -1171,7 +1263,7 @@ fn render_scene(output: &LayoutOutput, prefs: &Prefs) -> String {
                 ));
             }
             _ => {
-                render_bc_primitive(prim, &ctx, &mut out);
+                render_bc_primitive(prim, &ctx, &mut out, "");
             }
         }
     }
@@ -1791,6 +1883,45 @@ mod tests {
         assert!(out.contains("<rect "), "missing <rect> for boxes");
         assert!(out.contains("<line "), "missing <line> for connectors");
         assert!(out.contains("viewBox="), "missing viewBox");
+    }
+
+    #[test]
+    fn test_name_autocompress() {
+        fn layout(ged: &str, prefs: &Prefs) -> LayoutOutput {
+            let mut g = parse_str(ged).unwrap();
+            compute_scope(&mut g, Some("I1"), "descendants", Some(1));
+            run_layout(&g, prefs).unwrap()
+        }
+        let long = "0 HEAD\n1 GEDC\n2 VERS 5.5.1\n0 @I1@ INDI\n\
+            1 NAME Bartholomew Maximilian /Featherstonehaugh-Cholmondeley/\n1 SEX M\n0 TRLR\n";
+        let short = "0 HEAD\n1 GEDC\n2 VERS 5.5.1\n0 @I1@ INDI\n1 NAME Jo /Ng/\n1 SEX M\n0 TRLR\n";
+
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.layout.layout_type = "boxed_couples".into();
+
+        // Default (0.85): a too-long name is wrapped in a horizontal-scale group.
+        let out = render_to_string(&layout(long, &prefs), &prefs).unwrap();
+        assert!(
+            out.contains("scale(0."),
+            "long name should be compressed: {out}"
+        );
+        assert!(out.contains("class=\"indi_name\""));
+
+        // A short name is not compressed.
+        let out = render_to_string(&layout(short, &prefs), &prefs).unwrap();
+        assert!(
+            !out.contains("scale(0."),
+            "short name must not be compressed: {out}"
+        );
+
+        // names_autocompress >= 1.0 disables compression even when the name overflows.
+        prefs.output.style.spacing.names_autocompress = 1.0;
+        let out = render_to_string(&layout(long, &prefs), &prefs).unwrap();
+        assert!(
+            !out.contains("scale(0."),
+            "autocompress disabled must not compress: {out}"
+        );
     }
 
     #[test]

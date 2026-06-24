@@ -162,6 +162,9 @@ id = "Courier 8"
 [output.style.spacing]
 title = 12.0
 copyright = 12.0
+# Names too wide for their box (boxes / boxed_couples layouts) are compressed
+# horizontally (X only) down to this fraction. >= 1.0 disables compression.
+names_autocompress = 0.85
 
 [output.style.realistic_tree]
 # Replaces straight connector lines with organic tree branches (boxed_couples layout only;

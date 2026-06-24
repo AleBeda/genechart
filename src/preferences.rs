@@ -495,6 +495,8 @@ pub struct SpacingPrefs {
     pub title: f64,
     #[serde(default, deserialize_with = "de_f64")]
     pub copyright: f64,
+    #[serde(default, deserialize_with = "de_f64")]
+    pub names_autocompress: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -883,6 +885,7 @@ mod tests {
         assert_eq!(prefs.output.style.text.row_rule, 0xCCC);
         assert_eq!(prefs.output.style.text.note_bar, 0xCCC);
         assert_eq!(prefs.output.style.text.note_link, 0x06C);
+        assert_eq!(prefs.output.style.spacing.names_autocompress, 0.85);
         assert!(prefs.diagnostics.errors);
         assert_eq!(prefs.output.style.fonts.id, "Courier 8");
         assert_eq!(prefs.output.style.wedges.width, 0.5);
