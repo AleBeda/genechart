@@ -10,6 +10,8 @@ in the git tags `v0.1.0` … `v0.7.0`.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-25
+
 ### Fixed
 - Single-spouse parents in the `boxes` and `boxed_couples` layouts are now centered on the
   geometric midpoint of their first and last child, instead of over the median child. This
@@ -69,5 +71,6 @@ First public release. Capabilities at this point:
 - **Experimental:** a Lua parse-time plugin system behind the optional `lua` Cargo
   feature (default-off).
 
-[Unreleased]: https://github.com/AleBeda/genechart/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/AleBeda/genechart/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/AleBeda/genechart/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AleBeda/genechart/releases/tag/v0.7.0
