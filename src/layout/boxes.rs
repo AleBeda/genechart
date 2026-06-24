@@ -1170,12 +1170,19 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
             0.0
         };
 
+        // Excluded stub: render the message in place of the name and suppress data.
+        let excl = crate::layout::common::exclude_stub_msg(bare_id, prefs);
+
         // Name (wrapped in name sub-group)
         let name_baseline = box_display_top + actual_photo_h + spacing.name_above + font_size;
+        let (name_content, name_attr) = match &excl {
+            Some(msg) => (msg.clone(), TextAttr::ExcludeMsg),
+            None => (format_name(ind, prefs), TextAttr::IndividualName),
+        };
         children.push(Primitive::Group(GroupPrimitive {
             id: format!("{id_trimmed}-name"),
             children: vec![Primitive::Text(TextPrimitive {
-                content: format_name(ind, prefs),
+                content: name_content,
                 bbox: Rect {
                     x: cx_display - box_w / 2.0,
                     y: name_baseline - font_size,
@@ -1183,12 +1190,12 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                     h: font_size,
                 },
                 align: TextAlign::Center,
-                attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+                attrs: crate::scene::label_attrs(name_attr, is_highlighted),
             })],
         }));
 
         // ID (if show.id)
-        if prefs.show.id {
+        if prefs.show.id && excl.is_none() {
             children.push(Primitive::Text(TextPrimitive {
                 content: id_trimmed.to_string(),
                 bbox: Rect {
@@ -1204,7 +1211,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
         // Birth
         let mut y_pos = name_baseline;
-        if prefs.show.birth {
+        if prefs.show.birth && excl.is_none() {
             y_pos += spacing.date_above + date_font_size;
             let content = ind
                 .birth
@@ -1232,7 +1239,7 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
         }
 
         // Death
-        if prefs.show.death {
+        if prefs.show.death && excl.is_none() {
             y_pos += spacing.date_above + date_font_size;
             let content = ind
                 .death
@@ -1390,12 +1397,10 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
 
         // ── Descendants: emit spouse boxes and connectors ────────────────────────
         for (ind_id, geo) in &placed {
-            // Skip spouses of the last generation unless opted in
-            if let Some(last_gen) = max_gen_placed {
-                if geo.generation == last_gen {
-                    continue;
-                }
-            }
+            // Last-generation spouses are hidden unless opted in — but an excluded stub is
+            // always shown (a "branch cut" marker), so gate per-spouse rather than skipping
+            // the whole individual.
+            let at_last_gen = max_gen_placed.is_some_and(|last_gen| geo.generation == last_gen);
 
             let ind = &genrep.individuals[*ind_id];
             let sorted_fams = sort_families_by_date(ind, genrep);
@@ -1410,10 +1415,14 @@ pub fn emit_scene(genrep: &Genrep<BoxesGeo>, prefs: &Prefs) -> crate::scene::Sce
                     } else {
                         fam.husband_id.clone()?
                     };
-                    if genrep.get_individual(&sp_id).is_some_and(|i| i.in_scope) {
-                        Some((k, sp_id))
-                    } else {
+                    let is_excl_stub =
+                        crate::layout::common::exclude_stub_msg(&sp_id, prefs).is_some();
+                    if (at_last_gen && !is_excl_stub)
+                        || !genrep.get_individual(&sp_id).is_some_and(|i| i.in_scope)
+                    {
                         None
+                    } else {
+                        Some((k, sp_id))
                     }
                 })
                 .collect();

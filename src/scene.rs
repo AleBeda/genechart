@@ -58,6 +58,8 @@ pub enum TextAttr {
     Highlighted,
     /// A GEDCOM NOTE line.
     NoteText,
+    /// A substitution message shown in place of an excluded individual's name.
+    ExcludeMsg,
 }
 
 /// Build a `Vec<TextAttr>` with `base` plus `Highlighted` when `highlighted` is true.

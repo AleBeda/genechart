@@ -25,6 +25,11 @@ last_gen_spouses = false # Show spouses of the last generation (only applies to 
 id = false # Show GEDCOM IDs of individuals and families (without the "@" chars, e.g. "I1", "F2") for debugging purposes
 duplicated_individual = false # Show duplicated individuals at each position (fancy ancestors only); connects instances with a dashed line
 photo = false # Show photo in the top portion of the box (boxes layout only)
+# Exclude individuals (and the branches reachable only through them) from the chart.
+# Each entry: { id = "I123", msg = "see separate tree" }. A non-empty msg is shown in
+# place of the name (styled via output.style.{text,fonts}.exclude_msg); an empty msg
+# omits the individual entirely. Nodes also reachable via a non-excluded path are kept.
+exclude = []
 
 [format]
 individual = "{firstname} {lastname} {sex}"
@@ -144,6 +149,7 @@ copyright = 0x000    # copyright notice text
 row_rule = 0xCCC     # row-rule underlines (simple layout dot-leaders)
 note_bar = 0xCCC     # vertical bar beside a NOTE block
 note_link = 0x06C    # <a href> links in notes (expands to #0066CC)
+exclude_msg = 0x00D  # substitution message for excluded individuals (see [show] exclude)
 
 [output.style.text.highlights]
 color = 0x00D
@@ -160,6 +166,7 @@ spouse = "regular"
 title = "Georgia 24"
 copyright = "Arial 8"
 id = "Courier 8"
+exclude_msg = "Arial 10" # font for excluded-individual substitution messages
 
 [output.style.spacing]
 title = 12.0

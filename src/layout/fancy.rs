@@ -536,11 +536,18 @@ fn build_ind_text_lines(
     max_x: &mut f64,
     max_y: &mut f64,
 ) -> IndTextResult {
-    let base_name = format_name(ind, prefs);
+    // Excluded stub: render the message in place of the name and suppress data.
+    let excl = crate::layout::common::exclude_stub_msg(&ind.id, prefs);
+    let base_name = excl.clone().unwrap_or_else(|| format_name(ind, prefs));
     let name_text = if prefs.show.generation_num {
         format!("{}. {}", geo.generation, base_name)
     } else {
         base_name.clone()
+    };
+    let name_attr = if excl.is_some() {
+        TextAttr::ExcludeMsg
+    } else {
+        TextAttr::IndividualName
     };
 
     let (name_family, _) = parsed_font(&prefs.output.style.fonts.names);
@@ -600,9 +607,9 @@ fn build_ind_text_lines(
         x: geo.x,
         y: geo.y,
         text: name_text.clone(),
-        attrs: label_attrs(TextAttr::IndividualName, highlighted),
+        attrs: label_attrs(name_attr, highlighted),
     });
-    if prefs.show.id {
+    if prefs.show.id && excl.is_none() {
         let ind_id_str = ind
             .id
             .trim_start_matches('@')
@@ -616,7 +623,7 @@ fn build_ind_text_lines(
         });
     }
     let mut y_off = n_lh;
-    if prefs.show.birth {
+    if prefs.show.birth && excl.is_none() {
         if let Some(ev) = &ind.birth {
             if let Some(s) = format_event(
                 &prefs.format.birth,
@@ -634,7 +641,7 @@ fn build_ind_text_lines(
         }
         y_off += d_lh;
     }
-    if prefs.show.death {
+    if prefs.show.death && excl.is_none() {
         if let Some(ev) = &ind.death {
             if let Some(s) = format_event(
                 &prefs.format.death,
@@ -1023,7 +1030,12 @@ fn emit_subtree(
         };
 
         // ── Spouse text ───────────────────────────────────────────────────────
-        let skip_spouse = geo.generation == max_gen && !prefs.show.last_gen_spouses;
+        // Last-generation spouses are hidden unless opted in — except an excluded stub, which is
+        // always shown as a "branch cut" marker.
+        let skip_spouse = geo.generation == max_gen
+            && !prefs.show.last_gen_spouses
+            && spouse_id
+                .is_none_or(|sid| crate::layout::common::exclude_stub_msg(sid, prefs).is_none());
         let mut spouse_name_w: f64 = 0.0;
         let mut spouse_y: Option<f64> = None;
 
@@ -1033,7 +1045,14 @@ fn emit_subtree(
                     if sp.in_scope {
                         if let Some(sg) = sp.geo.as_ref() {
                             let sp_highlighted = highlighted_ids.contains(&sp.id);
-                            let sp_name = format_name(sp, prefs);
+                            // Excluded stub: message in place of the spouse name; suppress data.
+                            let sp_excl = crate::layout::common::exclude_stub_msg(&sp.id, prefs);
+                            let sp_name = sp_excl.clone().unwrap_or_else(|| format_name(sp, prefs));
+                            let sp_name_attr = if sp_excl.is_some() {
+                                TextAttr::ExcludeMsg
+                            } else {
+                                TextAttr::SpouseName
+                            };
                             let sp_bold =
                                 matches!(prefs.output.style.fonts.spouse.trim(), "bold" | "bolder");
                             spouse_name_w = crate::backend::font_metrics::measure_text_w(
@@ -1053,9 +1072,9 @@ fn emit_subtree(
                                 x: sp_name_x,
                                 y: sg.y,
                                 text: sp_name.clone(),
-                                attrs: label_attrs(TextAttr::SpouseName, sp_highlighted),
+                                attrs: label_attrs(sp_name_attr, sp_highlighted),
                             });
-                            if prefs.show.id {
+                            if prefs.show.id && sp_excl.is_none() {
                                 let sp_id_str = sp
                                     .id
                                     .trim_start_matches('@')
@@ -1070,7 +1089,7 @@ fn emit_subtree(
                             }
 
                             let mut sy_off = n_lh;
-                            if prefs.show.birth {
+                            if prefs.show.birth && sp_excl.is_none() {
                                 if let Some(ev) = &sp.birth {
                                     if let Some(s) = format_event(
                                         &prefs.format.birth,
@@ -1088,7 +1107,7 @@ fn emit_subtree(
                                 }
                                 sy_off += d_lh;
                             }
-                            if prefs.show.death {
+                            if prefs.show.death && sp_excl.is_none() {
                                 if let Some(ev) = &sp.death {
                                     if let Some(s) = format_event(
                                         &prefs.format.death,
@@ -1106,7 +1125,9 @@ fn emit_subtree(
                                 }
                                 sy_off += d_lh;
                             }
-                            let marriage_text: Option<String> = if prefs.show.marriage {
+                            let marriage_text: Option<String> = if prefs.show.marriage
+                                && sp_excl.is_none()
+                            {
                                 fam.marriage.as_ref().and_then(|ev| {
                                     format_event_extra(
                                         &prefs.format.marriage,
@@ -1127,7 +1148,7 @@ fn emit_subtree(
                                     attrs: vec![TextAttr::MarriageData],
                                 });
                             }
-                            if prefs.show.id && prefs.show.marriage {
+                            if prefs.show.id && prefs.show.marriage && sp_excl.is_none() {
                                 let fam_id_str = fam_id
                                     .trim_start_matches('@')
                                     .trim_end_matches('@')

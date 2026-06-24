@@ -443,6 +443,7 @@ fn class_for_attrs(attrs: &[TextAttr]) -> String {
             TextAttr::IndividualId => classes.push("indi_id"),
             TextAttr::GenerationNum => classes.push("gen_num"),
             TextAttr::NoteText => classes.push("note_text"),
+            TextAttr::ExcludeMsg => classes.push("exclude_msg"),
             TextAttr::Highlighted => classes.push("highlighted"),
         }
     }
@@ -485,6 +486,11 @@ fn font_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> (String, f64) {
             };
             (fam, sz)
         }
+        TextAttr::ExcludeMsg => {
+            let (fam, sz) = parsed_font(&prefs.output.style.fonts.exclude_msg);
+            let sz = if sz <= 0.0 { FONT_SIZE } else { sz };
+            (with_symbol_fallback(&fam), sz)
+        }
         _ => (with_symbol_fallback("monospace"), FONT_SIZE),
     }
 }
@@ -502,6 +508,7 @@ fn color_for_attr(attrs: &[TextAttr], prefs: &Prefs) -> String {
         TextAttr::GenerationNum => pick(text.gen_numbers),
         TextAttr::NoteText => pick(text.notes),
         TextAttr::IndividualId => hex_color(text.id),
+        TextAttr::ExcludeMsg => pick(text.exclude_msg),
         _ => "black".to_string(),
     }
 }
@@ -1674,6 +1681,15 @@ mod tests {
     }
 
     #[test]
+    fn exclude_msg_font_uses_pref() {
+        let mut prefs = Prefs::default();
+        prefs.output.style.fonts.exclude_msg = "Verdana 9".to_string();
+        let (fam, sz) = font_for_attr(&[TextAttr::ExcludeMsg], &prefs);
+        assert!(fam.starts_with("Verdana"), "got {fam}");
+        assert_eq!(sz, 9.0);
+    }
+
+    #[test]
     fn test_color_for_attr() {
         let mut prefs = Prefs::default();
         prefs.output.style.text.names = 0xF00; // 3-digit
@@ -1696,6 +1712,8 @@ mod tests {
         );
         assert_eq!(color_for_attr(&[TextAttr::NoteText], &prefs), "#1234ABCD");
         assert_eq!(color_for_attr(&[TextAttr::IndividualId], &prefs), "#EE0000");
+        prefs.output.style.text.exclude_msg = 0x0AB; // 3-digit → #00AABB
+        assert_eq!(color_for_attr(&[TextAttr::ExcludeMsg], &prefs), "#00AABB");
         // Highlighted wins over the per-kind color.
         assert_eq!(
             color_for_attr(&[TextAttr::IndividualName, TextAttr::Highlighted], &prefs),

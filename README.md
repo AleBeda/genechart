@@ -255,6 +255,7 @@ last_gen_spouses = false
 id = false
 duplicated_individual = false
 photo = false
+exclude = []            # prune branches; see "Excluding branches" below
 
 [photos]
 directory = "photos"    # relative to GEDCOM file
@@ -548,6 +549,36 @@ genechart maternal.ged -r I1 \
   --merge paternal.ged mat_to_pat_aliases.txt \
   --dir ancestors --type fan -o chart.svg
 ```
+
+## Excluding branches
+
+`show.exclude` prunes parts of the tree — the dual of merging — to drop uninteresting or
+unreliable branches, or to split a large tree into manageable charts. List the individuals to
+exclude by ID, each with an optional substitution message:
+
+```toml
+[show]
+exclude = [
+  { id = "I123", msg = "see separate tree for the Doe family" },
+  { id = "I456", msg = "" },   # empty message: omit this individual entirely
+]
+```
+
+Tree traversal stops at each excluded individual:
+
+- **descendants** — excluding a *blood descendant* removes its spouse(s) and all of its
+  descendants; excluding a *spouse* removes that marriage's children and all of their
+  descendants (the blood partner stays);
+- **ancestors** — the excluded individual's ancestors are removed;
+
+in all cases, anything also reachable through a *non-excluded* path is kept (reconvergence, e.g.
+a descendant reached via another line of a cousin marriage, or a shared ancestor in a pedigree
+collapse).
+
+A **non-empty** `msg` is shown in place of the individual's name (with no birth/death/marriage
+data) as a visual marker that part of the tree is missing; it is styled with
+`output.style.text.exclude_msg` (color) and `output.style.fonts.exclude_msg` (font) in every
+layout. An **empty** `msg` omits the individual completely (no box, row, or connector).
 
 ## Photos
 

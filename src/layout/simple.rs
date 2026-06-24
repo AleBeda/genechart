@@ -623,7 +623,11 @@ impl Layout for SimpleLayout {
                 .map(|g| g.generation)
                 .max()
                 .unwrap_or(0);
-            geo_map.retain(|_, g| !(g.is_spouse && g.generation == max_non_spouse_gen));
+            // Hide last-generation spouses, but always keep an excluded stub (a "branch cut" marker).
+            geo_map.retain(|id, g| {
+                !(g.is_spouse && g.generation == max_non_spouse_gen)
+                    || crate::layout::common::exclude_stub_msg(id, prefs).is_some()
+            });
         }
 
         let mut out_individuals = HashMap::new();
@@ -833,10 +837,12 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         let x_name = id_col_px + geo.indent as f64 * indent_px + gen_prefix_px(geo.generation);
         let gpx = gen_prefix_px(geo.generation);
         let is_highlighted = highlighted_ids.contains(*id);
+        // Excluded stub: render the message in place of the name and suppress all data.
+        let excl = crate::layout::common::exclude_stub_msg(id, prefs);
 
         // Individual ID — emitted first so the text backend writes it at col 0
         // before any other content fills the line.
-        if prefs.show.id {
+        if prefs.show.id && excl.is_none() {
             let id_str = id.to_string();
             let id_w = id_str.chars().count() as f64 * char_width_px;
             primitives.push(Primitive::Text(TextPrimitive {
@@ -868,17 +874,24 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
             }));
         }
 
-        // Individual / spouse name
-        let name = format_name(indi, prefs);
-        let name_w = name.chars().count() as f64 * char_width_px;
-        let name_attrs = crate::scene::label_attrs(
-            if geo.is_spouse {
+        // Individual / spouse name (or the substitution message for an excluded stub)
+        let (name, name_attrs) = if let Some(msg) = &excl {
+            (
+                msg.clone(),
+                crate::scene::label_attrs(TextAttr::ExcludeMsg, is_highlighted),
+            )
+        } else {
+            let base = if geo.is_spouse {
                 TextAttr::SpouseName
             } else {
                 TextAttr::IndividualName
-            },
-            is_highlighted,
-        );
+            };
+            (
+                format_name(indi, prefs),
+                crate::scene::label_attrs(base, is_highlighted),
+            )
+        };
+        let name_w = name.chars().count() as f64 * char_width_px;
         primitives.push(Primitive::Text(TextPrimitive {
             content: name,
             bbox: Rect {
@@ -892,7 +905,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }));
 
         // Birth data
-        if prefs.show.birth {
+        if prefs.show.birth && excl.is_none() {
             if let Some(e) = &indi.birth {
                 if let Some(s) = format_event(
                     &prefs.format.birth,
@@ -917,7 +930,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }
 
         // Death data
-        if prefs.show.death {
+        if prefs.show.death && excl.is_none() {
             if let Some(e) = &indi.death {
                 if let Some(s) = format_event(
                     &prefs.format.death,
@@ -942,7 +955,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }
 
         // Marriage data (spouse only)
-        if prefs.show.marriage && geo.is_spouse {
+        if prefs.show.marriage && geo.is_spouse && excl.is_none() {
             if let Some(fam) = find_marriage_in_genrep(id, genrep) {
                 if let Some(s) = fam.marriage.as_ref().and_then(|e| {
                     format_event_extra(
@@ -970,7 +983,7 @@ pub fn emit_scene(genrep: &Genrep<SimpleGeo>, prefs: &Prefs) -> crate::scene::Sc
         }
 
         // ── Note lines ────────────────────────────────────────────────────────
-        if prefs.show.notes && !indi.notes.is_empty() {
+        if prefs.show.notes && excl.is_none() && !indi.notes.is_empty() {
             let x_note = id_col_px + geo.indent as f64 * indent_px + 4.0 * char_width_px;
             // Vertical bar centered on the first character of the name (SVG backend only).
             let bar_x = id_col_px
@@ -1222,6 +1235,125 @@ mod tests {
         assert_eq!(i3_geo.indent, 1);
         assert_eq!(i3_geo.generation, 2);
         assert!(!i3_geo.is_spouse);
+    }
+
+    #[test]
+    fn exclude_stub_emits_message_no_data() {
+        use crate::parser::compute_scope_opts;
+        use crate::preferences::ExcludeEntry;
+        use crate::scene::{Primitive, TextAttr, TextPrimitive};
+
+        const GED: &str = "0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Mom /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Hidden /X/\n1 BIRT\n2 DATE 1 JAN 1900\n1 FAMC @F1@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n0 TRLR\n";
+        let mut genrep = parse_str(GED).unwrap();
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.show.exclude = vec![ExcludeEntry {
+            id: "I3".into(),
+            msg: "GONE".into(),
+        }];
+        let map: std::collections::HashMap<String, String> = prefs
+            .show
+            .exclude
+            .iter()
+            .map(|e| (e.id.clone(), e.msg.clone()))
+            .collect();
+        compute_scope_opts(&mut genrep, Some("I1"), "descendants", None, false, &map);
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        fn collect<'a>(prims: &'a [Primitive], out: &mut Vec<&'a TextPrimitive>) {
+            for p in prims {
+                match p {
+                    Primitive::Text(t) => out.push(t),
+                    Primitive::Group(g) => collect(&g.children, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut texts = Vec::new();
+        collect(&scene.primitives, &mut texts);
+
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.content == "GONE" && t.attrs.contains(&TextAttr::ExcludeMsg)),
+            "exclude message not emitted with ExcludeMsg attr"
+        );
+        assert!(
+            !texts.iter().any(|t| t.content.contains("Hidden")),
+            "excluded individual's real name leaked"
+        );
+        assert!(
+            !texts.iter().any(|t| t.attrs.contains(&TextAttr::BirthData)),
+            "birth data of excluded individual not suppressed"
+        );
+    }
+
+    #[test]
+    fn excluded_spouse_stub_shown_at_last_generation() {
+        // I1+I2 → I3 ; I3+S3 → I5. Excluding S3 prunes I5, making I3 the deepest generation;
+        // the excluded stub spouse must still be shown (exempt from last-gen suppression).
+        use crate::parser::compute_scope_opts;
+        use crate::preferences::ExcludeEntry;
+        use crate::scene::{Primitive, TextAttr, TextPrimitive};
+
+        const GED: &str = "0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Mate /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Branch /X/\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME Spouse3 /X/\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME Hidden /X/\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n0 TRLR\n";
+        let mut genrep = parse_str(GED).unwrap();
+        let mut prefs = Prefs::default();
+        prefs.scope.root = "I1".into();
+        prefs.scope.direction = "descendants".into();
+        prefs.show.exclude = vec![ExcludeEntry {
+            id: "S3".into(),
+            msg: "private".into(),
+        }];
+        let map: std::collections::HashMap<String, String> = prefs
+            .show
+            .exclude
+            .iter()
+            .map(|e| (e.id.clone(), e.msg.clone()))
+            .collect();
+        compute_scope_opts(&mut genrep, Some("I1"), "descendants", None, false, &map);
+        let result = SimpleLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        fn collect<'a>(prims: &'a [Primitive], out: &mut Vec<&'a TextPrimitive>) {
+            for p in prims {
+                match p {
+                    Primitive::Text(t) => out.push(t),
+                    Primitive::Group(g) => collect(&g.children, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut texts = Vec::new();
+        collect(&scene.primitives, &mut texts);
+
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.content == "private" && t.attrs.contains(&TextAttr::ExcludeMsg)),
+            "excluded stub spouse message not shown at last generation"
+        );
+        assert!(
+            !texts.iter().any(|t| t.content.contains("Hidden")),
+            "excluded spouse's child not pruned"
+        );
+        assert!(
+            !texts.iter().any(|t| t.content.contains("Spouse3")),
+            "excluded spouse's real name leaked"
+        );
     }
 
     #[test]

@@ -23,6 +23,14 @@ in the git tags `v0.1.0` … `v0.7.0`.
   alpha); it previously used a 3-digit-only converter, unlike every other layout.
 
 ### Added
+- `[show] exclude` prunes branches from the chart: list individual IDs (the dual of `--merge`,
+  useful for trimming uninteresting/unreliable lines or partitioning a large tree). Traversal stops
+  at each excluded individual — its spouse(s)/descendants (descendants mode) or ancestors
+  (ancestors mode) are dropped, unless also reachable via a non-excluded path (reconvergence). Each
+  entry takes an optional `msg` shown in place of the name (with no birth/death/marriage data),
+  styled via `output.style.text.exclude_msg` and `output.style.fonts.exclude_msg` in every layout;
+  an empty `msg` omits the individual entirely. Example:
+  `exclude = [{ id = "I123", msg = "see separate tree" }]`.
 - Nickname support: the GEDCOM `NICK` field (`2 NICK` under `NAME`, or a flat `1 NICK`) is now
   parsed. With `show.nickname = true`, individuals who have a nickname are formatted with
   `format.individual_nickname` (which adds a `{nickname}` placeholder) instead of `format.individual`.

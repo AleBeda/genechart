@@ -78,6 +78,16 @@ pub struct ScopePrefs {
     pub direction: String,
 }
 
+/// One entry of `[show] exclude`: an individual ID to exclude, with an optional
+/// substitution message shown in place of its name (empty message omits the node).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ExcludeEntry {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub msg: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ShowPrefs {
     #[serde(default)]
@@ -104,6 +114,8 @@ pub struct ShowPrefs {
     pub duplicated_individual: bool,
     #[serde(default)]
     pub photo: bool,
+    #[serde(default)]
+    pub exclude: Vec<ExcludeEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -384,6 +396,8 @@ pub struct TextStylePrefs {
     #[serde(default)]
     pub note_link: i64,
     #[serde(default)]
+    pub exclude_msg: i64,
+    #[serde(default)]
     pub highlights: HighlightsPrefs,
 }
 
@@ -489,6 +503,8 @@ pub struct FontPrefs {
     pub copyright: String,
     #[serde(default)]
     pub id: String,
+    #[serde(default)]
+    pub exclude_msg: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -895,6 +911,27 @@ mod tests {
         assert_eq!(prefs.output.style.wedges.width, 0.5);
         assert_eq!(prefs.output.style.wedges.border, 0x222);
         assert_eq!(prefs.output.style.wedges.background, 0xFFF);
+        assert!(prefs.show.exclude.is_empty());
+        assert_eq!(prefs.output.style.text.exclude_msg, 0x00D);
+        assert_eq!(prefs.output.style.fonts.exclude_msg, "Arial 10");
+    }
+
+    #[test]
+    fn exclude_round_trips() {
+        let mut prefs = load(None, &[], &[], &crate::trace::Tracer::disabled()).unwrap();
+        prefs.show.exclude = vec![
+            ExcludeEntry {
+                id: "I123".to_string(),
+                msg: "see separate tree".to_string(),
+            },
+            ExcludeEntry {
+                id: "I456".to_string(),
+                msg: String::new(),
+            },
+        ];
+        let serialized = toml::to_string(&prefs).unwrap();
+        let reparsed: Prefs = toml::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.show.exclude, prefs.show.exclude);
     }
 
     #[test]

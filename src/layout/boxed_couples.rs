@@ -1231,17 +1231,21 @@ impl Layout for BoxedCouplesLayout {
         };
 
         for ind_id in placed_ids {
-            if let Some(last_gen) = max_gen {
-                if let Some(i) = individuals.get(&ind_id) {
-                    if let Some(BoxedCouplesGeo::Individual(g)) = &i.geo {
-                        if g.generation == last_gen {
-                            continue;
-                        }
-                    }
-                }
-            }
+            let at_last_gen = max_gen.is_some_and(|last_gen| {
+                matches!(
+                    individuals.get(&ind_id).and_then(|i| i.geo.as_ref()),
+                    Some(BoxedCouplesGeo::Individual(g)) if g.generation == last_gen
+                )
+            });
             let spouses = spouses_of(&ind_id, genrep);
             for spouse_id in spouses {
+                // Last-generation spouses are hidden unless opted in, but an excluded stub is
+                // always shown — it is an explicit "branch cut" marker.
+                let is_excl_stub =
+                    crate::layout::common::exclude_stub_msg(&spouse_id, prefs).is_some();
+                if at_last_gen && !is_excl_stub {
+                    continue;
+                }
                 #[allow(clippy::map_entry)]
                 if !individuals.contains_key(&spouse_id) {
                     if let Some(spouse) = genrep.get_individual(&spouse_id) {
@@ -1390,6 +1394,76 @@ pub fn emit_scene(genrep: &Genrep<BoxedCouplesGeo>, prefs: &Prefs) -> crate::sce
 
         let ind = &genrep.individuals[*ind_id];
         let mut box_children: Vec<Primitive> = Vec::new();
+
+        // Excluded stub: render a single narrow box (no spouse sections, no data) whose only
+        // content is the substitution message, connected to its parent like any other child.
+        // Placement may have reserved a wider slot (from the source-GEDCOM spouse count); we
+        // draw a narrow box centred on the connector point so it does not show empty halves.
+        if crate::layout::common::exclude_stub_msg(ind_id, prefs).is_some() {
+            let stub_w = bc.box_width;
+            let stub_cx = to_display_x(geo.x);
+            box_children.push(Primitive::Box(BoxPrimitive {
+                bbox: Rect {
+                    x: stub_cx - stub_w / 2.0,
+                    y: box_display_top,
+                    w: stub_w,
+                    h: geo.height,
+                },
+                two_spouses: false,
+            }));
+
+            let center_display_y = to_display_y(geo.y);
+            let region_height = (geo.height - bc.spouse_sep_height) / 2.0;
+            let top_region_display = center_display_y - bc.spouse_sep_height / 2.0 - region_height;
+            let bottom_region_display = center_display_y + bc.spouse_sep_height / 2.0;
+            let sp_section_top = if root_pos_bottom {
+                top_region_display
+            } else {
+                bottom_region_display
+            };
+            let ind_section_top = if root_pos_bottom {
+                bottom_region_display
+            } else {
+                top_region_display
+            };
+            let marr_y = center_display_y + date_font_size / 2.0;
+            let name_baseline = ind_section_top + spacing.name_above + font_size;
+
+            emit_individual_section(
+                &mut box_children,
+                ind,
+                &ind_id_trimmed,
+                stub_cx,
+                stub_cx - stub_w / 2.0 + 2.0,
+                stub_w,
+                name_baseline,
+                font_size,
+                date_font_size,
+                spacing,
+                prefs,
+                is_highlighted,
+            );
+            box_children.extend(emit_blank_spouse_section(
+                stub_cx,
+                marr_y,
+                sp_section_top,
+                prefs,
+                stub_w,
+                font_size,
+                date_font_size,
+                spacing,
+            ));
+
+            box_groups.push(Primitive::Group(GroupPrimitive {
+                id: String::new(),
+                children: vec![Primitive::Group(GroupPrimitive {
+                    id: ind_id_trimmed,
+                    children: box_children,
+                })],
+            }));
+            continue;
+        }
+
         box_children.push(Primitive::Box(BoxPrimitive {
             bbox: box_bbox,
             two_spouses: geo.width > bc.box_width + 1.0,
@@ -1841,10 +1915,17 @@ fn emit_individual_section(
     use crate::format::{format_event, format_name};
     use crate::scene::{GroupPrimitive, Primitive, Rect, TextAlign, TextAttr, TextPrimitive};
 
+    // Excluded stub: render the message in place of the name and suppress data.
+    let excl = crate::layout::common::exclude_stub_msg(ind_id_trimmed, prefs);
+    let (name_content, name_attr) = match &excl {
+        Some(msg) => (msg.clone(), TextAttr::ExcludeMsg),
+        None => (format_name(ind, prefs), TextAttr::IndividualName),
+    };
+
     children.push(Primitive::Group(GroupPrimitive {
         id: format!("{ind_id_trimmed}-name"),
         children: vec![Primitive::Text(TextPrimitive {
-            content: format_name(ind, prefs),
+            content: name_content,
             bbox: Rect {
                 x: center_x - width / 2.0,
                 y: name_baseline - font_size,
@@ -1852,11 +1933,11 @@ fn emit_individual_section(
                 h: font_size,
             },
             align: TextAlign::Center,
-            attrs: crate::scene::label_attrs(TextAttr::IndividualName, is_highlighted),
+            attrs: crate::scene::label_attrs(name_attr, is_highlighted),
         })],
     }));
 
-    if prefs.show.id {
+    if prefs.show.id && excl.is_none() {
         children.push(Primitive::Text(TextPrimitive {
             content: ind_id_trimmed.to_string(),
             bbox: Rect {
@@ -1871,7 +1952,7 @@ fn emit_individual_section(
     }
 
     let mut y_pos = name_baseline;
-    if prefs.show.birth {
+    if prefs.show.birth && excl.is_none() {
         y_pos += spacing.date_above + date_font_size;
         let birth_content = ind
             .birth
@@ -1897,7 +1978,7 @@ fn emit_individual_section(
             attrs: vec![TextAttr::BirthData],
         }));
     }
-    if prefs.show.death {
+    if prefs.show.death && excl.is_none() {
         y_pos += spacing.date_above + date_font_size;
         let death_content = ind
             .death
@@ -2029,8 +2110,11 @@ fn emit_spouse_primitives(
         .trim_end_matches('@')
         .to_string();
 
+    // Excluded spouse: show the message in place of the name and suppress marriage/data.
+    let excl = crate::layout::common::exclude_stub_msg(&sp.id, prefs);
+
     // Marriage data — wrapped in a sub-group so SVG editors see symbol + text as one unit
-    if prefs.show.marriage {
+    if prefs.show.marriage && excl.is_none() {
         if let Some(marr) = &fam.marriage {
             if let Some(s) = format_event_extra(
                 &prefs.format.marriage,
@@ -2058,7 +2142,7 @@ fn emit_spouse_primitives(
     }
 
     // Family ID (plain text, not inside marriage sub-group)
-    if prefs.show.id {
+    if prefs.show.id && excl.is_none() {
         result.push(Primitive::Text(TextPrimitive {
             content: fam_id_trimmed,
             bbox: Rect {
@@ -2079,10 +2163,14 @@ fn emit_spouse_primitives(
         .trim_end_matches('@')
         .to_string();
     let sp_name_baseline = sp_section_top + spacing.name_above + font_size;
+    let (sp_name_content, sp_name_attr) = match &excl {
+        Some(msg) => (msg.clone(), TextAttr::ExcludeMsg),
+        None => (format_name(sp, prefs), TextAttr::SpouseName),
+    };
     result.push(Primitive::Group(GroupPrimitive {
         id: format!("{sp_id_trimmed}-name"),
         children: vec![Primitive::Text(TextPrimitive {
-            content: format_name(sp, prefs),
+            content: sp_name_content,
             bbox: Rect {
                 x: cx - section_width / 2.0,
                 y: sp_name_baseline - font_size,
@@ -2090,12 +2178,12 @@ fn emit_spouse_primitives(
                 h: font_size,
             },
             align: TextAlign::Center,
-            attrs: crate::scene::label_attrs(TextAttr::SpouseName, is_highlighted),
+            attrs: crate::scene::label_attrs(sp_name_attr, is_highlighted),
         })],
     }));
 
     // Spouse ID (plain text, not inside name sub-group)
-    if prefs.show.id {
+    if prefs.show.id && excl.is_none() {
         result.push(Primitive::Text(TextPrimitive {
             content: sp_id_trimmed,
             bbox: Rect {
@@ -2111,7 +2199,7 @@ fn emit_spouse_primitives(
 
     // Spouse birth
     let mut y = sp_name_baseline;
-    if prefs.show.birth {
+    if prefs.show.birth && excl.is_none() {
         y += spacing.date_above + date_font_size;
         let birth_content = sp
             .birth
@@ -2139,7 +2227,7 @@ fn emit_spouse_primitives(
     }
 
     // Spouse death
-    if prefs.show.death {
+    if prefs.show.death && excl.is_none() {
         y += spacing.date_above + date_font_size;
         let death_content = sp
             .death
@@ -3606,6 +3694,74 @@ mod tests {
         assert_eq!(
             upper_count, 1,
             "expected 1 connector at 2/3 (sp2); fractions: {fractions:?}"
+        );
+    }
+
+    #[test]
+    fn excluded_spouse_prunes_children_and_shows_stub_at_last_gen() {
+        // I1+I2 → I3 ; I3+S3 → I5. Excluding S3 prunes its child I5 (queue #103 spouse bug),
+        // which makes I3 the deepest generation — the excluded stub spouse must STILL be shown
+        // (it must be exempt from last-generation-spouse suppression).
+        use crate::parser::{compute_scope_opts, parse_str};
+        use crate::preferences::ExcludeEntry;
+        use crate::scene::{Primitive, TextAttr};
+
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /X/\n1 SEX M\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME Mate /X/\n1 SEX F\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME Branch /X/\n1 SEX M\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME Spouse3 /X/\n1 SEX F\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME Hidden /X/\n1 SEX M\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n\
+0 TRLR\n";
+
+        let mut prefs = desc_prefs();
+        prefs.show.exclude = vec![ExcludeEntry {
+            id: "S3".into(),
+            msg: "private".into(),
+        }];
+        let map: HashMap<String, String> = prefs
+            .show
+            .exclude
+            .iter()
+            .map(|e| (e.id.clone(), e.msg.clone()))
+            .collect();
+        let mut genrep = parse_str(GED).unwrap();
+        compute_scope_opts(&mut genrep, Some("I1"), "descendants", None, false, &map);
+        let result = BoxedCouplesLayout.compute(&genrep, &prefs).unwrap();
+        let scene = emit_scene(&result, &prefs);
+
+        // Bug 1: the excluded spouse's child is pruned.
+        assert!(
+            !result.individuals.contains_key("I5"),
+            "excluded spouse's child I5 was not pruned"
+        );
+
+        // Bug 2: the stub message is still emitted, even though pruning made I3 the last gen.
+        fn has_excl_msg(prims: &[Primitive], msg: &str) -> bool {
+            prims.iter().any(|p| match p {
+                Primitive::Text(t) => t.content == msg && t.attrs.contains(&TextAttr::ExcludeMsg),
+                Primitive::Group(g) => has_excl_msg(&g.children, msg),
+                _ => false,
+            })
+        }
+        assert!(
+            has_excl_msg(&scene.primitives, "private"),
+            "excluded stub spouse message not shown at last generation"
+        );
+        // And the real spouse name must not leak.
+        fn has_text(prims: &[Primitive], s: &str) -> bool {
+            prims.iter().any(|p| match p {
+                Primitive::Text(t) => t.content.contains(s),
+                Primitive::Group(g) => has_text(&g.children, s),
+                _ => false,
+            })
+        }
+        assert!(
+            !has_text(&scene.primitives, "Spouse3"),
+            "excluded spouse's real name leaked"
         );
     }
 }

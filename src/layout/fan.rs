@@ -232,7 +232,9 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
     let mut primitives: Vec<Primitive> = Vec::with_capacity(indis.len());
     for (indi, geo) in &indis {
         let radial_text = geo.angle_span <= inner_span_threshold + 1e-9;
-        let birth_line = if prefs.show.birth {
+        // Excluded stub: message in place of the name and no birth/death data.
+        let excl = crate::layout::common::exclude_stub_msg(&indi.id, prefs);
+        let birth_line = if prefs.show.birth && excl.is_none() {
             indi.birth.as_ref().and_then(|e| {
                 format_event(
                     &prefs.format.birth,
@@ -244,7 +246,7 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
         } else {
             None
         };
-        let death_line = if prefs.show.death {
+        let death_line = if prefs.show.death && excl.is_none() {
             indi.death.as_ref().and_then(|e| {
                 format_event(
                     &prefs.format.death,
@@ -263,9 +265,13 @@ pub fn emit_scene(genrep: &Genrep<FanGeo>, prefs: &Prefs) -> crate::scene::Scene
             angle_span: geo.angle_span,
             radius_inner: geo.radius_inner,
             radius_outer: geo.radius_outer,
-            label: Some(format_name(indi, prefs)),
+            label: Some(excl.clone().unwrap_or_else(|| format_name(indi, prefs))),
             label_attrs: crate::scene::label_attrs(
-                TextAttr::IndividualName,
+                if excl.is_some() {
+                    TextAttr::ExcludeMsg
+                } else {
+                    TextAttr::IndividualName
+                },
                 highlighted_ids.contains(&indi.id),
             ),
             radial_text,

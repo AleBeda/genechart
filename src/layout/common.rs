@@ -256,6 +256,23 @@ pub(crate) fn highlight_set(prefs: &Prefs) -> HashSet<String> {
     load_highlights(std::path::Path::new(&prefs.files.highlights))
 }
 
+/// `Some(msg)` when `id` is an excluded **stub** — listed in `[show] exclude` with a non-empty
+/// message — and therefore renders the message in place of its name (with no birth/death/marriage
+/// data). Excluded individuals with an empty message are omitted upstream (out of scope) and never
+/// reach a layout's emit, so this returns `None` for them. On a duplicate id, the last entry wins.
+pub(crate) fn exclude_stub_msg(id: &str, prefs: &Prefs) -> Option<String> {
+    // Normalise to the canonical GEDCOM id: strip any layout instance suffix ("I5##2" → "I5")
+    // and surrounding "@" delimiters, so the match works from every layout.
+    let canon = id.split("##").next().unwrap_or(id).trim_matches('@');
+    prefs
+        .show
+        .exclude
+        .iter()
+        .rev()
+        .find(|e| e.id == canon && !e.msg.is_empty())
+        .map(|e| e.msg.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

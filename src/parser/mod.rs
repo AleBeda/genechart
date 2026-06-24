@@ -687,7 +687,14 @@ pub fn compute_scope(
     direction: &str,
     generations: Option<u32>,
 ) {
-    compute_scope_opts(genrep, root_id, direction, generations, false);
+    compute_scope_opts(
+        genrep,
+        root_id,
+        direction,
+        generations,
+        false,
+        &HashMap::new(),
+    );
 }
 
 /// Like [`compute_scope`] but with an explicit `last_gen_spouses` flag.
@@ -701,15 +708,11 @@ pub fn compute_scope_opts(
     direction: &str,
     generations: Option<u32>,
     last_gen_spouses: bool,
+    exclude: &HashMap<String, String>,
 ) {
     let dir = direction.trim().to_ascii_lowercase();
     if matches_direction(&dir, "forest") {
-        for indi in genrep.individuals.values_mut() {
-            indi.in_scope = true;
-        }
-        for fam in genrep.families.values_mut() {
-            fam.in_scope = true;
-        }
+        scope_forest(genrep, last_gen_spouses, exclude);
         return;
     }
 
@@ -719,18 +722,59 @@ pub fn compute_scope_opts(
     };
 
     if matches_direction(&dir, "descendants") {
-        scope_descendants(genrep, &root, generations, last_gen_spouses);
+        scope_descendants(genrep, &[root], generations, last_gen_spouses, exclude);
     } else if matches_direction(&dir, "ancestors") || matches_direction(&dir, "pedigree") {
-        scope_ancestors(genrep, &root, generations);
+        scope_ancestors(genrep, &root, generations, exclude);
     } else {
         diag_warn!("unknown direction '{direction}', defaulting to forest");
+        scope_forest(genrep, last_gen_spouses, exclude);
+    }
+}
+
+/// Forest scope: every individual/family is in scope.
+///
+/// When `exclude` is empty this is the original blanket inclusion (byte-identical output).
+/// When `exclude` is non-empty, scope is instead the union of descendants subtrees from every
+/// natural root (an individual with no `famc`), pruned at excluded individuals — so exclusion
+/// applies within each root subtree just as in the `descendants` direction.
+fn scope_forest(genrep: &mut Genrep, last_gen_spouses: bool, exclude: &HashMap<String, String>) {
+    if exclude.is_empty() {
         for indi in genrep.individuals.values_mut() {
             indi.in_scope = true;
         }
         for fam in genrep.families.values_mut() {
             fam.in_scope = true;
         }
+        return;
     }
+
+    // Natural roots = individuals with no parents (`famc`), excluding in-laws: a no-`famc`
+    // individual who only married into a lineage (a spouse in some family whose other parent
+    // is itself someone's child). Seeding such an in-law would let traversal reach a couple's
+    // children while bypassing an excluded blood parent. (Founding couples — both spouses with
+    // no `famc` — are both kept as roots, which is harmless: the shared descendants dedup.)
+    let is_inlaw = |i: &Individual| {
+        i.fams.iter().any(|fid| {
+            genrep.get_family(fid).is_some_and(|f| {
+                let other = if f.husband_id.as_deref() == Some(i.id.as_str()) {
+                    f.wife_id.as_deref()
+                } else {
+                    f.husband_id.as_deref()
+                };
+                other
+                    .and_then(|o| genrep.get_individual(o))
+                    .is_some_and(|p| !p.famc.is_empty())
+            })
+        })
+    };
+    let mut roots: Vec<String> = genrep
+        .individuals
+        .values()
+        .filter(|i| i.famc.is_empty() && !is_inlaw(i))
+        .map(|i| i.id.clone())
+        .collect();
+    roots.sort();
+    scope_descendants(genrep, &roots, None, last_gen_spouses, exclude);
 }
 
 fn resolve_root(genrep: &Genrep, root_id: Option<&str>) -> Option<String> {
@@ -755,20 +799,33 @@ fn resolve_root(genrep: &Genrep, root_id: Option<&str>) -> Option<String> {
 
 fn scope_descendants(
     genrep: &mut Genrep,
-    root: &str,
+    roots: &[String],
     generations: Option<u32>,
     last_gen_spouses: bool,
+    exclude: &HashMap<String, String>,
 ) {
     let mut indi_scope: HashSet<String> = HashSet::new();
     let mut fam_scope: HashSet<String> = HashSet::new();
 
     let mut queue: VecDeque<(String, u32)> = VecDeque::new();
-    queue.push_back((root.to_string(), 0));
+    for root in roots {
+        queue.push_back((root.clone(), 0));
+    }
 
     while let Some((id, depth)) = queue.pop_front() {
         if indi_scope.contains(&id) {
             continue;
         }
+
+        // Exclusion: stop traversal at an excluded individual. A non-empty message keeps it as a
+        // labeled stub (in scope, but never expanded); an empty message omits it entirely.
+        if let Some(msg) = exclude.get(&id) {
+            if !msg.is_empty() {
+                indi_scope.insert(id.clone());
+            }
+            continue;
+        }
+
         indi_scope.insert(id.clone());
 
         // Whether this individual is in the last visible generation.
@@ -799,13 +856,25 @@ fn scope_descendants(
                     Option::None => continue,
                 };
 
+                // Is this family's co-parent (the other spouse) excluded? If so, this marriage's
+                // children — the excluded spouse's descendants — are pruned (they are still
+                // enqueued via any *other*, non-excluded family they belong to: reconvergence).
+                let spouse_excluded = spouse.as_deref().is_some_and(|sp| exclude.contains_key(sp));
+
                 fam_scope.insert(fam_id);
                 if add_spouses {
                     if let Some(sp) = spouse {
-                        indi_scope.insert(sp);
+                        // An excluded spouse with an empty message is omitted; a non-empty
+                        // message keeps it as a stub.
+                        match exclude.get(&sp) {
+                            Some(m) if m.is_empty() => {}
+                            _ => {
+                                indi_scope.insert(sp);
+                            }
+                        }
                     }
                 }
-                if add_children {
+                if add_children && !spouse_excluded {
                     for child_id in children {
                         if !indi_scope.contains(&child_id) {
                             queue.push_back((child_id, depth + 1));
@@ -819,7 +888,12 @@ fn scope_descendants(
     apply_scope(genrep, &indi_scope, &fam_scope);
 }
 
-fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
+fn scope_ancestors(
+    genrep: &mut Genrep,
+    root: &str,
+    generations: Option<u32>,
+    exclude: &HashMap<String, String>,
+) {
     let mut indi_scope: HashSet<String> = HashSet::new();
     let mut fam_scope: HashSet<String> = HashSet::new();
 
@@ -830,6 +904,15 @@ fn scope_ancestors(genrep: &mut Genrep, root: &str, generations: Option<u32>) {
         if indi_scope.contains(&id) {
             continue;
         }
+
+        // Exclusion: stop traversal at an excluded individual (see scope_descendants).
+        if let Some(msg) = exclude.get(&id) {
+            if !msg.is_empty() {
+                indi_scope.insert(id.clone());
+            }
+            continue;
+        }
+
         indi_scope.insert(id.clone());
 
         if generations.is_none_or(|g| depth < g.saturating_sub(1)) {
@@ -1220,5 +1303,210 @@ mod tests {
         );
         let f2 = gr.get_family("F2").unwrap();
         assert_eq!(f2.children_ids, vec!["I4"], "F2 children must be parsed");
+    }
+
+    // ── exclusion (queue #103) ────────────────────────────────────────────────
+
+    fn scope_excl(
+        ged: &str,
+        root: Option<&str>,
+        dir: &str,
+        gens: Option<u32>,
+        exclude: &[(&str, &str)],
+    ) -> Genrep {
+        let mut gr = parse_str(ged).unwrap();
+        let map: HashMap<String, String> = exclude
+            .iter()
+            .map(|(i, m)| (i.to_string(), m.to_string()))
+            .collect();
+        compute_scope_opts(&mut gr, root, dir, gens, false, &map);
+        gr
+    }
+
+    fn in_scope(gr: &Genrep, id: &str) -> bool {
+        gr.get_individual(id).map(|i| i.in_scope).unwrap_or(false)
+    }
+
+    #[test]
+    fn exclude_descendant_prunes_subtree_and_spouse() {
+        // I1+I2 → I3, I4 ; I3+S3 → I5, I6 ; I4 leaf. Exclude I3 (non-empty msg).
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME M /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /X/\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME S3 /X/\n1 FAMS @F3@\n\
+0 @I4@ INDI\n1 NAME C2 /X/\n1 FAMC @F1@\n\
+0 @I5@ INDI\n1 NAME G1 /X/\n1 FAMC @F3@\n\
+0 @I6@ INDI\n1 NAME G2 /X/\n1 FAMC @F3@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n1 CHIL @I6@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "descendants", None, &[("I3", "cut")]);
+        assert!(in_scope(&gr, "I3"), "excluded stub stays in scope");
+        assert!(in_scope(&gr, "I4"), "non-excluded sibling stays");
+        assert!(!in_scope(&gr, "I5"), "grandchild beyond I3 pruned");
+        assert!(!in_scope(&gr, "I6"), "grandchild beyond I3 pruned");
+        assert!(!in_scope(&gr, "S3"), "excluded descendant's spouse pruned");
+    }
+
+    #[test]
+    fn exclude_empty_msg_omits_node() {
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME M /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /X/\n1 FAMC @F1@\n\
+0 @I4@ INDI\n1 NAME C2 /X/\n1 FAMC @F1@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "descendants", None, &[("I3", "")]);
+        assert!(!in_scope(&gr, "I3"), "empty-msg excluded node is omitted");
+        assert!(in_scope(&gr, "I4"), "sibling unaffected");
+    }
+
+    #[test]
+    fn exclude_spouse_prunes_its_marriage_children() {
+        // I3 has two marriages: I3+S3a → I5, I6 ; I3+S3b → I7. Exclude S3a (a spouse):
+        // its marriage's children (I5, I6) are pruned, but the other marriage's child (I7)
+        // and the blood partner I3 stay.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME M /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /X/\n1 FAMC @F1@\n1 FAMS @F3A@\n1 FAMS @F3B@\n\
+0 @S3A@ INDI\n1 NAME S3a /X/\n1 FAMS @F3A@\n\
+0 @S3B@ INDI\n1 NAME S3b /X/\n1 FAMS @F3B@\n\
+0 @I5@ INDI\n1 NAME G1 /X/\n1 FAMC @F3A@\n\
+0 @I6@ INDI\n1 NAME G2 /X/\n1 FAMC @F3A@\n\
+0 @I7@ INDI\n1 NAME G3 /X/\n1 FAMC @F3B@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n\
+0 @F3A@ FAM\n1 HUSB @I3@\n1 WIFE @S3A@\n1 CHIL @I5@\n1 CHIL @I6@\n\
+0 @F3B@ FAM\n1 HUSB @I3@\n1 WIFE @S3B@\n1 CHIL @I7@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "descendants", None, &[("S3A", "x")]);
+        assert!(in_scope(&gr, "S3A"), "excluded spouse stub stays in scope");
+        assert!(in_scope(&gr, "I3"), "blood partner stays");
+        assert!(!in_scope(&gr, "I5"), "excluded spouse's child pruned");
+        assert!(!in_scope(&gr, "I6"), "excluded spouse's child pruned");
+        assert!(in_scope(&gr, "I7"), "other marriage's child kept");
+        assert!(in_scope(&gr, "S3B"), "other spouse kept");
+    }
+
+    #[test]
+    fn exclude_spouse_descendants_pruned_unless_reconverging() {
+        // I1 → I3, I4 ; I3+S3 → I5, I8 ; I4+S4 → I6 ; I5+I6 → I7 (cousin marriage).
+        // Exclude S3: I8 (purely S3's descendant) is pruned; I7 stays as a blood descendant via
+        // I4→I6 (reconvergence). I5 is pruned as a descendant but reappears as I6's spouse.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME M /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /X/\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME S3 /X/\n1 FAMS @F3@\n\
+0 @I4@ INDI\n1 NAME C2 /X/\n1 FAMC @F1@\n1 FAMS @F4@\n\
+0 @S4@ INDI\n1 NAME S4 /X/\n1 FAMS @F4@\n\
+0 @I5@ INDI\n1 NAME G1 /X/\n1 FAMC @F3@\n1 FAMS @F5@\n\
+0 @I8@ INDI\n1 NAME G1b /X/\n1 FAMC @F3@\n\
+0 @I6@ INDI\n1 NAME G2 /X/\n1 FAMC @F4@\n1 FAMS @F5@\n\
+0 @I7@ INDI\n1 NAME GG /X/\n1 FAMC @F5@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n1 CHIL @I8@\n\
+0 @F4@ FAM\n1 HUSB @I4@\n1 WIFE @S4@\n1 CHIL @I6@\n\
+0 @F5@ FAM\n1 HUSB @I5@\n1 WIFE @I6@\n1 CHIL @I7@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "descendants", None, &[("S3", "x")]);
+        assert!(in_scope(&gr, "S3"), "excluded spouse stub stays");
+        assert!(!in_scope(&gr, "I8"), "excluded spouse's child pruned");
+        assert!(
+            in_scope(&gr, "I7"),
+            "grandchild reachable via I4's line kept (reconvergence)"
+        );
+    }
+
+    #[test]
+    fn exclude_descendant_reconvergence_keeps_other_path() {
+        // I1 → I3, I4 ; I3+S3 → I5, I8 ; I4+S4 → I6 ; I5+I6 → I7 (cousin marriage).
+        // Exclude I3: I8 (only via I3) pruned; I7 reachable via I4→I6 stays.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R /X/\n1 FAMS @F1@\n\
+0 @I2@ INDI\n1 NAME M /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C1 /X/\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME S3 /X/\n1 FAMS @F3@\n\
+0 @I4@ INDI\n1 NAME C2 /X/\n1 FAMC @F1@\n1 FAMS @F4@\n\
+0 @S4@ INDI\n1 NAME S4 /X/\n1 FAMS @F4@\n\
+0 @I5@ INDI\n1 NAME G1 /X/\n1 FAMC @F3@\n1 FAMS @F5@\n\
+0 @I8@ INDI\n1 NAME G1b /X/\n1 FAMC @F3@\n\
+0 @I6@ INDI\n1 NAME G2 /X/\n1 FAMC @F4@\n1 FAMS @F5@\n\
+0 @I7@ INDI\n1 NAME GG /X/\n1 FAMC @F5@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 CHIL @I4@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n1 CHIL @I8@\n\
+0 @F4@ FAM\n1 HUSB @I4@\n1 WIFE @S4@\n1 CHIL @I6@\n\
+0 @F5@ FAM\n1 HUSB @I5@\n1 WIFE @I6@\n1 CHIL @I7@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "descendants", None, &[("I3", "x")]);
+        assert!(in_scope(&gr, "I3"), "excluded stub stays");
+        assert!(
+            !in_scope(&gr, "I8"),
+            "child only reachable via I3 is pruned"
+        );
+        assert!(
+            in_scope(&gr, "I7"),
+            "great-grandchild reachable via I4's line is kept (reconvergence)"
+        );
+    }
+
+    #[test]
+    fn exclude_ancestor_prunes_and_reconverges() {
+        // I1 ← (I2,I3) ; I2 ← (I4,I5) ; I3 ← (I4,I6)  [I4 is parent of both I2 and I3].
+        // Exclude I2: I5 (only via I2) pruned; I4 reachable via I3 stays.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME Root /X/\n1 FAMC @F1@\n\
+0 @I2@ INDI\n1 NAME Fa /X/\n1 FAMC @F2@\n\
+0 @I3@ INDI\n1 NAME Mo /X/\n1 FAMC @F3@\n\
+0 @I4@ INDI\n1 NAME GpShared /X/\n\
+0 @I5@ INDI\n1 NAME Gm1 /X/\n\
+0 @I6@ INDI\n1 NAME Gm2 /X/\n\
+0 @F1@ FAM\n1 HUSB @I2@\n1 WIFE @I3@\n1 CHIL @I1@\n\
+0 @F2@ FAM\n1 HUSB @I4@\n1 WIFE @I5@\n1 CHIL @I2@\n\
+0 @F3@ FAM\n1 HUSB @I4@\n1 WIFE @I6@\n1 CHIL @I3@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, Some("I1"), "ancestors", None, &[("I2", "x")]);
+        assert!(in_scope(&gr, "I2"), "excluded ancestor stub stays");
+        assert!(in_scope(&gr, "I3"), "other parent stays");
+        assert!(!in_scope(&gr, "I5"), "ancestor only via I2 pruned");
+        assert!(
+            in_scope(&gr, "I4"),
+            "shared grandparent reachable via I3 is kept (reconvergence)"
+        );
+    }
+
+    #[test]
+    fn exclude_forest_prunes_within_subtree() {
+        // Two roots: I1→I3→I5 and I10→I12. Exclude I3: I5 pruned, other root intact.
+        const GED: &str = "\
+0 HEAD\n1 GEDC\n2 VERS 5.5.1\n\
+0 @I1@ INDI\n1 NAME R1 /X/\n1 FAMS @F1@\n\
+0 @S1@ INDI\n1 NAME S1 /X/\n1 FAMS @F1@\n\
+0 @I3@ INDI\n1 NAME C /X/\n1 FAMC @F1@\n1 FAMS @F3@\n\
+0 @S3@ INDI\n1 NAME S3 /X/\n1 FAMS @F3@\n\
+0 @I5@ INDI\n1 NAME G /X/\n1 FAMC @F3@\n\
+0 @I10@ INDI\n1 NAME R2 /X/\n1 FAMS @F10@\n\
+0 @S10@ INDI\n1 NAME S10 /X/\n1 FAMS @F10@\n\
+0 @I12@ INDI\n1 NAME C2 /X/\n1 FAMC @F10@\n\
+0 @F1@ FAM\n1 HUSB @I1@\n1 WIFE @S1@\n1 CHIL @I3@\n\
+0 @F3@ FAM\n1 HUSB @I3@\n1 WIFE @S3@\n1 CHIL @I5@\n\
+0 @F10@ FAM\n1 HUSB @I10@\n1 WIFE @S10@\n1 CHIL @I12@\n\
+0 TRLR\n";
+        let gr = scope_excl(GED, None, "forest", None, &[("I3", "x")]);
+        assert!(in_scope(&gr, "I3"), "excluded stub stays");
+        assert!(
+            !in_scope(&gr, "I5"),
+            "descendant beyond I3 pruned in forest"
+        );
+        assert!(in_scope(&gr, "I1"), "first root intact");
+        assert!(in_scope(&gr, "I12"), "second root subtree intact");
     }
 }

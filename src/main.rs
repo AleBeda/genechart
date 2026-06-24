@@ -74,6 +74,7 @@ fn hexify_color_fields(toml: &str) -> String {
         "color",
         "copyright",
         "dates",
+        "exclude_msg",
         "gen_numbers",
         "id",
         "names",
@@ -330,12 +331,19 @@ fn run() -> anyhow::Result<()> {
         // 9. Compute scope
         let root_id = (!prefs.scope.root.is_empty()).then_some(prefs.scope.root.as_str());
         let gens = (prefs.scope.generations > 0).then_some(prefs.scope.generations);
+        let exclude: std::collections::HashMap<String, String> = prefs
+            .show
+            .exclude
+            .iter()
+            .map(|e| (e.id.clone(), e.msg.clone()))
+            .collect();
         parser::compute_scope_opts(
             &mut genrep,
             root_id,
             &prefs.scope.direction,
             gens,
             prefs.show.last_gen_spouses,
+            &exclude,
         );
 
         // 10. Run layout
