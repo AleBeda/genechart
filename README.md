@@ -665,6 +665,16 @@ tool with zero cost in normal builds.
 See [`docs/debugging-boxed-couples.md`](docs/debugging-boxed-couples.md) for the full
 rationale, log format, and diagnostic workflow.
 
+## Related projects
+
+- **[gedinfo](https://github.com/AleBeda/gedinfo)** — a command-line tool (Python) for
+  *querying and analyzing* GEDCOM files: search individuals by ID or name, trace ancestors
+  and descendants, identify relationships, list roots/leaves and disconnected groups,
+  generate statistics, compare two files, and anonymize data. It pairs naturally with
+  genechart — use `gedinfo` to explore a tree and find the individual IDs you need, then
+  feed them to genechart's `--root`, the highlights file, `[show] exclude`, or `--merge`
+  to render the chart. Both read GEDCOM 5.5.1 and support custom GEDCOM tags via TOML.
+
 ## License
 
 MIT — see `LICENSE`. Third-party components (and the vendored Lua 5.4 bundled when built
